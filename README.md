@@ -1,6 +1,14 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.30（实验版 v30）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.31（实验版 v31）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v31 是什么（修锁屏密码按不动——最小化与锁屏时把 scene 推回后台）
+
+v29 把所有窗层级降到锁屏之下，只修好了第一次锁屏；v30 上源后皇上 2026-11-13 15:21 复现：**锁屏密码键盘看得见（数字键全在），但按了没反应**，6 个圆圈一个都没填——不是窗盖住键盘，是按了没被系统处理。首要怀疑：hosted scene 从没被后台化（只推过 `foreground=YES`，从没推过 `NO`），锁屏时它还占着前景，干扰锁屏触摸。
+
+v31 只改三处：**① 最小化时把 scene 推回后台（`foreground=NO + backgrounded=YES`）；② 锁屏信号用 libnotify 的 `notify_register_dispatch("com.apple.springboard.lockstate")`（纯 C API，传 C 字串，不是被禁的 `CFNotificationCenterAddObserver`，不碰 CFString），锁了且有 hosted scene 就把它推回后台，开了只记日志、不自动推前景；③ 恢复时 v30 的 foreground 推送里补 `backgrounded=NO`**。`backgrounded` 属性由 KonbanXV（MIT）的 `dehost` 先例证实存在，另加 `respondsToSelector` 兜底；presenter 不动（只在关窗销毁时才 deactivate）。层级、sceneID、主线程启动、重试、其余什么都不动。
+
+测法：开计算器悬浮窗 → 锁屏 → 开屏 → 密码每次都能按（连测 3 次）；最小化 → 锁屏 → 开屏 → 密码能按 → 恢复计算器必须画出来，不能黑；日志里应有 `v31 scene backgrounded on lock`。
 
 ## v30 是什么（5.2 修恢复后黑窗——恢复时再推一遍 foreground）
 
