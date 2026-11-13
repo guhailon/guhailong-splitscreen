@@ -1,6 +1,48 @@
-// GuHaiLongSplitScreen v1.0.34 (v34) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.35 (v35) — 顾海龙集团原创分屏插件（实验版）
 //
 // 目标：iPhone 11 / iOS 16.5 / Dopamine (rootless)，iphoneos-arm64。
+//
+// ── v35：会话内永不销毁 scene + 计算器缩放到窗里（macOS 编） ──
+// v34 真机（2026-11-13 20:01）：皇上「都还在，感觉非常OK，就是计算
+// 机画面有点没对准」——计算器画出来了、切换没问题、没进安全模式、状
+// 态也留住了（截图里 556,913,3… 是按过的数字）。但日志
+//（GuHaiLongSplitScreen-7.log，v34 段 555 行）定死 v34 还是崩两次，
+// 两次都是切到设置（com.apple.Preferences）：设置只建过一次、被切走
+// 时销毁过（切设置→照片），再建就崩在 createSceneWithDefinition 里
+//（日志在 sceneID 后直接跳到 deferred setup ran，即 SpringBoard 重
+// 启；和 v32 的 .ips 定死的 registerHost 撞残留是同一个点）；第二
+// 次更是在重启之后又崩——设置进程 pid=2521 在重启后还活着，所以残
+// 留不在 SpringBoard 里、在设置进程自己身上，重启清不掉它。计算器、
+// 时钟、备忘录、照片都被销毁重建过多次，全成功——只有设置再建会崩，
+// 是设置特有的（它的进程在 host 销毁后还留着客户端的 scene）。结论：
+// v34「切走才销毁、ID 不同不撞」的判断错了——设置证明销毁 + 再建
+// 同一固定 ID 就是会崩，不管新 ID 是哪个 App 的。所以 v35 只改一处
+// 原则：**一个 SpringBoard 会话里永远不销毁 scene**——关窗（X）和
+// 切走都只藏窗 + 推后台，每个 App 留一个 scene + presenter + 窗
+//（最多 5 个，启动器的 5 个 App），切回来直接复用；只在进程死了的
+// 时候（复用守卫判旧：pid 对不上或 presenter/view 没了）才销毁那
+// 个旧 scene 再建——死进程留不住客户端残留，建的应该是干净的。
+// 实现选型（i）：每 App 一个窗、缓存在平行静态数组里（强引用，ARC
+// 安全），一次只显示一个；活动窗仍用原来那套静态量，所有现成路径
+//（关窗、最小化、恢复、锁屏回调、重试、拖动、缩放）原样不动，只改
+// 切换路径（藏旧窗 → 存缓存 → 清活动量 → 核对 → 开新 App）与复用
+// 守卫（查缓存不查活动量）。没选（ii）单窗换 presentationView：
+// 换 view 要拆 presenter 的 view 再嵌回去，presenter 可能停掉、
+// scene 可能挂起，且各 App 的窗尺寸/缩放状态会互相串，不如每 App
+// 一个窗干净。重试块不改：它只推 foreground=YES（对已在前景的
+// scene 是空操作），切走 1.5 秒内重试打到新 scene 上也无害。
+// 计算器对不准（20:01 截图）：窗 320 宽、计算器按全屏 414 宽排版、
+// 1:1 显示，右边和底下被切掉；日志 15 次 presentationView 全是
+// w=320 h=480。v35 只改：① 计算器的 scene frame 改成屏幕尺寸
+//（运行时读 UIScreen，不写死 414/896）——frame 决定远端图层大小，
+// 这样计算器的整张 414x896 画面都在图层里，不会被 scene frame 先
+// 切掉一刀；② presentationView 按比例缩放到窗里（s = min(内容宽/
+// 图层宽，内容高/图层高)，只缩不放大；只对计算器——别的 App 按
+// scene frame 排版，s=1，不动）；触摸由 transform 自动映射；
+// safe-area insets 本来就是零，不用除以 transform。缩放手柄松手
+// 时重算一次缩放（resizeHostedSceneToContentSize 里计算器分支：
+// frame 保持屏幕尺寸，只改缩放）。别的 App 的窗尺寸、frame、缩放
+// 全不动。层级、主线程启动、锁屏回调、固定 sceneID，其余什么都不动。
 //
 // ── v34：留着固定 sceneID，关窗改藏窗不销毁（macOS 编） ──
 // v33 真机实测（2026-11-13 17:08）：开计算器就是黑屏，没进安全
@@ -31,6 +73,9 @@
 // 次切回远不到阈值，但反复来回切可能攒够；若真机再现，v35 再做
 // 每 App 留一个 scene、会话内永不销毁。单窗切换（v33 的）原样
 // 保留；层级、主线程启动、重试、锁屏回调，其余什么都不动。
+// v35 纠正：上面 ②「切走才销毁、ID 不同不撞」也是错的——v34 日志
+// 定死，切设置→照片再切回设置就崩（设置进程在 host 销毁后还留着
+// 客户端 scene）；所以 v35 会话内永不销毁（见 v35 节）。
 //
 // ── v33：5.2 单窗切换 + 每次新 sceneID（macOS 编） ──
 // 皇上 2026-11-13 16:31：v32 锁屏密码修好了（「可以了，非常OK」）。
@@ -453,7 +498,6 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name;
 - (void)buildHostedWindowForBundleID:(const char *)bundleID name:(const char *)name scene:(FBScene *)scene presenter:(_UIScenePresenter *)presenter sceneID:(NSString *)sceneID pid:(int)pid;
 - (void)closeHostedWindow;
-- (void)destroyHostedScene;
 - (void)minimizeHostedWindow;
 - (void)restoreHostedWindow;
 - (void)handleHostedClose:(id)sender;
@@ -491,6 +535,142 @@ static BOOL GHLSSHostedLaunching = NO;
 // 最小化着的窗本来就藏着，解锁时不碰它（等用户点恢复）。
 static BOOL GHLSSHostedHiddenByLock = NO;
 
+// v35：每 App 一个悬浮窗的缓存——一个 SpringBoard 会话里永远不销毁
+// scene（见文件头 v35 节）。关窗（X）与切走都只藏窗 + 推后台，不
+// 销毁；切回来直接复用缓存里的 scene + presenter + 窗。一次只显示
+// 一个窗：活动窗仍用原来那套静态量（GHLSSHostedWindow 等），所有现
+// 成路径（关窗、最小化、恢复、锁屏回调、重试、拖动、缩放）都只认活
+// 动量，原样不动；切换时把活动量存进缓存、再清活动量。
+// 平行静态数组（强引用，ARC 安全）：不用 struct 存对象指针（ARC 不
+// 准 struct 里放强引用对象，__unsafe_unretained 又怕对象被系统释放
+// 后成野指针——SpringBoard 里野指针就是安全模式）；数组是静态量，
+// 可以强引用，缓存里的对象在会话里一直活着。sceneID 也放数组里
+//（NSString*，强引用），bundleID 放 char 数组（和原来一样）。
+static UIWindow *GHLSSCacheWindows[GHLSS_APP_COUNT];
+static FBScene *GHLSSCacheScenes[GHLSS_APP_COUNT];
+static _UIScenePresenter *GHLSSCachePresenters[GHLSS_APP_COUNT];
+static UIView *GHLSSCacheContainers[GHLSS_APP_COUNT];
+static UIView *GHLSSCacheTitleBars[GHLSS_APP_COUNT];
+static UILabel *GHLSSCacheTitleLabels[GHLSS_APP_COUNT];
+static UIView *GHLSSCacheContentViews[GHLSS_APP_COUNT];
+static UIView *GHLSSCacheResizeHandles[GHLSS_APP_COUNT];
+static NSString *GHLSSCacheSceneIDs[GHLSS_APP_COUNT];
+static char GHLSSCacheBundleIDs[GHLSS_APP_COUNT][128];
+static int GHLSSCachePids[GHLSS_APP_COUNT];
+static BOOL GHLSSCacheMinimized[GHLSS_APP_COUNT];
+static BOOL GHLSSCacheHiddenByLock[GHLSS_APP_COUNT];
+// 当前活动的是缓存里的第几个 App（-1 = 没有活动窗）。
+static int GHLSSActiveAppIndex = -1;
+
+// bundleID → 启动器下标（0–4），找不到返回 -1。
+static int GHLSSAppIndexForBundleID(const char *bundleID) {
+if (!bundleID) return -1;
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (strcmp(GHLSSAppBundleIDs[i], bundleID) == 0) return i;
+}
+return -1;
+}
+
+// 把活动量存进缓存（切走 / 新窗建成后调；调用前活动量必须是那个 App 的）。
+static void GHLSSSaveActiveToCache(void) {
+if (GHLSSActiveAppIndex < 0 || GHLSSActiveAppIndex >= GHLSS_APP_COUNT) return;
+int i = GHLSSActiveAppIndex;
+GHLSSCacheWindows[i] = GHLSSHostedWindow;
+GHLSSCacheScenes[i] = GHLSSHostedScene;
+GHLSSCachePresenters[i] = GHLSSHostedPresenter;
+GHLSSCacheContainers[i] = GHLSSHostedContainer;
+GHLSSCacheTitleBars[i] = GHLSSHostedTitleBar;
+GHLSSCacheTitleLabels[i] = GHLSSHostedTitleLabel;
+GHLSSCacheContentViews[i] = GHLSSHostedContentView;
+GHLSSCacheResizeHandles[i] = GHLSSHostedResizeHandle;
+GHLSSCacheSceneIDs[i] = GHLSSHostedSceneID;
+strncpy(GHLSSCacheBundleIDs[i], GHLSSHostedBundleID, sizeof(GHLSSCacheBundleIDs[i]) - 1);
+GHLSSCacheBundleIDs[i][sizeof(GHLSSCacheBundleIDs[i]) - 1] = '\0';
+GHLSSCachePids[i] = GHLSSHostedPid;
+GHLSSCacheMinimized[i] = GHLSSHostedMinimized;
+GHLSSCacheHiddenByLock[i] = GHLSSHostedHiddenByLock;
+}
+
+// 把缓存第 idx 项装回活动量（切回来复用时调）。
+static void GHLSSLoadCacheToActive(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+GHLSSHostedWindow = GHLSSCacheWindows[idx];
+GHLSSHostedScene = GHLSSCacheScenes[idx];
+GHLSSHostedPresenter = GHLSSCachePresenters[idx];
+GHLSSHostedContainer = GHLSSCacheContainers[idx];
+GHLSSHostedTitleBar = GHLSSCacheTitleBars[idx];
+GHLSSHostedTitleLabel = GHLSSCacheTitleLabels[idx];
+GHLSSHostedContentView = GHLSSCacheContentViews[idx];
+GHLSSHostedResizeHandle = GHLSSCacheResizeHandles[idx];
+GHLSSHostedSceneID = GHLSSCacheSceneIDs[idx];
+strncpy(GHLSSHostedBundleID, GHLSSCacheBundleIDs[idx], sizeof(GHLSSHostedBundleID) - 1);
+GHLSSHostedBundleID[sizeof(GHLSSHostedBundleID) - 1] = '\0';
+GHLSSHostedPid = GHLSSCachePids[idx];
+GHLSSHostedMinimized = GHLSSCacheMinimized[idx];
+GHLSSHostedHiddenByLock = GHLSSCacheHiddenByLock[idx];
+GHLSSActiveAppIndex = idx;
+}
+
+// 清活动量（切走时存完缓存后调；缓存里的指针不受影响）。
+static void GHLSSClearActive(void) {
+GHLSSHostedWindow = nil;
+GHLSSHostedScene = nil;
+GHLSSHostedPresenter = nil;
+GHLSSHostedContainer = nil;
+GHLSSHostedTitleBar = nil;
+GHLSSHostedTitleLabel = nil;
+GHLSSHostedContentView = nil;
+GHLSSHostedResizeHandle = nil;
+GHLSSHostedSceneID = nil;
+GHLSSHostedBundleID[0] = '\0';
+GHLSSHostedPid = 0;
+GHLSSHostedMinimized = NO;
+GHLSSHostedHiddenByLock = NO;
+GHLSSActiveAppIndex = -1;
+}
+
+// v35：销毁缓存里第 idx 项的 scene + presenter。只在复用守卫判旧时
+// 调（进程死了：pid 对不上或 presenter/view 没了）。死进程留不住
+// 客户端残留，销毁后重建同一固定 ID 应该是干净的。切走与关窗永远
+// 不调这里（只藏窗）。若那项正好是活动窗，也顺手清活动量。
+static void GHLSSDestroyCachedEntryAtIndex(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheScenes[idx] && !GHLSSCacheWindows[idx]) return;
+if (GHLSSCacheWindows[idx]) GHLSSCacheWindows[idx].hidden = YES;
+@try {
+if (GHLSSCacheSceneIDs[idx]) {
+char dbuf[256];
+snprintf(dbuf, sizeof(dbuf), "v35 destroying scene %s", [GHLSSCacheSceneIDs[idx] UTF8String]);
+GHLSSLogLine(dbuf);
+[[FBSceneManager sharedInstance] destroyScene:GHLSSCacheSceneIDs[idx] withTransitionContext:nil];
+}
+if (GHLSSCachePresenters[idx]) {
+[GHLSSCachePresenters[idx] deactivate];
+[GHLSSCachePresenters[idx] invalidate];
+}
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v35 destroy failed");
+}
+GHLSSCacheWindows[idx] = nil;
+GHLSSCacheScenes[idx] = nil;
+GHLSSCachePresenters[idx] = nil;
+GHLSSCacheContainers[idx] = nil;
+GHLSSCacheTitleBars[idx] = nil;
+GHLSSCacheTitleLabels[idx] = nil;
+GHLSSCacheContentViews[idx] = nil;
+GHLSSCacheResizeHandles[idx] = nil;
+GHLSSCacheSceneIDs[idx] = nil;
+GHLSSCacheBundleIDs[idx][0] = '\0';
+GHLSSCachePids[idx] = 0;
+GHLSSCacheMinimized[idx] = NO;
+GHLSSCacheHiddenByLock[idx] = NO;
+if (idx == GHLSSActiveAppIndex) {
+GHLSSClearActive();
+}
+GHLSSLogLine("v35 scene destroyed");
+}
+
 // v31：把 hosted scene 推回后台（foreground=NO + backgrounded=YES）。
 // 最小化、关窗与锁屏三处共用。只推 settings，不动 presenter（只在
 // 销毁 scene 时才 deactivate；临时后台化就 deactivate 很可能拆掉
@@ -509,7 +689,7 @@ settings.backgrounded = YES;
 GHLSSLogLine(logLine);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 scene background failed");
+GHLSSLogLine("v35 scene background failed");
 }
 }
 
@@ -534,6 +714,47 @@ if ([s isKindOfClass:[UIWindowScene class]]) return (UIWindowScene *)s;
 return nil;
 }
 
+// v35：一个 App 的 scene frame 尺寸——计算器拿屏幕尺寸（它按全屏排
+// 版；frame 决定远端图层大小，图层得是整张 414x896 才不会被 scene
+// frame 先切掉一刀），别的 App 拿 320x480 内容尺寸（它们按 scene
+// frame 排版，没问题）。屏幕尺寸运行时读，不写死 414/896。
+static CGSize GHLSSSceneFrameSizeForBundleID(const char *bundleID) {
+if (bundleID && strcmp(bundleID, "com.apple.calculator") == 0) {
+return [UIScreen mainScreen].bounds.size;
+}
+return CGSizeMake(GHLSS_HOSTED_CONTENT_W, GHLSS_HOSTED_CONTENT_H);
+}
+
+// v35：计算器缩放到窗里——把 presentationView 按比例缩到内容区里，
+// 让计算器的全屏排版整个放进 320 宽的窗。只对计算器（启动器里唯一
+// 按屏幕尺寸排版的 App；别的 App 按 scene frame 排版，s=1，不动）。
+// s = min(内容宽/图层宽，内容高/图层高)，只缩不放大（>1 就夹到 1）。
+// 触摸由 transform 自动映射（UIKit 的 hit-testing 会过 transform）。
+// safe-area insets 本来就是零，不用除以 transform。建窗时与缩放手
+// 柄松手时各调一次。view 的 bounds 本来就是图层尺寸（建窗时给的），
+// 这里只设 transform 与 center（transform 绕 center 缩，图层正好
+// 落在内容区正中）。
+static void GHLSSScalePresenterViewToFit(UIView *presenterView, UIView *contentView, const char *bundleID) {
+if (!presenterView || !contentView || !bundleID) return;
+if (strcmp(bundleID, "com.apple.calculator") != 0) return;
+CGSize frameSize = GHLSSSceneFrameSizeForBundleID(bundleID);
+CGSize contentSize = contentView.bounds.size;
+if (frameSize.width <= 0 || frameSize.height <= 0 || contentSize.width <= 0 || contentSize.height <= 0) return;
+CGFloat s = contentSize.width / frameSize.width;
+CGFloat s2 = contentSize.height / frameSize.height;
+if (s2 < s) s = s2;
+if (s > 1.0) s = 1.0;
+if (s >= 1.0) {
+presenterView.transform = CGAffineTransformIdentity;
+} else {
+presenterView.transform = CGAffineTransformMakeScale(s, s);
+}
+presenterView.center = CGPointMake(contentSize.width / 2.0, contentSize.height / 2.0);
+char buf[128];
+snprintf(buf, sizeof(buf), "v35 scene scaled %d%%", (int)(s * 100.0));
+GHLSSLogLine(buf);
+}
+
 @implementation GHLSSLauncher
 
 // 允许我们的手势与系统手势同时识别（不抢系统手势）。
@@ -547,17 +768,17 @@ if (recognizer.state != UIGestureRecognizerStateEnded) return;
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v34 edge swipe 2nd, opening launcher");
+GHLSSLogLine("v35 edge swipe 2nd, opening launcher");
 [self showLauncher];
 } else {
 GHLSSLastSwipeTime = now;
-GHLSSLogLine("v34 edge swipe 1st, armed");
+GHLSSLogLine("v35 edge swipe 1st, armed");
 }
 }
 
 // 金色"分"按钮：点一次就开启动器（备用触发，不用滑两次）。
 - (void)handleHandleButton:(id)sender {
-GHLSSLogLine("v34 handle button tapped, opening launcher");
+GHLSSLogLine("v35 handle button tapped, opening launcher");
 [self showLauncher];
 }
 
@@ -572,7 +793,7 @@ if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 const char *bid = GHLSSAppBundleIDs[idx];
 const char *name = GHLSSAppNames[idx];
 char buf[256];
-snprintf(buf, sizeof(buf), "v34 app tapped %s", bid);
+snprintf(buf, sizeof(buf), "v35 app tapped %s", bid);
 GHLSSLogLine(buf);
 // 一个悬浮窗：已经有窗在，同 App 就恢复/已开着；不同 App 就先关
 // 当前窗再开新 App（v34 单窗切换）。
@@ -583,30 +804,35 @@ if (GHLSSHostedMinimized && strcmp(GHLSSHostedBundleID, bid) == 0) {
 return;
 }
 if (strcmp(GHLSSHostedBundleID, bid) == 0) {
-GHLSSLogLine("v34 window already open");
+GHLSSLogLine("v35 window already open");
 [self dismissLauncher];
 return;
 }
-// v34：点的是别的 App——先真正销毁当前 scene（destroyHostedScene，
-// 旧关窗体：销毁 scene、停 presenter、进程留着），再开新 App 的
-// 悬浮窗（5.2 单窗切换）。最小化着的窗也一样（反正藏着）。新 App
-// 的固定 sceneID 与旧的不同，残留撞不到新 ID。关完先核对状态清
+// v35：点的是别的 App——旧窗只藏起来、不销毁（closeHostedWindow：
+// 藏窗 + 推后台 + 记最小化，和 X 关窗同一条路），再把活动量存进
+// 缓存、清活动量，然后开新 App 的悬浮窗（5.2 单窗切换）。最小化
+// 着的窗也一样（反正藏着）。一个 SpringBoard 会话里 scene 永远不
+// 销毁：切回来直接复用缓存里的旧 scene（见 createHostedScene 的
+// 复用守卫），不再建新 scene，残留撞不到。存完缓存先核对活动量清
 // 干净了（窗/scene/presenter 全 nil、bundleID 清空、没最小化、
 // 没被锁屏藏着、没在启动中），不清干净就不开新窗，免得新 scene
 // 建在旧状态上。同一个 App 重开不走这里（关窗藏窗不销毁，直接
 // 复用，见 closeHostedWindow）。
-snprintf(buf, sizeof(buf), "v34 switching from %s to %s", GHLSSHostedBundleID, bid);
+snprintf(buf, sizeof(buf), "v35 switching from %s to %s", GHLSSHostedBundleID, bid);
 GHLSSLogLine(buf);
-[self destroyHostedScene];
+GHLSSLogLine("v35 window hidden on switch");
+[self closeHostedWindow];
+GHLSSSaveActiveToCache();
+GHLSSClearActive();
 if (GHLSSHostedWindow || GHLSSHostedScene || GHLSSHostedPresenter || GHLSSHostedBundleID[0] != '\0' || GHLSSHostedMinimized || GHLSSHostedHiddenByLock || GHLSSHostedLaunching) {
-GHLSSLogLine("v34 switch state not cleared, aborting launch");
+GHLSSLogLine("v35 switch state not cleared, aborting launch");
 return;
 }
-GHLSSLogLine("v34 old window closed, launching new app");
+GHLSSLogLine("v35 old window hidden, launching new app");
 // 不 return，掉下去走正常开窗流程（先收启动器、再主线程启动）。
 }
 if (GHLSSHostedLaunching) {
-GHLSSLogLine("v34 launch in progress, ignoring tap");
+GHLSSLogLine("v35 launch in progress, ignoring tap");
 return;
 }
 // 先收启动器（v23 卡死的教训：收窗是便宜操作，先做；
@@ -628,17 +854,17 @@ char *nameCopy = strdup(name);
 if (!bidCopy || !nameCopy) {
 if (bidCopy) free(bidCopy);
 if (nameCopy) free(nameCopy);
-GHLSSLogLine("v34 launch failed no memory");
+GHLSSLogLine("v35 launch failed no memory");
 return;
 }
 GHLSSHostedLaunching = YES;
 char buf[256];
-snprintf(buf, sizeof(buf), "v34 launch start %s", bundleID);
+snprintf(buf, sizeof(buf), "v35 launch start %s", bundleID);
 GHLSSLogLine(buf);
 @try {
 NSString *bidStr = [NSString stringWithCString:bidCopy encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v34 launch failed bad bundle id");
+GHLSSLogLine("v35 launch failed bad bundle id");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
@@ -646,13 +872,13 @@ return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
 if (!identity) {
-GHLSSLogLine("v34 launch failed no identity");
+GHLSSLogLine("v35 launch failed no identity");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v34 identity ok");
+GHLSSLogLine("v35 identity ok");
 // 先看 App 是不是已经在跑（单场景 App 已有全屏版时，再建
 // 第二个 scene 可能只剩白窗——测前要先把目标 App 彻底关掉）。
 RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:identity];
@@ -660,7 +886,7 @@ RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:
 int pid = handle ? [handle pid] : 0;
 if (pid > 0) {
 char pbuf[128];
-snprintf(pbuf, sizeof(pbuf), "v34 app already running pid=%d", pid);
+snprintf(pbuf, sizeof(pbuf), "v35 app already running pid=%d", pid);
 GHLSSLogLine(pbuf);
 // 已经在跑：不走事务，直接去建 scene（和参考实现同一做法）。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -670,18 +896,18 @@ free(nameCopy);
 });
 return;
 }
-GHLSSLogLine("v34 handle pid=0");
+GHLSSLogLine("v35 handle pid=0");
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 if (!manager) {
-GHLSSLogLine("v34 manager failed nil");
+GHLSSLogLine("v35 manager failed nil");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v34 manager ok");
+GHLSSLogLine("v35 manager ok");
 FBApplicationProcessLaunchTransaction *transaction = [[FBApplicationProcessLaunchTransaction alloc] initWithProcessIdentity:identity executionContextProvider:^id(void) {
-GHLSSLogLine("v34 launch provider called");
+GHLSSLogLine("v35 launch provider called");
 FBMutableProcessExecutionContext *context = [FBMutableProcessExecutionContext new];
 context.identity = identity;
 context.environment = [NSDictionary dictionary];
@@ -689,13 +915,13 @@ context.launchIntent = 4;
 return [manager launchProcessWithContext:context];
 }];
 if (!transaction) {
-GHLSSLogLine("v34 transaction failed nil");
+GHLSSLogLine("v35 transaction failed nil");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v34 transaction created");
+GHLSSLogLine("v35 transaction created");
 [transaction setCompletionBlock:^{
 // 事务完成可能跑在任意队列——场景创建回主线程做。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -705,11 +931,11 @@ free(nameCopy);
 });
 }];
 [transaction begin];
-GHLSSLogLine("v34 begin called");
-GHLSSLogLine("v34 launch transaction begun");
+GHLSSLogLine("v35 begin called");
+GHLSSLogLine("v35 launch transaction begun");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 launch failed exception");
+GHLSSLogLine("v35 launch failed exception");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
@@ -722,11 +948,11 @@ free(nameCopy);
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name {
 @try {
 char buf[256];
-snprintf(buf, sizeof(buf), "v34 scene start %s", bundleID);
+snprintf(buf, sizeof(buf), "v35 scene start %s", bundleID);
 GHLSSLogLine(buf);
 NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v34 scene failed no bid");
+GHLSSLogLine("v35 scene failed no bid");
 return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
@@ -734,25 +960,29 @@ RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:
 RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:nil];
 int pid = handle ? [handle pid] : 0;
 if (pid <= 0) {
-GHLSSLogLine("v34 scene failed no process");
+GHLSSLogLine("v35 scene failed no process");
 return;
 }
-snprintf(buf, sizeof(buf), "v34 process launched pid=%d", pid);
+snprintf(buf, sizeof(buf), "v35 process launched pid=%d", pid);
 GHLSSLogLine(buf);
-// v34 复用守卫：已有同 App 的 scene（关窗时没销毁）且进程还是
-// 同一个 pid、presenter 与它的 view 还活着——直接复用，不建新
-// scene。固定 ID 一个会话里只建一次，残留撞不到。scene 旧了
-//（进程换了或 presenter/view 没了）就先销毁再建（掉下去之前先
-// 清掉旧 scene，见下面）。
-if (GHLSSHostedScene && strcmp(GHLSSHostedBundleID, bundleID) == 0) {
-if (pid == GHLSSHostedPid && GHLSSHostedPresenter && GHLSSHostedPresenter.presentationView) {
-if (GHLSSHostedSceneID) {
+// v35 复用守卫：缓存里已有这个 App 的 scene（关窗或切走时没销毁）
+// 且进程还是同一个 pid、presenter 与它的 view 还活着——直接复用，
+// 不建新 scene。固定 ID 一个会话里只建一次，残留撞不到。scene 旧
+// 了（进程换了或 presenter/view 没了）就先销毁缓存里那一项再建
+//（掉下去之前先清掉旧 scene，见下面；只调销毁缓存那一项，不碰
+// 活动量）。查缓存不查活动量：切走后活动量是空的，旧 scene 只在
+// 缓存里。
+int cacheIdx = GHLSSAppIndexForBundleID(bundleID);
+if (cacheIdx >= 0 && GHLSSCacheScenes[cacheIdx]) {
+if (pid == GHLSSCachePids[cacheIdx] && GHLSSCachePresenters[cacheIdx] && GHLSSCachePresenters[cacheIdx].presentationView) {
+if (GHLSSCacheSceneIDs[cacheIdx]) {
 char rbuf[256];
-snprintf(rbuf, sizeof(rbuf), "v34 reusing existing scene %s", [GHLSSHostedSceneID UTF8String]);
+snprintf(rbuf, sizeof(rbuf), "v35 reusing cached scene %s", [GHLSSCacheSceneIDs[cacheIdx] UTF8String]);
 GHLSSLogLine(rbuf);
 } else {
-GHLSSLogLine("v34 reusing existing scene");
+GHLSSLogLine("v35 reusing cached scene");
 }
+GHLSSLoadCacheToActive(cacheIdx);
 if (GHLSSHostedMinimized) {
 [self restoreHostedWindow];
 } else if (GHLSSHostedWindow) {
@@ -764,35 +994,33 @@ if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
 settings.backgrounded = NO;
 }
 }];
-GHLSSLogLine("v34 foreground pushed on reuse");
+GHLSSLogLine("v35 foreground pushed on reuse");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 foreground push on reuse failed");
+GHLSSLogLine("v35 foreground push on reuse failed");
 }
 }
 return;
 }
-GHLSSLogLine("v34 stored scene stale, destroying");
-[self destroyHostedScene];
+GHLSSLogLine("v35 stored scene stale, destroying");
+GHLSSDestroyCachedEntryAtIndex(cacheIdx);
 }
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 [manager registerProcessForAuditToken:[handle auditToken]];
-// v34：sceneID 改回固定格式 `sceneID:<bundleID>-default`（v28
-// 的格式）——v33 的每次新 UUID 让计算器黑屏：已在跑着的单 scene
-// App 只往自己默认 ID 的 scene 里画，全新 UUID 的 scene 它认不
-// 出来、不往里画（§84 定死）。固定 ID + 低层级（v29）两个条件
-// 都要，缺一不可。v33「固定 ID 不是画画的必要条件」的判断是错
-// 的，一并纠正。残留撞 ID 的崩不靠新 ID 修，靠关窗的生命周期
-//（见 closeHostedWindow：关窗藏窗不销毁，重开直接复用；同一 ID
-// 一个 SpringBoard 会话里只建一次）。persistenceIdentifier 仍
-// 与 sceneID 相同（下面那行本来就是 settings.persistenceIdentifier
-// = sceneID）；切走别的 App 时才按存着的 sceneID 销毁（见
-// destroyHostedScene）。主线程启动、foreground 推送、1.5 秒 +
-// 4 秒重试，其余什么都不动。
+// v35：sceneID 仍是固定格式 `sceneID:<bundleID>-default`（v28 的
+// 格式）——v33 的每次新 UUID 让计算器黑屏：已在跑着的单 scene App
+// 只往自己默认 ID 的 scene 里画，全新 UUID 的 scene 它认不出来、
+// 不往里画（§84 定死）。固定 ID + 低层级（v29）两个条件都要，缺
+// 一不可。残留撞 ID 的崩不靠新 ID 修，靠会话内永不销毁（见文件头
+// v35 节：关窗与切走都只藏窗，复用缓存里的旧 scene；同一 ID 一个
+// 会话只建一次）。persistenceIdentifier 仍与 sceneID 相同（下面那
+// 行本来就是 settings.persistenceIdentifier = sceneID）。主线程启
+// 动、foreground 推送、1.5 秒 + 4 秒重试，其余什么都不动。
 NSString *fmt = [NSString stringWithCString:"sceneID:%s-default" encoding:NSUTF8StringEncoding];
 NSString *sceneID = [NSString stringWithFormat:fmt, bundleID];
+GHLSSLogLine("v35 creating new scene");
 char idbuf[256];
-snprintf(idbuf, sizeof(idbuf), "v34 sceneID %s", [sceneID UTF8String]);
+snprintf(idbuf, sizeof(idbuf), "v35 sceneID %s", [sceneID UTF8String]);
 GHLSSLogLine(idbuf);
 FBSMutableSceneDefinition *definition = [FBSMutableSceneDefinition definition];
 definition.identity = [FBSSceneIdentity identityForIdentifier:sceneID];
@@ -806,7 +1034,12 @@ settings.displayConfiguration = [[UIScreen mainScreen] displayConfiguration];
 settings.foreground = YES;
 settings.deviceOrientation = UIDeviceOrientationPortrait;
 settings.interfaceOrientation = UIInterfaceOrientationPortrait;
-settings.frame = CGRectMake(0, 0, GHLSS_HOSTED_CONTENT_W, GHLSS_HOSTED_CONTENT_H);
+// v35：frame 按 App 定——计算器拿屏幕尺寸（它的远端图层得是整张全
+// 屏画面，见 GHLSSSceneFrameSizeForBundleID），别的 App 拿 320x480
+// 内容尺寸。presentationView 的尺寸就是 frame 的尺寸（日志里那行
+// presentationView w=... 会印证：计算器应是 414x896）。
+CGSize sceneFrameSize = GHLSSSceneFrameSizeForBundleID(bundleID);
+settings.frame = CGRectMake(0, 0, sceneFrameSize.width, sceneFrameSize.height);
 settings.level = 1;
 settings.persistenceIdentifier = sceneID;
 settings.peripheryInsets = UIEdgeInsetsZero;
@@ -819,18 +1052,18 @@ clientSettings.statusBarStyle = 0;
 parameters.clientSettings = clientSettings;
 FBScene *scene = [[FBSceneManager sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
 if (!scene) {
-GHLSSLogLine("v34 scene failed nil scene");
+GHLSSLogLine("v35 scene failed nil scene");
 return;
 }
-GHLSSLogLine("v34 scene created");
+GHLSSLogLine("v35 scene created");
 id presenterManager = [scene uiPresentationManager];
 if (!presenterManager) {
-GHLSSLogLine("v34 presenter failed no manager");
+GHLSSLogLine("v35 presenter failed no manager");
 return;
 }
 _UIScenePresenter *presenter = [presenterManager createPresenterWithIdentifier:sceneID];
 if (!presenter) {
-GHLSSLogLine("v34 presenter failed nil");
+GHLSSLogLine("v35 presenter failed nil");
 return;
 }
 [presenter modifyPresentationContext:^(UIMutableScenePresentationContext *context) {
@@ -838,7 +1071,7 @@ context.appearanceStyle = 2;
 }];
 [presenter activate];
 if (!presenter.presentationView) {
-GHLSSLogLine("v34 presenter failed no view");
+GHLSSLogLine("v35 presenter failed no view");
 return;
 }
 // v28：记 presenterView 的尺寸与有没有 layer——计算器在 v26 还是黑的
@@ -847,11 +1080,11 @@ return;
 @try {
 char pbuf[128];
 UIView *pv = presenter.presentationView;
-snprintf(pbuf, sizeof(pbuf), "v34 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
+snprintf(pbuf, sizeof(pbuf), "v35 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
 GHLSSLogLine(pbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 presentationView failed");
+GHLSSLogLine("v35 presentationView failed");
 }
 // v28：scene 建好了、presenter 也 activate 了，但 v25 的窗是黑的——
 // 计算器进程没往 scene 里画。KonbanXV 的做法是建完 scene 就把
@@ -862,28 +1095,28 @@ GHLSSLogLine("v34 presentationView failed");
 // 单独包 @try/@catch，出错只记日志、继续建窗。
 @try {
 char cbuf[128];
-snprintf(cbuf, sizeof(cbuf), "v34 scene contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(cbuf, sizeof(cbuf), "v35 scene contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(cbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 scene contentState failed");
+GHLSSLogLine("v35 scene contentState failed");
 }
 @try {
 [scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
 settings.foreground = YES;
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v34 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(fbuf, sizeof(fbuf), "v35 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 foreground push failed");
+GHLSSLogLine("v35 foreground push failed");
 }
-GHLSSLogLine("v34 presenter ready");
+GHLSSLogLine("v35 presenter ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:scene presenter:presenter sceneID:sceneID pid:pid];
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 scene failed exception");
+GHLSSLogLine("v35 scene failed exception");
 } @finally {
 GHLSSHostedLaunching = NO;
 }
@@ -906,7 +1139,7 @@ UIWindowScene *hostedScene = GHLSSActiveWindowScene();
 if (hostedScene) {
 GHLSSHostedWindow.windowScene = hostedScene;
 } else {
-GHLSSLogLine("v34 hosted scene nil");
+GHLSSLogLine("v35 hosted scene nil");
 }
 // 窗的阴影与圆角（画在窗的 layer 上；内容容器自己裁圆角）。
 GHLSSHostedWindow.layer.cornerRadius = GHLSS_HOSTED_CORNER;
@@ -967,9 +1200,21 @@ contentView.backgroundColor = [UIColor whiteColor];
 [container addSubview:contentView];
 GHLSSHostedContentView = contentView;
 UIView *presenterView = presenter.presentationView;
+// v35：计算器的 view 不按内容区 frame——它的图层是屏幕尺寸
+//（scene frame），bounds 就给图层尺寸、居中，再按比例缩放（见
+// GHLSSScalePresenterViewToFit）；autoresizing 关掉，尺寸由缩放
+// 管。别的 App 照旧：frame = 内容区 bounds + 自适应宽高。
+if (strcmp(bundleID, "com.apple.calculator") == 0) {
+CGSize frameSize = GHLSSSceneFrameSizeForBundleID(bundleID);
+presenterView.autoresizingMask = UIViewAutoresizingNone;
+presenterView.bounds = CGRectMake(0, 0, frameSize.width, frameSize.height);
+presenterView.center = CGPointMake(contentView.bounds.size.width / 2.0, contentView.bounds.size.height / 2.0);
+} else {
 presenterView.frame = contentView.bounds;
 presenterView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+}
 [contentView insertSubview:presenterView atIndex:0];
+GHLSSScalePresenterViewToFit(presenterView, contentView, bundleID);
 // 右下角缩放手柄（60x60，斜纹小方块）。
 UIView *resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(winW - 60, winH - 60, 60, 60)];
 resizeHandle.backgroundColor = [UIColor clearColor];
@@ -994,7 +1239,14 @@ strncpy(GHLSSHostedBundleID, bundleID, sizeof(GHLSSHostedBundleID) - 1);
 GHLSSHostedBundleID[sizeof(GHLSSHostedBundleID) - 1] = '\0';
 GHLSSHostedPid = pid;
 GHLSSHostedMinimized = NO;
-GHLSSLogLine("v34 window shown");
+// v35：新窗也进缓存（这个 App 的第一份），活动下标指到它；以后切
+// 走再切回来，直接复用这一份，不再建新 scene。
+int newCacheIdx = GHLSSAppIndexForBundleID(bundleID);
+if (newCacheIdx >= 0) {
+GHLSSActiveAppIndex = newCacheIdx;
+GHLSSSaveActiveToCache();
+}
+GHLSSLogLine("v35 window shown");
 // v28：1.5 秒重试 + 4 秒再重试一次。v26 的 1.5 秒重试在真机日志里
 // 一次都没出现——不知道是重试块根本没跑，还是窗在 1.5 秒内就被
 // 关/最小化了、守卫条件直接 return 没留日志。所以两次重试的块一跑
@@ -1003,7 +1255,7 @@ GHLSSLogLine("v34 window shown");
 // retry2。再包一层 @try/@catch，重试绝不能拖垮 SpringBoard。
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v34 foreground retry check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v35 foreground retry check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!GHLSSHostedScene || !GHLSSHostedWindow || GHLSSHostedMinimized) return;
 @try {
@@ -1012,17 +1264,17 @@ if ([GHLSSHostedScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v34 foreground retry contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v35 foreground retry contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 foreground retry failed");
+GHLSSLogLine("v35 foreground retry failed");
 }
 });
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v34 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v35 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!GHLSSHostedScene || !GHLSSHostedWindow || GHLSSHostedMinimized) return;
 @try {
@@ -1031,96 +1283,61 @@ if ([GHLSSHostedScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v34 foreground retry2 contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v35 foreground retry2 contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 foreground retry2 failed");
+GHLSSLogLine("v35 foreground retry2 failed");
 }
 });
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 window failed exception");
+GHLSSLogLine("v35 window failed exception");
 }
 }
 
-// v34 关窗（X）：藏窗、不销毁 scene——只藏窗、推后台、记最小化。
+// v35 关窗（X）：藏窗、不销毁 scene——只藏窗、推后台、记最小化。
 // scene 留着，重开同一个 App 直接复用（见 createHostedScene 的
 // 复用守卫），不再建新 scene；固定 ID 一个 SpringBoard 会话里只
-// 建一次，残留撞不到。真正销毁只在切走别的 App 时（见
-// destroyHostedScene，新 App 的固定 ID 不同，不撞）。关窗后窗的
-// 状态与最小化一样（hidden=YES、minimized=YES、scene 后台化），
-// 重开走同一条恢复路（restoreHostedWindow 推前景）；锁屏回调也
-// 一样处理（最小化着的窗锁屏不藏、解锁不弹，等用户点恢复）。
+// 建一次，残留撞不到。切走别的 App 时也一样（只藏窗、存缓存，见
+// handleAppButton 的切换路径）；真正销毁只在复用守卫判旧时（进程
+// 死了，见 GHLSSDestroyCachedEntryAtIndex）。关窗后窗的状态与最小
+// 化一样（hidden=YES、minimized=YES、scene 后台化），重开走同一条
+// 恢复路（restoreHostedWindow 推前景）；锁屏回调也一样处理（最小
+// 化着的窗锁屏不藏、解锁不弹，等用户点恢复）。
 // 进程留着不杀（V5_DESIGN.md §2.2 第 19 步的精神：关窗不杀进程）。
 - (void)closeHostedWindow {
 if (!GHLSSHostedWindow) return;
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedMinimized = YES;
-GHLSSLogLine("v34 window closed (scene kept)");
-GHLSSBackgroundHostedScene("v34 scene backgrounded on close");
+GHLSSLogLine("v35 window closed (scene kept)");
+GHLSSBackgroundHostedScene("v35 scene backgrounded on close");
 }
 
-// v34 真正销毁 hosted scene——只在切走别的 App 时调（不同
-// bundleID → 不同固定 sceneID，残留不撞新 ID）。同 App 重开不
-// 走这里（见 closeHostedWindow：藏窗不销毁，直接复用）。体是旧
-// 关窗（destroyScene → deactivate → invalidate presenter → 清
-// 全部静态量），顺序与参考项目 FrontBoardAppLauncher 的关窗一致。
-- (void)destroyHostedScene {
-if (!GHLSSHostedWindow && !GHLSSHostedScene) return;
-@try {
-if (GHLSSHostedSceneID) {
-char dbuf[256];
-snprintf(dbuf, sizeof(dbuf), "v34 destroying scene %s", [GHLSSHostedSceneID UTF8String]);
-GHLSSLogLine(dbuf);
-[[FBSceneManager sharedInstance] destroyScene:GHLSSHostedSceneID withTransitionContext:nil];
-}
-if (GHLSSHostedPresenter) {
-[GHLSSHostedPresenter deactivate];
-[GHLSSHostedPresenter invalidate];
-}
-} @catch (NSException *e) {
-(void)e;
-GHLSSLogLine("v34 destroy failed");
-}
-GHLSSHostedWindow.hidden = YES;
-GHLSSHostedWindow = nil;
-GHLSSHostedScene = nil;
-GHLSSHostedPresenter = nil;
-GHLSSHostedContainer = nil;
-GHLSSHostedTitleBar = nil;
-GHLSSHostedTitleLabel = nil;
-GHLSSHostedContentView = nil;
-GHLSSHostedResizeHandle = nil;
-GHLSSHostedSceneID = nil;
-GHLSSHostedBundleID[0] = '\0';
-GHLSSHostedPid = 0;
-GHLSSHostedMinimized = NO;
-GHLSSHostedHiddenByLock = NO;
-if (GHLSSLauncherWindow) {
-// v29：启动器回到基准层级，仍在 Alert 之下（相对顺序不变，见 buildHostedWindow 的注释）。
-GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert - 3.0;
-}
-GHLSSLogLine("v34 scene destroyed");
-}
+// v35：destroyHostedScene 已删——会话内永不销毁 scene（见文件头 v35
+// 节）。唯一剩下的销毁在 GHLSSDestroyCachedEntryAtIndex（只在复用
+// 守卫判旧、进程死了时调）。切走与关窗只藏窗（见 handleAppButton
+// 的切换路径与 closeHostedWindow）。启动器层级不用这里复位：
+// showLauncher 每次按活动窗有没有定层级（有窗 Alert - 1、没窗
+// Alert - 3），销毁只发生在没有活动窗的旧 scene 上。
 
 - (void)minimizeHostedWindow {
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedMinimized = YES;
-GHLSSLogLine("v34 window minimized");
+GHLSSLogLine("v35 window minimized");
 // v31：藏窗后把 scene 推回后台（foreground=NO + backgrounded=YES）。
 // 锁屏时系统不会替我们的 scene 推后台，scene 一直占着前景，很可能
 // 干扰锁屏密码的触摸；最小化时先后台化，锁屏时再后台化一次也无妨。
-GHLSSBackgroundHostedScene("v34 scene backgrounded on minimize");
+GHLSSBackgroundHostedScene("v35 scene backgrounded on minimize");
 }
 
 - (void)restoreHostedWindow {
 if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
 GHLSSHostedWindow.hidden = NO;
 GHLSSHostedMinimized = NO;
-GHLSSLogLine("v34 window restored");
+GHLSSLogLine("v35 window restored");
 // v30：最小化后锁屏再解锁、恢复窗时内容是黑的——锁屏把 scene 的
 // foreground 状态弄丢了，只取消 hidden 不够；恢复时也要把
 // foreground=YES 再推一遍（建窗时同一个已证明能用的做法），
@@ -1136,22 +1353,22 @@ settings.backgrounded = NO;
 }
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v34 foreground pushed on restore contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+snprintf(fbuf, sizeof(fbuf), "v35 foreground pushed on restore contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
 GHLSSLogLine(fbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 foreground push on restore failed");
+GHLSSLogLine("v35 foreground push on restore failed");
 }
 }
 
 - (void)handleHostedClose:(id)sender {
-GHLSSLogLine("v34 hosted close tapped");
+GHLSSLogLine("v35 hosted close tapped");
 [self closeHostedWindow];
 }
 
 - (void)handleHostedMinimize:(id)sender {
-GHLSSLogLine("v34 hosted minimize tapped");
+GHLSSLogLine("v35 hosted minimize tapped");
 [self minimizeHostedWindow];
 }
 
@@ -1205,33 +1422,42 @@ if (recognizer.state == UIGestureRecognizerStateEnded) {
 - (void)resizeHostedSceneToContentSize:(CGSize)size {
 if (!GHLSSHostedScene) return;
 @try {
+// v35：计算器的 frame 保持屏幕尺寸（图层得是整张全屏画面，缩放
+// 才有东西可缩）；别的 App 照旧，frame = 新内容尺寸。
+CGSize newFrameSize = size;
+if (strcmp(GHLSSHostedBundleID, "com.apple.calculator") == 0) {
+newFrameSize = GHLSSSceneFrameSizeForBundleID(GHLSSHostedBundleID);
+}
 [GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
-settings.frame = CGRectMake(0, 0, size.width, size.height);
+settings.frame = CGRectMake(0, 0, newFrameSize.width, newFrameSize.height);
 settings.interfaceOrientation = UIInterfaceOrientationPortrait;
 settings.deviceOrientation = UIDeviceOrientationPortrait;
 }];
 char buf[128];
-snprintf(buf, sizeof(buf), "v34 scene resized %d,%d", (int)size.width, (int)size.height);
+snprintf(buf, sizeof(buf), "v35 scene resized %d,%d", (int)size.width, (int)size.height);
 GHLSSLogLine(buf);
+// v35：缩放手柄松手后重算一次缩放（内容区变了，s 跟着变；计算器
+// 才缩，别的 App 的 helper 里直接 return）。
+GHLSSScalePresenterViewToFit(GHLSSHostedPresenter.presentationView, GHLSSHostedContentView, GHLSSHostedBundleID);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v34 scene resize failed");
+GHLSSLogLine("v35 scene resize failed");
 }
 }
 
 - (void)handleCloseButton:(id)sender {
-GHLSSLogLine("v34 close button tapped");
+GHLSSLogLine("v35 close button tapped");
 [self dismissLauncher];
 }
 
 - (void)handleBackgroundTap:(UITapGestureRecognizer *)recognizer {
-GHLSSLogLine("v34 background tapped, dismissing launcher");
+GHLSSLogLine("v35 background tapped, dismissing launcher");
 [self dismissLauncher];
 }
 
 - (void)showLauncher {
 if (GHLSSLauncherVisible) {
-GHLSSLogLine("v34 launcher already open");
+GHLSSLogLine("v35 launcher already open");
 return;
 }
 if (!GHLSSLauncherWindow) {
@@ -1245,14 +1471,14 @@ GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert - 3.0;
 }
 GHLSSLauncherWindow.hidden = NO;
 GHLSSLauncherVisible = YES;
-GHLSSLogLine("v34 launcher opened");
+GHLSSLogLine("v35 launcher opened");
 }
 
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherWindow.hidden = YES;
 GHLSSLauncherVisible = NO;
-GHLSSLogLine("v34 launcher dismissed");
+GHLSSLogLine("v35 launcher dismissed");
 }
 
 // 建启动器窗（第一次打开时才建）：全屏透明窗 + 右侧 220pt 暗色面板。
@@ -1269,9 +1495,9 @@ GHLSSLauncherWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *launcherScene = GHLSSActiveWindowScene();
 if (launcherScene) {
 GHLSSLauncherWindow.windowScene = launcherScene;
-GHLSSLogLine("v34 launcher scene found");
+GHLSSLogLine("v35 launcher scene found");
 } else {
-GHLSSLogLine("v34 launcher scene nil");
+GHLSSLogLine("v35 launcher scene nil");
 }
 UIViewController *launcherVC = [[UIViewController alloc] init];
 UIView *rootView = [[UIView alloc] initWithFrame:screenBounds];
@@ -1307,7 +1533,7 @@ iconView.image = icon;
 } else {
 iconView.backgroundColor = [UIColor grayColor];
 char ibuf[192];
-snprintf(ibuf, sizeof(ibuf), "v34 icon nil for %s", GHLSSAppBundleIDs[i]);
+snprintf(ibuf, sizeof(ibuf), "v35 icon nil for %s", GHLSSAppBundleIDs[i]);
 GHLSSLogLine(ibuf);
 }
 iconView.layer.cornerRadius = 10.0;
@@ -1329,7 +1555,7 @@ closeButton.titleLabel.font = [UIFont systemFontOfSize:16];
 [closeButton addTarget:self action:@selector(handleCloseButton:) forControlEvents:UIControlEventTouchUpInside];
 [panel addSubview:closeButton];
 GHLSSLauncherWindow.rootViewController = launcherVC;
-GHLSSLogLine("v34 launcher built");
+GHLSSLogLine("v35 launcher built");
 }
 
 @end
@@ -1361,8 +1587,8 @@ CFRelease(v);
 if (domain) CFRelease(domain);
 if (key) CFRelease(key);
 char buf[128];
-snprintf(buf, sizeof(buf), "v34 deferred setup ran, switch=%s", state);
-GHLSSLogLine("v34 deferred setup ran");
+snprintf(buf, sizeof(buf), "v35 deferred setup ran, switch=%s", state);
+GHLSSLogLine("v35 deferred setup ran");
 GHLSSLogLine(buf);
 // 右边缘感应带：24pt 宽、全高、透明，层级在 SpringBoard 内容之上。
 // v23 的修法：窗显式挂 windowScene（没挂 scene 的窗可能不显示，
@@ -1377,9 +1603,9 @@ GHLSSStripWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *stripScene = GHLSSActiveWindowScene();
 if (stripScene) {
 GHLSSStripWindow.windowScene = stripScene;
-GHLSSLogLine("v34 window scene found");
+GHLSSLogLine("v35 window scene found");
 } else {
-GHLSSLogLine("v34 window scene nil");
+GHLSSLogLine("v35 window scene nil");
 }
 UIViewController *stripVC = [[UIViewController alloc] init];
 GHLSSPlainStripView *stripView = [[GHLSSPlainStripView alloc] initWithFrame:CGRectMake(0, 0, stripWidth, screenBounds.size.height)];
@@ -1387,14 +1613,14 @@ stripView.backgroundColor = [UIColor clearColor];
 stripVC.view = stripView;
 GHLSSStripWindow.rootViewController = stripVC;
 GHLSSStripWindow.hidden = NO;
-GHLSSLogLine("v34 edge strip built");
+GHLSSLogLine("v35 edge strip built");
 // 诊断日志：窗与带子到底是什么状态（真机一看就知道上没上屏）。
 char dbuf[256];
 CGRect wf = GHLSSStripWindow.frame;
-snprintf(dbuf, sizeof(dbuf), "v34 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
+snprintf(dbuf, sizeof(dbuf), "v35 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
 GHLSSLogLine(dbuf);
 CGRect sf = stripView.frame;
-snprintf(dbuf, sizeof(dbuf), "v34 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v35 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
 GHLSSLogLine(dbuf);
 // 5.1 的处理器（唯一的自定义处理类）。
 GHLSSLauncherShared = [[GHLSSLauncher alloc] init];
@@ -1403,7 +1629,7 @@ UIScreenEdgePanGestureRecognizer *edgePan = [[UIScreenEdgePanGestureRecognizer a
 edgePan.edges = UIRectEdgeRight;
 edgePan.delegate = GHLSSLauncherShared;
 [stripView addGestureRecognizer:edgePan];
-GHLSSLogLine("v34 edge gesture added");
+GHLSSLogLine("v35 edge gesture added");
 // 金色"分"按钮（感应带上的可见把手，备用触发）。
 // v23 做大做显眼：24 宽 x 64 高、14pt 粗体、金底黑边（v22 的 12x48
 // 太小，就算显示了也难看见）。
@@ -1418,9 +1644,9 @@ handleButton.layer.borderColor = [UIColor blackColor].CGColor;
 handleButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [handleButton addTarget:GHLSSLauncherShared action:@selector(handleHandleButton:) forControlEvents:UIControlEventTouchUpInside];
 [stripView addSubview:handleButton];
-GHLSSLogLine("v34 handle button added");
+GHLSSLogLine("v35 handle button added");
 CGRect bf = handleButton.frame;
-snprintf(dbuf, sizeof(dbuf), "v34 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v35 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
 GHLSSLogLine(dbuf);
 // v32：锁屏信号——libnotify 的 notify_register_dispatch（<notify.h>，
 // 纯 C API，传 C 字串）。这不是被禁的 CFNotificationCenterAddObserver，
@@ -1438,9 +1664,9 @@ uint64_t lockState = 0;
 notify_get_state(token, &lockState);
 if (lockState == 1) {
 if (GHLSSHostedScene) {
-GHLSSBackgroundHostedScene("v34 scene backgrounded on lock");
+GHLSSBackgroundHostedScene("v35 scene backgrounded on lock");
 } else {
-GHLSSLogLine("v34 lock state locked, no hosted scene");
+GHLSSLogLine("v35 lock state locked, no hosted scene");
 }
 // v32：锁屏时把悬浮窗也临时藏起来（见上面注释）。只藏"开着"的窗
 // （hidden=NO 且没最小化）；最小化着的窗本来就藏着（hidden=YES），
@@ -1448,26 +1674,26 @@ GHLSSLogLine("v34 lock state locked, no hosted scene");
 if (GHLSSHostedWindow && !GHLSSHostedMinimized) {
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedHiddenByLock = YES;
-GHLSSLogLine("v34 hosted window hidden on lock");
+GHLSSLogLine("v35 hosted window hidden on lock");
 } else if (GHLSSHostedWindow) {
-GHLSSLogLine("v34 lock, window already minimized");
+GHLSSLogLine("v35 lock, window already minimized");
 }
 } else {
 if (GHLSSHostedHiddenByLock) {
 if (GHLSSHostedWindow) {
 GHLSSHostedWindow.hidden = NO;
-GHLSSLogLine("v34 hosted window shown on unlock");
+GHLSSLogLine("v35 hosted window shown on unlock");
 }
 GHLSSHostedHiddenByLock = NO;
 } else {
-GHLSSLogLine("v34 lock state unlocked");
+GHLSSLogLine("v35 lock state unlocked");
 }
 }
 });
 if (lockNotifyResult == 0) {
-GHLSSLogLine("v34 lockstate notify registered");
+GHLSSLogLine("v35 lockstate notify registered");
 } else {
-GHLSSLogLine("v34 lockstate notify register failed");
+GHLSSLogLine("v35 lockstate notify register failed");
 }
 });
 }
