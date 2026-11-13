@@ -1,6 +1,27 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.25（实验版 v25）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.26（实验版 v26）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v26 是什么（5.2 修 v25 的黑窗）
+
+v25 真机（2026-11-13 11:50）：悬浮窗出来了（圆角、标题栏「计算器」、
+红 X、黄最小化、金色「分」按钮），没进安全模式、没卡住、手机没重启——
+v24 的崩修好了。但窗里的内容全黑，计算器的界面画不出来，没法用。
+日志（`GuHaiLongSplitScreen-3.log`）证明整条链全走通了两遍：
+`identity ok` → `handle pid=0` → `manager ok` → `transaction created`
+→ `provider called` → `begin called` → `transaction begun` →
+`scene start` → `process launched pid=5254` → `scene created` →
+`presenter ready` → `window shown`；关窗后重开（进程已在跑 pid=5254）
+也一样走到 `window shown`、也一样黑——所以不是启动时机问题。
+scene、presenter、窗都在，就是计算器进程没往 scene 里画东西。
+
+v26 只改一件事：**presenter activate 之后，把 foreground=YES 显式推给
+scene**（KonbanXV 的做法，注释写着 "important for the view to be
+interactable"），并记 scene 的 `contentState`（0 没就绪、1 准备中、2
+就绪）；窗出来 1.5 秒后，如果窗还在、没最小化、`contentState` 还不是
+2，再推一遍。推 foreground 用的是已经证明能用的
+`updateSettingsWithBlock:`（缩放那条路就用它推 frame，日志里有
+`v25 scene resized`）。其余与 v25 相同。
 
 ## v25 是什么（5.2 修 v24 的安全模式）
 
