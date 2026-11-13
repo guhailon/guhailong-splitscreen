@@ -1,6 +1,12 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.37（实验版 v37）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.38（实验版 v38）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v38 是什么（托管已有主 scene + 无标题栏大窗 + 哆啦A夢鈕）
+
+**① 撞崩修法（最高优先级，BUILD_LOG §99 的设计）——已在跑的 App 托管它已有的主 scene（仿照 KonbanXV，作者 Hoangdus，MIT——只仿结构，代码原创）：**切到一个 App 前，先查 FBSceneManager 的 `_workspace` → `_allScenesByID`，找 identifier 匹配固定 sceneID `sceneID:<bundleID>-default` 的已有主 scene；找到了就不 `registerProcessForAuditToken`、不 `createScene`、不用 `_UIScenePresenter`，改用 `_UISceneLayerHostContainerView` + `_setPresentationContext:` 把已有 scene 的画面嵌进窗（只推 foreground，**不动它的 frame、不动安全区 insets**），永远不 destroyScene 它；哪一步失败就落回原来的 createScene 路径并记日志。缓存多一套平行数组 `GHLSSCacheLayerHostViews[5]`，复用判断、缩放、关窗/最小化/恢复、锁屏、陈旧场景守卫都按 presenter==nil / layer-host 分支。**② 无标题栏大窗（浮动View 的样子）：**44pt 标题栏删掉，内容区就是整个窗、贴边填满、圆角 35；一般 App 默认窗改大到 350x757（85% 宽、按屏比例算高，层宿主按宽缩放正好填满、无裁切、无白边），计算器仍是 320x693（0.77 缩放不变）。窗顶只有一条 16pt 透明细条（中间一条 56x5 的白 pill，50% 透明），点一下展开/收起 36pt 控制条（半透明黑底：红 X、黄最小化、App 名、±），控制条收起时缩放滑杆条也跟着收起；细条和控制条都能拖窗。缩放滑杆仍是 v37 的反向耦合（scene frame = 内容尺寸 ÷ scale）。**③ 哆啦A夢鈕：**金色「分」按钮改成 56pt 圆钮，大笑 3D 版哆啦A夢图（皇上 22:23 确认），单独一个 56x56 的小窗（右边缘、竖直居中、层级 Alert - 4），图从 prefs bundle 里读（@3x 自动挑，读不到退回金色圆钮 + 「分」字）；感应带仍是 24pt，只留右边缘滑动手势。
+
+测法：**先把设置打开（让它在后台跑着），再从分屏启动器点设置——必须不进安全模式、设置正常画出来**；切设置↔计算器↔时钟来回 6 次，看有没有崩；计算器窗里按键全在、左右没有白边；点窗顶细条，控制条出来（红 X、黄最小化、± 都在），再点控制条中间收起来；点 ±，缩放滑杆条出来，拖滑杆放大/缩小；点右边缘的哆啦A夢鈕，启动器打开；锁屏→解锁，密码能按（等 30 秒以上再按）；日志里应有 `v38 hosting existing scene …`、`v38 layer host ready`、`v38 doraemon image loaded`、`v38 control bar toggled`、`v38 scale changed to …%`。
 
 ## v37 是什么（反向耦合缩放 + 标题栏缩放滑杆 + 安全区规则）
 
