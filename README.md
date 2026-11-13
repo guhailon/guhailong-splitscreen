@@ -1,4 +1,4 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.22（实验版 v22）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.23（实验版 v23）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
 
@@ -10,6 +10,21 @@
 - 架构：`iphoneos-arm64`，`arm64 / arm64e`，SDK 16.5
 
 其他版本、其他越狱工具均不在目标内，不保证能用。
+
+## v23 是什么（修 v22 的窗没显示出来）
+
+v22 真机：装得上、不黑屏，日志全齐，但金色「分」按钮看不见，滑两次
+也打不开启动器——感应带的窗在代码里建了，却没显示到屏幕上。v23 只
+改三件事：
+
+- 窗显式挂 `windowScene`（从 `connectedScenes` 取，没挂 scene 的窗
+  可能不显示）；
+- 带子的视图给显式 frame（不用 plain init 的零 frame）；
+- 把手做大做显眼：感应带 24pt 宽，按钮 24x64、14pt 粗体、金底黑边。
+
+建窗后还记诊断日志（窗的 frame、hidden、scene 有没有，带子与按钮的
+frame），真机一看日志就知道窗到底上没上屏。启动器的窗也一样显式挂
+scene。5.1 其余不变。
 
 ## v22 是什么（5.1）
 
