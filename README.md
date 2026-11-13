@@ -1,6 +1,12 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.36（实验版 v36）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.37（实验版 v37）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v37 是什么（反向耦合缩放 + 标题栏缩放滑杆 + 安全区规则）
+
+v36 真机日志（`GuHaiLongSplitScreen-8.log`，v36 段 183 行）：计算器贴边修好了（窗 320x736、scale 77%、presenterView frame 0,0 320x692、contentState 到 2）；切计算器→时钟→备忘录都正常；**切到设置时进安全模式两次，都是同一个签名——`app already running pid=3666` → 建 scene → `sceneID sceneID:com.apple.Preferences-default` → 下一行就是 `deferred setup ran`（SpringBoard 重启）。设置是皇上之前自己打开过、一直在后台跑的，所以 createScene 时它的进程已有同 ID 的主 scene，固定 ID 一撞就触发 registerHost fromRemnant 断言。**v35 段对比：设置第一次开是新进程、建 scene 成功，之后 12 次都是 reusing cached scene、0 崩——v35 的 never-destroy 修好了「销毁→重建」崩，但 v36 暴露了「已在跑 + 同 ID」这个新触发点。v37 的第 4 项（最高优先级，托管已有主 scene）因修法太大、且与第 1 项改同一处代码，**留给 v38 做**（见 BUILD_LOG §99 末尾的 v38 具体设计），v37 先做原定的三项：**① 反向耦合缩放（仿照 FrontBoardAppLauncher，作者 khanhduytran0，Apache-2.0——只仿结构，代码原创）：每个窗一个 scaleRatio（默认 1.0；计算器默认 0.77，窗仍是 320x737）；scene frame = 内容尺寸 ÷ scale，内容区 layer 加 sublayerTransform = CATransform3DMakeScale(scale, scale, 1) 缩回。一除一乘，任意 App、任意窗尺寸都填满内容区、贴边。v36 的计算器特判全删掉（只按宽缩放的 helper、建窗的计算器分支、缩放手柄的比例锁、resize 的计算器分支），只剩每 App 的默认 scaleRatio 不同。frame 更新防抖 0.05 秒；presentationView 的 bounds = frame 尺寸、anchorPoint (0,0)、position (0,0)。② 标题栏缩放滑杆 0.5–2.0（步进 0.01）：标题栏右边加一个 26x26 的「±」圆钮，点一下在内容区顶上展开一条 36pt 的滑杆条（半透明黑底，UISlider + 百分比），再点收起来。拖滑杆改 scaleRatio，走同一条反向耦合路径（立即改 transform、0.05 秒防抖改 frame）。滑杆条默认藏着；缩放能裁掉计算器顶上约 370pt 的黑空区（放大就裁掉）。③ 设置顶上切掉——按 LiveContainer 的安全区规则（AGPL，只借原则）：我们的初始 settings 本来就 peripheryInsets = 0、safeAreaInsetsPortrait = 0（窗口模式规则，已对上），初始 settings 不动；只在 frame 更新时（resize、滑杆）顺带把两个 insets 重设为 0。**若切掉只是滚动位置，这改就是空操作；若是 frame 更新后 insets 被重置，这改就修了它。仍需真机验证（滚动到顶看个人资料卡）。
+
+测法：开计算器，看显示和按键是不是整个都在窗里、没被切掉、左右没有白边；点标题栏右边的 ±，滑杆条出来，拖滑杆放大/缩小，看内容跟着变大/变小、始终贴边填满；拖右下角手柄改窗大小（计算器窗现在不用按比例锁，随便拖），松手后内容重排版、仍贴边；切到时钟，再切回计算器，看计算器还画不画；**切到设置前先把它彻底关掉（App 切换器里划掉）——v37 还没修「已在跑的设置」崩，v38 才修**；锁屏密码还能按；日志里应有 `v37 calculator window 320x737 scale 77%`、`v37 presenterView frame 0,0 414x896`（图层尺寸，显示尺寸 = frame × scale）、`v37 scene scaled 77%`、`v37 scale changed to …%`、`v37 reusing cached scene …`。
 
 ## v36 是什么（计算器窗改高、按宽缩放贴边；内容贴边填满）
 
