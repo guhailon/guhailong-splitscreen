@@ -1,6 +1,28 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.23（实验版 v23）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.24（实验版 v24）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v24 是什么（5.2：悬浮窗里打开 App）
+
+v23 真机：按钮看得见、启动器能开能关，但点 App 会卡 5 秒以上、
+App 全屏打开、手机随后自己重启。日志证明两件事：系统打开 App 的
+方法在 SpringBoard 里根本打不开 App（四次全失败，ok=0），而那个
+同步调用把主线程堵了 5 秒以上，触发看门狗把 SpringBoard 重启了。
+v24 修掉这三个缺点：
+
+- 点 App 时**先收启动器，再异步启动**——主线程绝不被启动堵住；
+- 启动只走 **FBProcessManager + FBApplicationProcessLaunchTransaction**
+  （SpringBoard 这边的正路），再经 **FBSceneManager** 建 scene、
+  用 **\_UIScenePresenter** 把 App 的画面嵌进悬浮窗；
+- 悬浮窗照 floatingView 的样子：圆角 35、带阴影、320x480、44pt
+  标题栏可拖动、红关闭钮、黄最小化钮、右下角缩放手柄；一次只开
+  一个悬浮窗；每一步都记日志，任何一步失败只记日志、不拖垮
+  SpringBoard；场景结构仿 FrontBoardAppLauncher（Apache-2.0），
+  代码是原创。
+
+测前先把计算器彻底关掉（在 App 切换器里划掉），不然 scene 可能
+只剩白窗。键盘不在 v24 做（计算器不用键盘；iOS 16.5 没有干净的
+键盘办法，见 `V5_DESIGN.md` §3.3）。
 
 ## 目标（定死）
 

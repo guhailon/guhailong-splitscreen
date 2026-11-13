@@ -1,8 +1,8 @@
 Package: com.guhailong.splitscreen
 Name: 顾海龙集团分屏
-Version: 1.0.23
+Version: 1.0.24
 Architecture: iphoneos-arm64
-Description: 顾海龙集团原创分屏插件（实验版 v23，修 v22 的窗没显示出来的问题，macOS 编）：%ctor 里只调 dispatch_after，5 秒后在延后的步骤里读开关、建右边缘 24pt 透明感应带（带金色"分"按钮，24x64、14pt 粗体、金底黑边）+ 右边缘滑动手势；窗显式挂 windowScene（v22 的窗建了却没上屏）、带子给显式 frame；2 秒内滑两次（或点"分"按钮）打开侧边小窗启动器（计算器、时钟、备忘录、设置、照片，带图标），点 App 全屏打开，点窗外或"关闭"收起；并写日志；不建 FBScene、不 hook。v22 1.0.22 真机：装得上、不黑屏，但按钮看不见、滑两次打不开启动器。详见源内说明页。
+Description: 顾海龙集团原创分屏插件（实验版 v24，5.2：点启动器里的 App 在悬浮窗里打开，macOS 编）：%ctor 里只调 dispatch_after，5 秒后在延后的步骤里读开关、建右边缘 24pt 透明感应带（带金色"分"按钮，24x64、14pt 粗体、金底黑边）+ 右边缘滑动手势；窗显式挂 windowScene、带子给显式 frame；2 秒内滑两次（或点"分"按钮）打开侧边小窗启动器（计算器、时钟、备忘录、设置、照片，带图标）；点 App 时先收启动器，再异步走 FBProcessManager + FBApplicationProcessLaunchTransaction 拉起进程、经 FBSceneManager 建 scene、用 _UIScenePresenter 把 App 的画面嵌进圆角 35、带阴影的 320x480 悬浮窗（44pt 标题栏可拖动、红关闭钮、黄最小化钮、右下角缩放手柄），主线程绝不被启动堵住；一次只开一个悬浮窗；并写日志；不 hook。v23 1.0.23 真机：按钮看得见、启动器能开能关，但点 App 会卡 5 秒以上（系统打开 App 的方法在 SpringBoard 里打不开 App，四次全失败）、App 全屏打开、手机随后自己重启（看门狗）。详见源内说明页。
 Maintainer: 顾海龙集团
 Author: 顾海龙集团
 Section: Tweaks

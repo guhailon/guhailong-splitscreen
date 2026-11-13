@@ -1,43 +1,41 @@
-// GuHaiLongSplitScreen v1.0.23 (v23) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.24 (v24) — 顾海龙集团原创分屏插件（实验版）
 //
 // 目标：iPhone 11 / iOS 16.5 / Dopamine (rootless)，iphoneos-arm64。
 //
-// ── v23：修 v22 的窗没显示出来的问题（macOS 编） ───────────
-// v22（1.0.22，macOS 编）皇上真机实测（2026-11-13 10:03–10:05）：
-// 装得上、不黑屏，日志 9–13 行全齐（`v22 handle button added` 也在），
-// 但金色"分"按钮看不见，右边缘滑两次启动器也打不开——感应带的窗
-// 在代码里建了，却从来没显示到屏幕上，也没收到触摸。v21/v22 的带子
-// 都是透明的，窗本身从来没被肉眼确认过，"分"按钮是第一个看得见的
-// 东西。最可能的两个原因：(a) 窗是用 initWithFrame 建的，没挂
-// windowScene（iOS 13+ 没挂 scene 的窗可能不显示）；(b) 带子的视图
-// 是 plain init（零 frame），只靠 view controller 去调尺寸。
-// v23 只改这三件事（其余照抄 v22）：
-//   1) 建窗前先从 connectedScenes 取一个 UIWindowScene（取不到就
-//      记 `v23 window scene nil`），显式挂到窗上，再 hidden = NO，
-//      并记日志 `v23 window scene found` / `v23 window scene nil`；
-//   2) 带子的视图用 initWithFrame 给显式 frame；
-//   3) 把手做大做显眼：感应带 24pt 宽，按钮 24x64、14pt 粗体、
-//      金底黑边，竖直居中放右边缘。
-// 另外建窗后记诊断日志：窗的 frame、hidden、scene 有没有，带子与
-// 按钮的 frame 各是多少——下次真机一看日志就知道窗到底上没上屏。
-// 5.1 的其余部分不变：感应带上挂 UIScreenEdgePanGestureRecognizer
-// （右边缘，2 秒内滑两次才开启动器），侧边小窗启动器（右边缘
-// 220pt 宽、暗色半透明，列 5 个系统 App，图标用 UIImage 的私有方法
-// 取；点 App 全屏打开，点窗外或"关闭"收起）。启动器的窗也一样显式
-// 挂 scene（不然启动器也可能看不见）。手势与按钮的目标是唯一的一
-// 个自定义类 GHLSSLauncher，视图全部用苹果的类（UIWindow、
-// UIViewController、UIView、UIButton、UIImageView、UILabel）。
+// ── v24：5.2，一个托管 App 悬浮窗（macOS 编） ──────────────
+// v23（1.0.23）皇上真机实测（2026-11-13 10:33）：金色"分"按钮看得见、
+// 点得动，启动器打得开，但点计算器后手机卡住 5 秒以上、随后手机自己
+// 重启了一次，而且计算器是全屏打开、没有分屏。日志证明了两件事：
+//   (a) v23 用的系统打开 App 的方法在 SpringBoard 里根本打不开
+//       App（ok=0，四次全失败）——这条路死了，v24 把它整个删掉，不再用；
+//   (b) 卡住是因为 v23 在主线程上同步调那个打开方法、等它返回才收
+//       启动器——主线程被堵 5 秒以上，SpringBoard 的看门狗把它杀掉
+//       重启了。所以 v24 的启动必须异步：先收启动器，再在后台队列
+//       走 FB 事务，场景创建回主线程做；启动的每一步都不堵主线程。
+// v24 只做 5.2：点启动器里的 App，不再全屏打开，而是按 V5_DESIGN.md
+// §2.2 把它的 live scene 嵌进一个 FV 风格的悬浮窗（圆角 35、有阴影、
+// 离屏幕边缘有距离、44pt 标题栏可拖动、红关闭钮、黄最小化钮、右下角
+// 缩放手柄）。先只支持一个悬浮窗；计算器先测（测前先把计算器彻底
+// 关掉——目标 App 不能已经在跑）。键盘不做（计算器不用键盘；
+// iOS 16.5 上没有干净修法，见 V5_DESIGN.md §3.3）。
+// 场景托管的结构与私有接口声明，仿照 FrontBoardAppLauncher
+//（作者 khanhduytran0，Apache-2.0，https://github.com/khanhduytran0/
+// FrontBoardAppLauncher）的 DecoratedAppSceneView.m、
+// AppSceneViewController.m 与 UIKitPrivate+MultitaskSupport.h；
+// 代码全部原创，只借结构与接口名（接口名是事实，不是表达）。
+// LiveContainer 的窗外形与场景生命周期只学原理（AGPL-3.0，不能抄）。
 // 关键约束（v13 的教训）：**这个文件里一个写死的字串都不能有**——
 // 不用硬编码的 CoreFoundation 字串常量，也不用 ObjC 字面量字串。
 // 所有 NSString/CFString 都在运行时现做
 //（CFStringCreateWithCString / stringWithCString:）；普通的 C
 // 字串（"..."）没问题；@selector(...) 没问题（selector 不是
-// 字串常量）。编译完要验 dylib 里没有 __cfstring 段，
-// AddObserver 是 0。
-// 感应带与启动器不看开关：v23 永远建带，只测功能；开关的门以后再加。
+// 字串常量）。编译完要验 dylib 里没有 __cfstring 段，也没有通知中心的
+// 登记调用。不要用任何已废弃 API（v23 首编的教训：取主窗口的旧 API 在
+// iOS 13 起已废弃，Theos 默认 -Werror 会把它当编译错误）。
+// 感应带与启动器不看开关：v24 永远建带，只测功能；开关的门以后再加。
 // 横屏不处理：只按竖屏算位置。
-// v1–v21 的完整历史与诊断见 BUILD_LOG.md。5.1 的完整设计见
-// V5_DESIGN.md §5.1。开源学习的完整报告见
+// v1–v23 的完整历史与诊断见 BUILD_LOG.md。5.2 的完整设计见
+// V5_DESIGN.md §2、§4.4、§5.2 与附录 D。开源学习见
 // OPEN_SOURCE_RESEARCH_2.md。
 
 #import <UIKit/UIKit.h>
@@ -45,10 +43,15 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <stdio.h>
+#import <string.h>
+#import <stdlib.h>
+#import <unistd.h>
+#import <signal.h>
 
 #define GHLSS_LOG_PATH "/var/mobile/Library/Logs/GuHaiLongSplitScreen.log"
 
-// 纯 C 写日志（一行）：日志只用来证明延后步骤跑了、窗建了没有。
+// 纯 C 写日志（一行）：日志只用来证明延后步骤跑了、窗建了没有、
+// 启动走到哪一步了。
 static void GHLSSLogLine(const char *line) {
 FILE *f = fopen(GHLSS_LOG_PATH, "a");
 if (f) {
@@ -97,22 +100,151 @@ return nil;
 }
 }
 
-// 全屏打开一个 App：LSApplicationWorkspace 的
-// openApplicationWithBundleID:，同样用运行时查找。返回 YES/NO。
-static BOOL GHLSSOpenApp(const char *bundleID) {
-NSString *bid = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
-if (!bid) return NO;
-Class workspaceClass = objc_getClass("LSApplicationWorkspace");
-if (!workspaceClass) return NO;
-SEL defaultSel = sel_registerName("defaultWorkspace");
-if (![workspaceClass respondsToSelector:defaultSel]) return NO;
-id workspace = ((id(*)(id, SEL))objc_msgSend)(workspaceClass, defaultSel);
-if (!workspace) return NO;
-SEL openSel = sel_registerName("openApplicationWithBundleID:");
-if (![workspace respondsToSelector:openSel]) return NO;
-BOOL ok = ((BOOL(*)(id, SEL, id))objc_msgSend)(workspace, openSel, bid);
-return ok;
-}
+// ── 私有接口最小声明 ─────────────────────────────────────
+// 结构与接口名仿照 FrontBoardAppLauncher 的
+// UIKitPrivate+MultitaskSupport.h（作者 khanhduytran0，
+// Apache-2.0）。只声明类名与方法名，代码全部原创。
+// 注意：audit_token_t 是 32 字节的结构（8 个 uint32_t），这里用
+// 自己的同布局类型名，避免去找 bsm 头文件；传参布局完全一致。
+typedef struct { uint32_t val[8]; } GHLSSAuditToken;
+
+@interface BSTransaction : NSObject
+- (void)begin;
+- (void)setCompletionBlock:(dispatch_block_t)block;
+@end
+
+@interface FBApplicationProcessLaunchTransaction : BSTransaction
+- (instancetype)initWithProcessIdentity:(id)identity executionContextProvider:(id)providerBlock;
+@end
+
+@interface FBProcessExecutionContext : NSObject
+@end
+
+@interface FBMutableProcessExecutionContext : FBProcessExecutionContext
+@property (nonatomic, copy) id identity;
+@property (nonatomic, copy) NSDictionary *environment;
+@property (nonatomic, assign) long long launchIntent;
+@end
+
+@interface FBProcessManager : NSObject
++ (instancetype)sharedInstance;
+- (FBProcessExecutionContext *)launchProcessWithContext:(FBMutableProcessExecutionContext *)context;
+- (void)registerProcessForAuditToken:(GHLSSAuditToken)token;
+@end
+
+@interface RBSProcessIdentity : NSObject
++ (instancetype)identityForEmbeddedApplicationIdentifier:(NSString *)identifier;
+@end
+
+@interface RBSProcessPredicate : NSObject
++ (instancetype)predicateMatchingIdentity:(RBSProcessIdentity *)identity;
+@end
+
+@interface RBSProcessHandle : NSObject
+@property (nonatomic, copy, readonly) RBSProcessIdentity *identity;
++ (instancetype)handleForPredicate:(RBSProcessPredicate *)predicate error:(NSError **)error;
+- (GHLSSAuditToken)auditToken;
+- (int)pid;
+@end
+
+@interface FBSSceneIdentity : NSObject
++ (instancetype)identityForIdentifier:(NSString *)identifier;
+@end
+
+@interface FBSSceneClientIdentity : NSObject
++ (instancetype)identityForProcessIdentity:(RBSProcessIdentity *)identity;
+@end
+
+@interface FBSSceneSpecification : NSObject
++ (instancetype)specification;
+@end
+
+@interface UIApplicationSceneSpecification : FBSSceneSpecification
+@end
+
+@interface FBSMutableSceneDefinition : NSObject
+@property (nonatomic, copy) FBSSceneClientIdentity *clientIdentity;
+@property (nonatomic, copy) FBSSceneIdentity *identity;
+@property (nonatomic, copy) FBSSceneSpecification *specification;
++ (instancetype)definition;
+@end
+
+@interface UIApplicationSceneSettings : NSObject
+@end
+
+@interface UIMutableApplicationSceneSettings : UIApplicationSceneSettings
+@property (nonatomic, assign) BOOL canShowAlerts;
+@property (nonatomic, assign) NSInteger interruptionPolicy;
+@property (nonatomic, strong) NSString *persistenceIdentifier;
+@property (nonatomic, assign) UIEdgeInsets peripheryInsets;
+@property (nonatomic, assign) UIEdgeInsets safeAreaInsetsPortrait;
+@property (nonatomic, assign) UIDeviceOrientation deviceOrientation;
+@property (nonatomic, strong) BSCornerRadiusConfiguration *cornerRadiusConfiguration;
+@property (nonatomic, assign, getter=isForeground) BOOL foreground;
+@property (nonatomic, assign) CGRect frame;
+@property (nonatomic, assign) NSInteger level;
+@property (nonatomic, assign) BOOL statusBarDisabled;
+@property (nonatomic, assign) NSInteger interfaceOrientation;
+@property (nonatomic, strong) id displayConfiguration;
+@end
+
+@interface UIApplicationSceneClientSettings : NSObject
+@end
+
+@interface UIMutableApplicationSceneClientSettings : UIApplicationSceneClientSettings
+@property (nonatomic, assign) UIDeviceOrientation deviceOrientation;
+@property (nonatomic, assign) NSInteger interfaceOrientation;
+@property (nonatomic, assign) NSInteger statusBarStyle;
+@end
+
+@interface FBSSceneParameters : NSObject
+@property (nonatomic, copy) UIApplicationSceneSettings *settings;
+@property (nonatomic, copy) UIApplicationSceneClientSettings *clientSettings;
+@end
+
+@interface FBSMutableSceneParameters : FBSSceneParameters
+@property (nonatomic, copy) UIMutableApplicationSceneSettings *settings;
++ (instancetype)parametersForSpecification:(FBSSceneSpecification *)spec;
+@end
+
+@interface BSCornerRadiusConfiguration : NSObject
+- (instancetype)initWithTopLeft:(CGFloat)topLeft bottomLeft:(CGFloat)bottomLeft bottomRight:(CGFloat)bottomRight topRight:(CGFloat)topRight;
+@end
+
+@interface FBScene : NSObject
+- (id)uiPresentationManager;
+- (void)updateSettingsWithBlock:(void (^)(UIMutableApplicationSceneSettings *settings))block;
+@end
+
+@interface FBSceneManager : NSObject
++ (instancetype)sharedInstance;
+- (FBScene *)createSceneWithDefinition:(id)definition initialParameters:(id)params;
+- (void)destroyScene:(id)arg1 withTransitionContext:(id)arg2;
+@end
+
+@interface _UIScenePresentationView : UIView
+@end
+
+@interface UIMutableScenePresentationContext : NSObject
+@property (nonatomic, assign) NSUInteger appearanceStyle;
+@end
+
+@interface _UIScenePresenter : NSObject
+@property (nonatomic, assign, readonly) _UIScenePresentationView *presentationView;
+@property (nonatomic, assign, readonly) FBScene *scene;
+- (void)modifyPresentationContext:(void (^)(UIMutableScenePresentationContext *context))block;
+- (void)activate;
+- (void)deactivate;
+- (void)invalidate;
+@end
+
+@interface UIScenePresentationManager : NSObject
+- (_UIScenePresenter *)createPresenterWithIdentifier:(NSString *)identifier;
+@end
+
+@interface UIScreen (GHLSSScenePrivate)
+- (id)displayConfiguration;
+@end
 
 // 感应带的视图：自己写的普通 UIView 子类，里面什么方法都没有
 //（v18/v21 已证明它在 macOS 编的包里是安全的）。
@@ -121,8 +253,8 @@ return ok;
 @implementation GHLSSPlainStripView
 @end
 
-// 5.1 唯一的自定义处理类：手势与按钮的目标、启动器的主人。
-// 视图全部用苹果的类，不再加自定义视图子类。
+// 5.1 唯一的自定义处理类：手势与按钮的目标、启动器的主人、
+// 5.2 托管悬浮窗的主人。视图全部用苹果的类，不再加自定义视图子类。
 @interface GHLSSLauncher : NSObject <UIGestureRecognizerDelegate>
 - (void)handleEdgeSwipe:(UIScreenEdgePanGestureRecognizer *)recognizer;
 - (void)handleHandleButton:(id)sender;
@@ -132,6 +264,17 @@ return ok;
 - (void)showLauncher;
 - (void)dismissLauncher;
 - (void)buildLauncherWindow;
+- (void)launchHostedApp:(const char *)bundleID name:(const char *)name;
+- (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name;
+- (void)buildHostedWindowForBundleID:(const char *)bundleID name:(const char *)name scene:(FBScene *)scene presenter:(_UIScenePresenter *)presenter sceneID:(NSString *)sceneID pid:(int)pid;
+- (void)closeHostedWindow;
+- (void)minimizeHostedWindow;
+- (void)restoreHostedWindow;
+- (void)handleHostedClose:(id)sender;
+- (void)handleHostedMinimize:(id)sender;
+- (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer;
+- (void)handleResizeDrag:(UIPanGestureRecognizer *)recognizer;
+- (void)resizeHostedSceneToContentSize:(CGSize)size;
 @end
 
 // 窗与状态要一直留着（静态变量拿着，不会被释放）。
@@ -142,10 +285,30 @@ static BOOL GHLSSLauncherVisible = NO;
 // 上一次边缘滑动的时间（CFAbsoluteTime），用来做"滑两次才开"。
 static double GHLSSLastSwipeTime = 0;
 
+// 5.2 托管悬浮窗的状态（一个窗，见 V5_DESIGN.md §5.2）。
+static UIWindow *GHLSSHostedWindow = nil;
+static FBScene *GHLSSHostedScene = nil;
+static _UIScenePresenter *GHLSSHostedPresenter = nil;
+static UIView *GHLSSHostedContainer = nil;
+static UIView *GHLSSHostedTitleBar = nil;
+static UILabel *GHLSSHostedTitleLabel = nil;
+static UIView *GHLSSHostedContentView = nil;
+static UIView *GHLSSHostedResizeHandle = nil;
+static NSString *GHLSSHostedSceneID = nil;
+static char GHLSSHostedBundleID[128] = {0};
+static int GHLSSHostedPid = 0;
+static BOOL GHLSSHostedMinimized = NO;
+static BOOL GHLSSHostedLaunching = NO;
+// 悬浮窗的尺寸：内容区 320x480（竖屏）+ 44pt 标题栏；圆角 35。
+#define GHLSS_HOSTED_CONTENT_W 320.0
+#define GHLSS_HOSTED_CONTENT_H 480.0
+#define GHLSS_HOSTED_TITLE_H 44.0
+#define GHLSS_HOSTED_CORNER 35.0
+
 // 取一个可用的 UIWindowScene（iOS 13+ 的窗必须挂 scene 才会显示）：
 // 从 connectedScenes 里找第一个 UIWindowScene，没有就返回 nil
 //（调用处记日志）。全部是公开 API 的方法调用，不用字串常量。
-// 注意：不能用 keyWindow 做退路——它在 iOS 13 起已废弃，Theos
+// 注意：不能用已废弃的取主窗口 API 做退路——它在 iOS 13 起已废弃，Theos
 // 默认 -Werror 会把它当编译错误（v23 首编就是这么失败的）。
 static UIWindowScene *GHLSSActiveWindowScene(void) {
 UIApplication *app = [UIApplication sharedApplication];
@@ -170,62 +333,493 @@ if (recognizer.state != UIGestureRecognizerStateEnded) return;
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v23 edge swipe 2nd, opening launcher");
+GHLSSLogLine("v24 edge swipe 2nd, opening launcher");
 [self showLauncher];
 } else {
 GHLSSLastSwipeTime = now;
-GHLSSLogLine("v23 edge swipe 1st, armed");
+GHLSSLogLine("v24 edge swipe 1st, armed");
 }
 }
 
 // 金色"分"按钮：点一次就开启动器（备用触发，不用滑两次）。
 - (void)handleHandleButton:(id)sender {
-GHLSSLogLine("v23 handle button tapped, opening launcher");
+GHLSSLogLine("v24 handle button tapped, opening launcher");
 [self showLauncher];
 }
 
-// 点启动器里的一个 App：全屏打开它，再收起启动器。
+// 点启动器里的一个 App：v24 不再全屏打开（那条路在 SpringBoard 里
+// 是死的：在 SpringBoard 里打开 App 返回 NO，四次全失败，还把主线程
+// 堵 5 秒以上、触发看门狗重启）。
+// 新流程：先收启动器，再异步走 FB 事务建 scene、嵌进悬浮窗。
+// 主线程上只做记日志与收窗，启动本身不在主线程上堵。
 - (void)handleAppButton:(UIButton *)sender {
 NSInteger idx = sender.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 const char *bid = GHLSSAppBundleIDs[idx];
-char buf[192];
-snprintf(buf, sizeof(buf), "v23 app tapped %s", bid);
+const char *name = GHLSSAppNames[idx];
+char buf[256];
+snprintf(buf, sizeof(buf), "v24 app tapped %s", bid);
 GHLSSLogLine(buf);
-BOOL ok = GHLSSOpenApp(bid);
-snprintf(buf, sizeof(buf), "v23 open app %s ok=%d", bid, ok ? 1 : 0);
-GHLSSLogLine(buf);
+// 一个悬浮窗：已经有窗在，就不再开第二个。
+if (GHLSSHostedWindow) {
+if (GHLSSHostedMinimized && strcmp(GHLSSHostedBundleID, bid) == 0) {
+[self restoreHostedWindow];
 [self dismissLauncher];
+return;
+}
+if (strcmp(GHLSSHostedBundleID, bid) == 0) {
+GHLSSLogLine("v24 window already open");
+[self dismissLauncher];
+return;
+}
+snprintf(buf, sizeof(buf), "v24 window busy, ignoring tap %s", bid);
+GHLSSLogLine(buf);
+return;
+}
+if (GHLSSHostedLaunching) {
+GHLSSLogLine("v24 launch in progress, ignoring tap");
+return;
+}
+// 先收启动器（v23 卡死的教训：收窗是便宜操作，先做；
+// 启动是慢操作，后做、异步做）。
+[self dismissLauncher];
+[self launchHostedApp:bid name:name];
+}
+
+// 异步启动：进程拉起那部分在后台队列做，主线程绝不被堵。
+//（v23 的看门狗重启就是主线程被同步打开调用堵 5 秒以上造成的。）
+- (void)launchHostedApp:(const char *)bundleID name:(const char *)name {
+char *bidCopy = strdup(bundleID);
+char *nameCopy = strdup(name);
+if (!bidCopy || !nameCopy) {
+if (bidCopy) free(bidCopy);
+if (nameCopy) free(nameCopy);
+GHLSSLogLine("v24 launch failed no memory");
+return;
+}
+GHLSSHostedLaunching = YES;
+char buf[256];
+snprintf(buf, sizeof(buf), "v24 launch start %s", bundleID);
+GHLSSLogLine(buf);
+dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+@try {
+NSString *bidStr = [NSString stringWithCString:bidCopy encoding:NSUTF8StringEncoding];
+if (!bidStr) {
+GHLSSLogLine("v24 launch failed bad bundle id");
+GHLSSHostedLaunching = NO;
+free(bidCopy);
+free(nameCopy);
+return;
+}
+RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
+if (!identity) {
+GHLSSLogLine("v24 launch failed no identity");
+GHLSSHostedLaunching = NO;
+free(bidCopy);
+free(nameCopy);
+return;
+}
+// 先看 App 是不是已经在跑（单场景 App 已有全屏版时，再建
+// 第二个 scene 可能只剩白窗——测前要先把目标 App 彻底关掉）。
+RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:identity];
+RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:nil];
+int pid = handle ? [handle pid] : 0;
+if (pid > 0) {
+char pbuf[128];
+snprintf(pbuf, sizeof(pbuf), "v24 app already running pid=%d", pid);
+GHLSSLogLine(pbuf);
+// 已经在跑：不走事务，直接去建 scene（和参考实现同一做法）。
+dispatch_async(dispatch_get_main_queue(), ^{
+[self createHostedSceneForBundleID:bidCopy name:nameCopy];
+free(bidCopy);
+free(nameCopy);
+});
+return;
+}
+FBProcessManager *manager = [FBProcessManager sharedInstance];
+FBApplicationProcessLaunchTransaction *transaction = [[FBApplicationProcessLaunchTransaction alloc] initWithProcessIdentity:identity executionContextProvider:^id(void) {
+GHLSSLogLine("v24 launch provider called");
+FBMutableProcessExecutionContext *context = [FBMutableProcessExecutionContext new];
+context.identity = identity;
+context.environment = [NSDictionary dictionary];
+context.launchIntent = 4;
+return [manager launchProcessWithContext:context];
+}];
+[transaction setCompletionBlock:^{
+// 事务完成可能跑在任意队列——场景创建回主线程做。
+dispatch_async(dispatch_get_main_queue(), ^{
+[self createHostedSceneForBundleID:bidCopy name:nameCopy];
+free(bidCopy);
+free(nameCopy);
+});
+}];
+[transaction begin];
+GHLSSLogLine("v24 launch transaction begun");
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v24 launch failed exception");
+GHLSSHostedLaunching = NO;
+free(bidCopy);
+free(nameCopy);
+}
+});
+}
+
+// 在主线程建 scene + presenter（V5_DESIGN.md §2.2 第 2–5 步）。
+// 每一步都记日志、包 @try/@catch：任何一步失败只记日志，
+// 绝不拖垮 SpringBoard。
+- (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name {
+@try {
+char buf[256];
+snprintf(buf, sizeof(buf), "v24 scene start %s", bundleID);
+GHLSSLogLine(buf);
+NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
+if (!bidStr) {
+GHLSSLogLine("v24 scene failed no bid");
+return;
+}
+RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
+RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:identity];
+RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:nil];
+int pid = handle ? [handle pid] : 0;
+if (pid <= 0) {
+GHLSSLogLine("v24 scene failed no process");
+return;
+}
+snprintf(buf, sizeof(buf), "v24 process launched pid=%d", pid);
+GHLSSLogLine(buf);
+FBProcessManager *manager = [FBProcessManager sharedInstance];
+[manager registerProcessForAuditToken:[handle auditToken]];
+// 每次建窗都用新的 sceneID 与 persistenceIdentifier
+//（复用会出“关窗后重开崩”的问题，见 V5_DESIGN.md §2.5 第 4 条）。
+NSString *uuidStr = [[NSUUID UUID] UUIDString];
+NSString *fmt = [NSString stringWithCString:"sceneID:%s-%s" encoding:NSUTF8StringEncoding];
+NSString *sceneID = [NSString stringWithFormat:fmt, bundleID, [uuidStr UTF8String]];
+FBSMutableSceneDefinition *definition = [FBSMutableSceneDefinition definition];
+definition.identity = [FBSSceneIdentity identityForIdentifier:sceneID];
+definition.clientIdentity = [FBSSceneClientIdentity identityForProcessIdentity:[handle identity]];
+definition.specification = [UIApplicationSceneSpecification specification];
+FBSMutableSceneParameters *parameters = [FBSMutableSceneParameters parametersForSpecification:definition.specification];
+UIMutableApplicationSceneSettings *settings = [UIMutableApplicationSceneSettings new];
+settings.canShowAlerts = YES;
+settings.cornerRadiusConfiguration = [[BSCornerRadiusConfiguration alloc] initWithTopLeft:GHLSS_HOSTED_CORNER bottomLeft:GHLSS_HOSTED_CORNER bottomRight:GHLSS_HOSTED_CORNER topRight:GHLSS_HOSTED_CORNER];
+settings.displayConfiguration = [[UIScreen mainScreen] displayConfiguration];
+settings.foreground = YES;
+settings.deviceOrientation = UIDeviceOrientationPortrait;
+settings.interfaceOrientation = UIInterfaceOrientationPortrait;
+settings.frame = CGRectMake(0, 0, GHLSS_HOSTED_CONTENT_W, GHLSS_HOSTED_CONTENT_H);
+settings.level = 1;
+settings.persistenceIdentifier = uuidStr;
+settings.peripheryInsets = UIEdgeInsetsZero;
+settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
+settings.statusBarDisabled = YES;
+parameters.settings = settings;
+UIMutableApplicationSceneClientSettings *clientSettings = [UIMutableApplicationSceneClientSettings new];
+clientSettings.interfaceOrientation = UIInterfaceOrientationPortrait;
+clientSettings.statusBarStyle = 0;
+parameters.clientSettings = clientSettings;
+FBScene *scene = [[FBSceneManager sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
+if (!scene) {
+GHLSSLogLine("v24 scene failed nil scene");
+return;
+}
+GHLSSLogLine("v24 scene created");
+id presenterManager = [scene uiPresentationManager];
+if (!presenterManager) {
+GHLSSLogLine("v24 presenter failed no manager");
+return;
+}
+_UIScenePresenter *presenter = [presenterManager createPresenterWithIdentifier:sceneID];
+if (!presenter) {
+GHLSSLogLine("v24 presenter failed nil");
+return;
+}
+[presenter modifyPresentationContext:^(UIMutableScenePresentationContext *context) {
+context.appearanceStyle = 2;
+}];
+[presenter activate];
+if (!presenter.presentationView) {
+GHLSSLogLine("v24 presenter failed no view");
+return;
+}
+GHLSSLogLine("v24 presenter ready");
+[self buildHostedWindowForBundleID:bundleID name:name scene:scene presenter:presenter sceneID:sceneID pid:pid];
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v24 scene failed exception");
+} @finally {
+GHLSSHostedLaunching = NO;
+}
+}
+
+// 建 FV 风格的悬浮窗（V5_DESIGN.md §4.4 + 附录 D）：
+// 圆角 35、有阴影、离屏幕边缘有距离、44pt 标题栏（可拖动）、
+// 红关闭钮、黄最小化钮、右下角缩放手柄。内容区嵌 presenter 的 view。
+- (void)buildHostedWindowForBundleID:(const char *)bundleID name:(const char *)name scene:(FBScene *)scene presenter:(_UIScenePresenter *)presenter sceneID:(NSString *)sceneID pid:(int)pid {
+@try {
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat winW = GHLSS_HOSTED_CONTENT_W;
+CGFloat winH = GHLSS_HOSTED_CONTENT_H + GHLSS_HOSTED_TITLE_H;
+CGRect winFrame = CGRectMake((screenBounds.size.width - winW) / 2.0, (screenBounds.size.height - winH) / 2.0, winW, winH);
+GHLSSHostedWindow = [[UIWindow alloc] initWithFrame:winFrame];
+GHLSSHostedWindow.windowLevel = UIWindowLevelAlert + 2.0;
+GHLSSHostedWindow.backgroundColor = [UIColor clearColor];
+UIWindowScene *hostedScene = GHLSSActiveWindowScene();
+if (hostedScene) {
+GHLSSHostedWindow.windowScene = hostedScene;
+} else {
+GHLSSLogLine("v24 hosted scene nil");
+}
+// 窗的阴影与圆角（画在窗的 layer 上；内容容器自己裁圆角）。
+GHLSSHostedWindow.layer.cornerRadius = GHLSS_HOSTED_CORNER;
+GHLSSHostedWindow.layer.shadowColor = [UIColor blackColor].CGColor;
+GHLSSHostedWindow.layer.shadowOpacity = 0.5;
+GHLSSHostedWindow.layer.shadowRadius = 12.0;
+GHLSSHostedWindow.layer.shadowOffset = CGSizeMake(0, 6);
+UIViewController *vc = [[UIViewController alloc] init];
+// 内容容器：圆角 35、裁掉超出部分、细边框。
+UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, winW, winH)];
+container.backgroundColor = [UIColor whiteColor];
+container.layer.cornerRadius = GHLSS_HOSTED_CORNER;
+container.layer.masksToBounds = YES;
+container.layer.borderWidth = 1.0;
+container.layer.borderColor = [UIColor colorWithWhite:0.8 alpha:1.0].CGColor;
+vc.view = container;
+GHLSSHostedContainer = container;
+// 标题栏（44pt，深色，可拖动）。
+UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, winW, GHLSS_HOSTED_TITLE_H)];
+titleBar.backgroundColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0];
+[container addSubview:titleBar];
+GHLSSHostedTitleBar = titleBar;
+UIPanGestureRecognizer *dragGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleTitleDrag:)];
+dragGesture.minimumNumberOfTouches = 1;
+dragGesture.maximumNumberOfTouches = 1;
+[titleBar addGestureRecognizer:dragGesture];
+// 关闭钮（红圆，左）。
+UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+closeBtn.frame = CGRectMake(10, 9, 26, 26);
+closeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0];
+closeBtn.layer.cornerRadius = 13.0;
+[closeBtn setTitle:[NSString stringWithCString:"x" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[closeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+closeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+[closeBtn addTarget:self action:@selector(handleHostedClose:) forControlEvents:UIControlEventTouchUpInside];
+[titleBar addSubview:closeBtn];
+// 最小化钮（黄圆，左二）：只藏窗、不销毁 scene（5.3 再做贴边）。
+UIButton *minBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+minBtn.frame = CGRectMake(44, 9, 26, 26);
+minBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.76 blue:0.03 alpha:1.0];
+minBtn.layer.cornerRadius = 13.0;
+[minBtn setTitle:[NSString stringWithCString:"-" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[minBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+minBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+[minBtn addTarget:self action:@selector(handleHostedMinimize:) forControlEvents:UIControlEventTouchUpInside];
+[titleBar addSubview:minBtn];
+// 标题：App 名，居中。
+UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(78, 0, winW - 156, GHLSS_HOSTED_TITLE_H)];
+titleLabel.text = [NSString stringWithCString:name encoding:NSUTF8StringEncoding];
+titleLabel.textColor = [UIColor whiteColor];
+titleLabel.font = [UIFont boldSystemFontOfSize:16];
+titleLabel.textAlignment = NSTextAlignmentCenter;
+[titleBar addSubview:titleLabel];
+GHLSSHostedTitleLabel = titleLabel;
+// 内容区：presenter 的 view 嵌在这里（标题栏之下）。
+UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(0, GHLSS_HOSTED_TITLE_H, winW, GHLSS_HOSTED_CONTENT_H)];
+contentView.backgroundColor = [UIColor whiteColor];
+[container addSubview:contentView];
+GHLSSHostedContentView = contentView;
+UIView *presenterView = presenter.presentationView;
+presenterView.frame = contentView.bounds;
+presenterView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+[contentView insertSubview:presenterView atIndex:0];
+// 右下角缩放手柄（60x60，斜纹小方块）。
+UIView *resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(winW - 60, winH - 60, 60, 60)];
+resizeHandle.backgroundColor = [UIColor clearColor];
+resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
+UIView *grip = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 60 / 1.4142, 60 / 1.4142)];
+grip.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.2];
+grip.center = CGPointMake(60, 60);
+grip.transform = CGAffineTransformMakeRotation(3.14159265 / 4.0);
+[resizeHandle addSubview:grip];
+UIPanGestureRecognizer *resizeGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResizeDrag:)];
+resizeGesture.minimumNumberOfTouches = 1;
+resizeGesture.maximumNumberOfTouches = 1;
+[resizeHandle addGestureRecognizer:resizeGesture];
+[container addSubview:resizeHandle];
+GHLSSHostedResizeHandle = resizeHandle;
+GHLSSHostedWindow.rootViewController = vc;
+GHLSSHostedWindow.hidden = NO;
+GHLSSHostedScene = scene;
+GHLSSHostedPresenter = presenter;
+GHLSSHostedSceneID = sceneID;
+strncpy(GHLSSHostedBundleID, bundleID, sizeof(GHLSSHostedBundleID) - 1);
+GHLSSHostedBundleID[sizeof(GHLSSHostedBundleID) - 1] = '\0';
+GHLSSHostedPid = pid;
+GHLSSHostedMinimized = NO;
+GHLSSLogLine("v24 window shown");
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v24 window failed exception");
+}
+}
+
+// 关窗：销毁 scene、停 presenter；进程留着不杀
+//（V5_DESIGN.md §2.2 第 19 步：关窗只销毁 scene、不杀进程）。
+- (void)closeHostedWindow {
+if (!GHLSSHostedWindow) return;
+@try {
+if (GHLSSHostedSceneID) {
+[[FBSceneManager sharedInstance] destroyScene:GHLSSHostedSceneID withTransitionContext:nil];
+}
+if (GHLSSHostedPresenter) {
+[GHLSSHostedPresenter deactivate];
+[GHLSSHostedPresenter invalidate];
+}
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v24 close failed");
+}
+GHLSSHostedWindow.hidden = YES;
+GHLSSHostedWindow = nil;
+GHLSSHostedScene = nil;
+GHLSSHostedPresenter = nil;
+GHLSSHostedContainer = nil;
+GHLSSHostedTitleBar = nil;
+GHLSSHostedTitleLabel = nil;
+GHLSSHostedContentView = nil;
+GHLSSHostedResizeHandle = nil;
+GHLSSHostedSceneID = nil;
+GHLSSHostedBundleID[0] = '\0';
+GHLSSHostedPid = 0;
+GHLSSHostedMinimized = NO;
+if (GHLSSLauncherWindow) {
+GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert + 1.0;
+}
+GHLSSLogLine("v24 window closed");
+}
+
+- (void)minimizeHostedWindow {
+if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
+GHLSSHostedWindow.hidden = YES;
+GHLSSHostedMinimized = YES;
+GHLSSLogLine("v24 window minimized");
+}
+
+- (void)restoreHostedWindow {
+if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
+GHLSSHostedWindow.hidden = NO;
+GHLSSHostedMinimized = NO;
+GHLSSLogLine("v24 window restored");
+}
+
+- (void)handleHostedClose:(id)sender {
+GHLSSLogLine("v24 hosted close tapped");
+[self closeHostedWindow];
+}
+
+- (void)handleHostedMinimize:(id)sender {
+GHLSSLogLine("v24 hosted minimize tapped");
+[self minimizeHostedWindow];
+}
+
+// 拖标题栏移动窗口（参考实现的 moveWindow 做法：取位移、
+// 加到中心点上、位移清零；位置夹在屏幕里，不让窗丢出去）。
+- (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer {
+if (!GHLSSHostedWindow) return;
+CGPoint point = [recognizer translationInView:GHLSSHostedWindow];
+[recognizer setTranslation:CGPointZero inView:GHLSSHostedWindow];
+CGPoint center = GHLSSHostedWindow.center;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat minX = 80.0;
+CGFloat maxX = screenBounds.size.width - 80.0;
+CGFloat minY = 100.0;
+CGFloat maxY = screenBounds.size.height - 100.0;
+CGFloat newX = center.x + point.x;
+CGFloat newY = center.y + point.y;
+if (newX < minX) newX = minX;
+if (newX > maxX) newX = maxX;
+if (newY < minY) newY = minY;
+if (newY > maxY) newY = maxY;
+GHLSSHostedWindow.center = CGPointMake(newX, newY);
+}
+
+// 拖右下角手柄改窗大小：拖动时只改窗与视图（live）；
+// 松手时才调 scene 的 frame（V5_DESIGN.md §2.2：改尺寸防抖，
+// 拖动时不要每次移动都调一次）。
+- (void)handleResizeDrag:(UIPanGestureRecognizer *)recognizer {
+if (!GHLSSHostedWindow || !GHLSSHostedContainer || !GHLSSHostedContentView) return;
+CGPoint point = [recognizer translationInView:GHLSSHostedContainer];
+[recognizer setTranslation:CGPointZero inView:GHLSSHostedContainer];
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGRect frame = GHLSSHostedWindow.frame;
+CGFloat newW = frame.size.width + point.x;
+CGFloat newH = frame.size.height + point.y;
+if (newW < 200.0) newW = 200.0;
+if (newW > screenBounds.size.width - 16.0) newW = screenBounds.size.width - 16.0;
+if (newH < 300.0) newH = 300.0;
+if (newH > screenBounds.size.height - 120.0) newH = screenBounds.size.height - 120.0;
+GHLSSHostedWindow.frame = CGRectMake(frame.origin.x, frame.origin.y, newW, newH);
+GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
+GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_TITLE_H);
+GHLSSHostedTitleLabel.frame = CGRectMake(78, 0, newW - 156, GHLSS_HOSTED_TITLE_H);
+GHLSSHostedContentView.frame = CGRectMake(0, GHLSS_HOSTED_TITLE_H, newW, newH - GHLSS_HOSTED_TITLE_H);
+if (recognizer.state == UIGestureRecognizerStateEnded) {
+[self resizeHostedSceneToContentSize:CGSizeMake(newW, newH - GHLSS_HOSTED_TITLE_H)];
+}
+}
+
+// 松手后把新内容尺寸告诉 scene（只在松手时调一次）。
+- (void)resizeHostedSceneToContentSize:(CGSize)size {
+if (!GHLSSHostedScene) return;
+@try {
+[GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+settings.frame = CGRectMake(0, 0, size.width, size.height);
+settings.interfaceOrientation = UIInterfaceOrientationPortrait;
+settings.deviceOrientation = UIDeviceOrientationPortrait;
+}];
+char buf[128];
+snprintf(buf, sizeof(buf), "v24 scene resized %d,%d", (int)size.width, (int)size.height);
+GHLSSLogLine(buf);
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v24 scene resize failed");
+}
 }
 
 - (void)handleCloseButton:(id)sender {
-GHLSSLogLine("v23 close button tapped");
+GHLSSLogLine("v24 close button tapped");
 [self dismissLauncher];
 }
 
 - (void)handleBackgroundTap:(UITapGestureRecognizer *)recognizer {
-GHLSSLogLine("v23 background tapped, dismissing launcher");
+GHLSSLogLine("v24 background tapped, dismissing launcher");
 [self dismissLauncher];
 }
 
 - (void)showLauncher {
 if (GHLSSLauncherVisible) {
-GHLSSLogLine("v23 launcher already open");
+GHLSSLogLine("v24 launcher already open");
 return;
 }
 if (!GHLSSLauncherWindow) {
 [self buildLauncherWindow];
 }
+// 有悬浮窗在时，启动器要升到它上面（不然会被盖住一半）。
+if (GHLSSHostedWindow) {
+GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert + 3.0;
+} else {
+GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert + 1.0;
+}
 GHLSSLauncherWindow.hidden = NO;
 GHLSSLauncherVisible = YES;
-GHLSSLogLine("v23 launcher opened");
+GHLSSLogLine("v24 launcher opened");
 }
 
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherWindow.hidden = YES;
 GHLSSLauncherVisible = NO;
-GHLSSLogLine("v23 launcher dismissed");
+GHLSSLogLine("v24 launcher dismissed");
 }
 
 // 建启动器窗（第一次打开时才建）：全屏透明窗 + 右侧 220pt 暗色面板。
@@ -241,9 +835,9 @@ GHLSSLauncherWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *launcherScene = GHLSSActiveWindowScene();
 if (launcherScene) {
 GHLSSLauncherWindow.windowScene = launcherScene;
-GHLSSLogLine("v23 launcher scene found");
+GHLSSLogLine("v24 launcher scene found");
 } else {
-GHLSSLogLine("v23 launcher scene nil");
+GHLSSLogLine("v24 launcher scene nil");
 }
 UIViewController *launcherVC = [[UIViewController alloc] init];
 UIView *rootView = [[UIView alloc] initWithFrame:screenBounds];
@@ -266,7 +860,7 @@ titleLabel.text = [NSString stringWithCString:"分屏" encoding:NSUTF8StringEnco
 titleLabel.textColor = [UIColor whiteColor];
 titleLabel.font = [UIFont boldSystemFontOfSize:17];
 [panel addSubview:titleLabel];
-// 5 个 App 行：图标 + 名字，点一行全屏打开那个 App。
+// 5 个 App 行：图标 + 名字，点一行在悬浮窗里打开那个 App。
 for (NSInteger i = 0; i < GHLSS_APP_COUNT; i++) {
 UIButton *appButton = [UIButton buttonWithType:UIButtonTypeCustom];
 appButton.frame = CGRectMake(0, 64 + i * 64, panelWidth, 60);
@@ -279,7 +873,7 @@ iconView.image = icon;
 } else {
 iconView.backgroundColor = [UIColor grayColor];
 char ibuf[192];
-snprintf(ibuf, sizeof(ibuf), "v23 icon nil for %s", GHLSSAppBundleIDs[i]);
+snprintf(ibuf, sizeof(ibuf), "v24 icon nil for %s", GHLSSAppBundleIDs[i]);
 GHLSSLogLine(ibuf);
 }
 iconView.layer.cornerRadius = 10.0;
@@ -301,15 +895,15 @@ closeButton.titleLabel.font = [UIFont systemFontOfSize:16];
 [closeButton addTarget:self action:@selector(handleCloseButton:) forControlEvents:UIControlEventTouchUpInside];
 [panel addSubview:closeButton];
 GHLSSLauncherWindow.rootViewController = launcherVC;
-GHLSSLogLine("v23 launcher built");
+GHLSSLogLine("v24 launcher built");
 }
 
 @end
 
 %ctor {
-// v23 的 %ctor 和 v21 一模一样，只做一行纯 C 调用：
+// v24 的 %ctor 和 v21/v22/v23 一模一样，只做一行纯 C 调用：
 // 5 秒后在主队列跑一个 block。不登记通知、不写日志、不读文件、
-// 不调 NSLog、不建窗、不 hook。
+// 不调系统日志、不建窗、不 hook。
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
 dispatch_get_main_queue(), ^{
 // 延后步骤（启动完成 5 秒后，主队列）：
@@ -333,8 +927,8 @@ CFRelease(v);
 if (domain) CFRelease(domain);
 if (key) CFRelease(key);
 char buf[128];
-snprintf(buf, sizeof(buf), "v23 deferred setup ran, switch=%s", state);
-GHLSSLogLine("v23 deferred setup ran");
+snprintf(buf, sizeof(buf), "v24 deferred setup ran, switch=%s", state);
+GHLSSLogLine("v24 deferred setup ran");
 GHLSSLogLine(buf);
 // 右边缘感应带：24pt 宽、全高、透明，层级在 SpringBoard 内容之上。
 // v23 的修法：窗显式挂 windowScene（没挂 scene 的窗可能不显示，
@@ -348,9 +942,9 @@ GHLSSStripWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *stripScene = GHLSSActiveWindowScene();
 if (stripScene) {
 GHLSSStripWindow.windowScene = stripScene;
-GHLSSLogLine("v23 window scene found");
+GHLSSLogLine("v24 window scene found");
 } else {
-GHLSSLogLine("v23 window scene nil");
+GHLSSLogLine("v24 window scene nil");
 }
 UIViewController *stripVC = [[UIViewController alloc] init];
 GHLSSPlainStripView *stripView = [[GHLSSPlainStripView alloc] initWithFrame:CGRectMake(0, 0, stripWidth, screenBounds.size.height)];
@@ -358,14 +952,14 @@ stripView.backgroundColor = [UIColor clearColor];
 stripVC.view = stripView;
 GHLSSStripWindow.rootViewController = stripVC;
 GHLSSStripWindow.hidden = NO;
-GHLSSLogLine("v23 edge strip built");
+GHLSSLogLine("v24 edge strip built");
 // 诊断日志：窗与带子到底是什么状态（真机一看就知道上没上屏）。
 char dbuf[256];
 CGRect wf = GHLSSStripWindow.frame;
-snprintf(dbuf, sizeof(dbuf), "v23 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
+snprintf(dbuf, sizeof(dbuf), "v24 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
 GHLSSLogLine(dbuf);
 CGRect sf = stripView.frame;
-snprintf(dbuf, sizeof(dbuf), "v23 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v24 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
 GHLSSLogLine(dbuf);
 // 5.1 的处理器（唯一的自定义处理类）。
 GHLSSLauncherShared = [[GHLSSLauncher alloc] init];
@@ -374,7 +968,7 @@ UIScreenEdgePanGestureRecognizer *edgePan = [[UIScreenEdgePanGestureRecognizer a
 edgePan.edges = UIRectEdgeRight;
 edgePan.delegate = GHLSSLauncherShared;
 [stripView addGestureRecognizer:edgePan];
-GHLSSLogLine("v23 edge gesture added");
+GHLSSLogLine("v24 edge gesture added");
 // 金色"分"按钮（感应带上的可见把手，备用触发）。
 // v23 做大做显眼：24 宽 x 64 高、14pt 粗体、金底黑边（v22 的 12x48
 // 太小，就算显示了也难看见）。
@@ -389,9 +983,9 @@ handleButton.layer.borderColor = [UIColor blackColor].CGColor;
 handleButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [handleButton addTarget:GHLSSLauncherShared action:@selector(handleHandleButton:) forControlEvents:UIControlEventTouchUpInside];
 [stripView addSubview:handleButton];
-GHLSSLogLine("v23 handle button added");
+GHLSSLogLine("v24 handle button added");
 CGRect bf = handleButton.frame;
-snprintf(dbuf, sizeof(dbuf), "v23 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v24 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
 GHLSSLogLine(dbuf);
 });
 }
