@@ -12,8 +12,8 @@
 // windowScene（iOS 13+ 没挂 scene 的窗可能不显示）；(b) 带子的视图
 // 是 plain init（零 frame），只靠 view controller 去调尺寸。
 // v23 只改这三件事（其余照抄 v22）：
-//   1) 建窗前先从 connectedScenes 取一个 UIWindowScene（没有就用
-//      key window 的 windowScene），显式挂到窗上，再 hidden = NO，
+//   1) 建窗前先从 connectedScenes 取一个 UIWindowScene（取不到就
+//      记 `v23 window scene nil`），显式挂到窗上，再 hidden = NO，
 //      并记日志 `v23 window scene found` / `v23 window scene nil`；
 //   2) 带子的视图用 initWithFrame 给显式 frame；
 //   3) 把手做大做显眼：感应带 24pt 宽，按钮 24x64、14pt 粗体、
@@ -143,9 +143,10 @@ static BOOL GHLSSLauncherVisible = NO;
 static double GHLSSLastSwipeTime = 0;
 
 // 取一个可用的 UIWindowScene（iOS 13+ 的窗必须挂 scene 才会显示）：
-// 先从 connectedScenes 里找第一个 UIWindowScene，没有就退到
-// key window 的 windowScene，再没有就返回 nil（调用处记日志）。
-// 全部是公开 API 的方法调用，不用字串常量。
+// 从 connectedScenes 里找第一个 UIWindowScene，没有就返回 nil
+//（调用处记日志）。全部是公开 API 的方法调用，不用字串常量。
+// 注意：不能用 keyWindow 做退路——它在 iOS 13 起已废弃，Theos
+// 默认 -Werror 会把它当编译错误（v23 首编就是这么失败的）。
 static UIWindowScene *GHLSSActiveWindowScene(void) {
 UIApplication *app = [UIApplication sharedApplication];
 if (!app) return nil;
@@ -153,8 +154,6 @@ NSSet *scenes = [app connectedScenes];
 for (id s in scenes) {
 if ([s isKindOfClass:[UIWindowScene class]]) return (UIWindowScene *)s;
 }
-UIWindow *key = [app keyWindow];
-if (key) return key.windowScene;
 return nil;
 }
 
