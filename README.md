@@ -1,6 +1,14 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.32（实验版 v32）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.33（实验版 v33）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v33 是什么（单窗切换 + 每次新 sceneID）
+
+v32 真机（2026-11-13 16:31）：**锁屏密码修好了**（「可以了，非常OK」）。但新问题：**App 没办法来回切换**——开着计算器，点启动器里的时钟没反应，必须先把计算器悬浮窗关掉（X）再点。5.2 只准开一个窗，点别的 App 时直接忽略。皇上 16:33 确认是不同 App 之间切。
+
+v33 只改两处（同一条关窗→开窗路）：**① 点别的 App 时，先关当前窗（走现有关窗路径，销毁 scene、停 presenter、进程留着），核对状态清干净了，再开新 App 的悬浮窗（单窗切换）；最小化着的窗也一样关了再开；同一个 App 再点不变（恢复/已开着）。② sceneID 改每次新 UUID**——同一天皇上又报：悬浮窗开着时点启动器里的 App，SpringBoard 会进安全模式；日志（`GuHaiLongSplitScreen-6.log`）定死：2 次崩全是计算器关窗重开，崩在 `createSceneWithDefinition` 里，同一固定 sceneID、同一 pid，前面 5 次关窗重开都好、第 6、7 次崩；第 2 次崩很可能是第 1 次崩留下的半注册 scene 撞的。`destroyScene` 不是完全同步/干净的，v28「固定 ID 复用安全」的判断错了。每次新 ID（LiveContainer 的做法；我们保留 bundleID 在前面、UUID 在后面），关窗重开与切 App 都不会撞 ID。固定 ID 不是画画的必要条件：v28 换固定 ID 时计算器还是黑的，是 v29 降层级才让它画出来。UUID 用纯 C 的 `uuid_generate` / `uuid_unparse`，不用 NSUUID 类。其余与 v32 相同。
+
+测法：开计算器悬浮窗 → 点启动器里的时钟 → 计算器窗关掉、时钟悬浮窗出来；再点计算器 → 时钟窗关掉、计算器悬浮窗出来；最小化计算器 → 点时钟 → 直接开时钟悬浮窗；同一个 App 再点仍恢复/已开着；关窗重开同一个 App 6 次以上不进安全模式；日志里应有 `v33 switching from … to …`、`v33 sceneID sceneID:…` 与 `v33 destroying scene …`。
 
 ## v32 是什么（锁屏时把悬浮窗也临时藏起来）
 

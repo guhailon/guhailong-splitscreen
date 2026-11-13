@@ -3,7 +3,7 @@
 # （Apache-2.0，macOS runner + Theos + iOS 16.5 SDK + ldid），
 # 改成编 tweak 的 .deb（rootless）。推代码就自动跑；跑完在
 # 该次运行的 Artifacts 里下载
-# com.guhailong.splitscreen_1.0.32_iphoneos-arm64.deb。
+# com.guhailong.splitscreen_1.0.33_iphoneos-arm64.deb。
 # 不需要任何密钥（Secret），不需要 Mac。
 name: Build
 
