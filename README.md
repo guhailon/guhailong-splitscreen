@@ -1,6 +1,24 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.24（实验版 v24）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.25（实验版 v25）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v25 是什么（5.2 修 v24 的安全模式）
+
+v24 真机：点启动器里的计算器，手机直接进安全模式。崩溃日志
+（`SpringBoard-2026-11-13-110826.ips`）定死了原因：
+**EXC_BREAKPOINT**，崩在 `-[BSTransaction begin]` 里，后台队列。
+`FBApplicationProcessLaunchTransaction` 是 `BSTransaction` 的子类，
+`begin` 里面断言当前队列必须是主队列（`BSDispatchQueueAssert`）——
+v24 把启动放后台队列，`begin` 一调就触发断言，把 SpringBoard 杀进
+安全模式。RBS 那些调用在后台队列都成功了，只有 `begin` 崩。
+
+v25 只改一件事：**启动放回主线程做**（和参考实现
+FrontBoardAppLauncher 一模一样——它就是在主线程点按回调里拉起进程）。
+FB 事务本身是异步的：`begin` 立刻返回、完成走回调，主线程不会被堵
+（v23 那种 5 秒卡死是同步打开调用造成的，那条路已经删了，不会重演）。
+先收启动器不变；启动每一步都记日志（`v25 identity ok`、`v25 handle
+pid=0`、`v25 manager ok`、`v25 transaction created`、`v25 begin called`），
+下次再崩直接定位到具体调用。
 
 ## v24 是什么（5.2：悬浮窗里打开 App）
 
@@ -8,9 +26,10 @@ v23 真机：按钮看得见、启动器能开能关，但点 App 会卡 5 秒�
 App 全屏打开、手机随后自己重启。日志证明两件事：系统打开 App 的
 方法在 SpringBoard 里根本打不开 App（四次全失败，ok=0），而那个
 同步调用把主线程堵了 5 秒以上，触发看门狗把 SpringBoard 重启了。
-v24 修掉这三个缺点：
+v25 只改启动的线程（见上），其余与 v24 相同：
 
-- 点 App 时**先收启动器，再异步启动**——主线程绝不被启动堵住；
+- 点 App 时**先收启动器，再在主线程走 FB 事务启动**——事务本身
+  异步，`begin` 立刻返回，主线程不被堵；
 - 启动只走 **FBProcessManager + FBApplicationProcessLaunchTransaction**
   （SpringBoard 这边的正路），再经 **FBSceneManager** 建 scene、
   用 **\_UIScenePresenter** 把 App 的画面嵌进悬浮窗；
@@ -21,7 +40,7 @@ v24 修掉这三个缺点：
   代码是原创。
 
 测前先把计算器彻底关掉（在 App 切换器里划掉），不然 scene 可能
-只剩白窗。键盘不在 v24 做（计算器不用键盘；iOS 16.5 没有干净的
+只剩白窗。键盘不在 v25 做（计算器不用键盘；iOS 16.5 没有干净的
 键盘办法，见 `V5_DESIGN.md` §3.3）。
 
 ## 目标（定死）

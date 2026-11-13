@@ -1,9 +1,9 @@
-# macOS 云端编译：顾海龙集团分屏 v1.0.24
+# macOS 云端编译：顾海龙集团分屏 v1.0.25
 # 做法照抄 FrontBoardAppLauncher 的 .github/workflows/build.yml
 # （Apache-2.0，macOS runner + Theos + iOS 16.5 SDK + ldid），
 # 改成编 tweak 的 .deb（rootless）。推代码就自动跑；跑完在
 # 该次运行的 Artifacts 里下载
-# com.guhailong.splitscreen_1.0.24_iphoneos-arm64.deb。
+# com.guhailong.splitscreen_1.0.25_iphoneos-arm64.deb。
 # 不需要任何密钥（Secret），不需要 Mac。
 name: Build
 
@@ -55,5 +55,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@main
         with:
-          name: com.guhailong.splitscreen_1.0.24_iphoneos-arm64
+          name: com.guhailong.splitscreen_1.0.25_iphoneos-arm64
           path: packages/*.deb

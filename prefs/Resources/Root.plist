@@ -8,9 +8,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>顾海龙集团分屏 v1.0.24（实验版 v24）</string>
+			<string>顾海龙集团分屏 v1.0.25（实验版 v25）</string>
 			<key>footerText</key>
-			<string>目标：iPhone 11 / iOS 16.5 / Dopamine。v24 是实验版（5.2：点启动器里的 App 在悬浮窗里打开）：窗显式挂 windowScene，感应带 24pt 宽，金色"分"按钮 24x64、14pt 粗体、金底黑边，2 秒内从右边缘滑两次（或点"分"按钮）打开侧边小窗启动器；点 App 时先收启动器，再异步走 FBProcessManager + FBApplicationProcessLaunchTransaction 拉起进程、经 FBSceneManager 建 scene、用 _UIScenePresenter 把 App 的画面嵌进圆角 35、带阴影的 320x480 悬浮窗（44pt 标题栏可拖动、红关闭钮、黄最小化钮、右下角缩放手柄），主线程绝不被启动堵住；一次只开一个悬浮窗；macOS 编。开关默认关，改动后需要重新启动 SpringBoard（respring）才生效。日志在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。测前先把计算器彻底关掉（在 App 切换器里划掉），不然 scene 可能只剩白窗。v23 1.0.23 真机：按钮看得见、启动器能开能关，但点 App 会卡 5 秒以上（系统打开 App 的方法在 SpringBoard 里打不开 App，四次全失败）、App 全屏打开、手机随后自己重启（看门狗）；v22 1.0.22 装得上、不黑屏，但按钮看不见、滑两次打不开启动器；v21 1.0.21 已通过真机测试（不黑屏、感应带建成）；v20 1.0.20 装完不黑屏但不加载（只编 arm64 的包注不进 arm64e 的 SpringBoard）、v18 1.0.18、v17 1.0.17、v16 1.0.16 与 v14 1.0.14 装完启动黑屏、v12 1.0.12 装完进安全模式、v11 1.0.11 装完约 5 秒后卡住、v1.0.0 装完即进安全模式，均已下架，不要再装。</string>
+			<string>目标：iPhone 11 / iOS 16.5 / Dopamine。v25 是实验版（5.2 修 v24 的安全模式：点启动器里的 App 在悬浮窗里打开）：窗显式挂 windowScene，感应带 24pt 宽，金色"分"按钮 24x64、14pt 粗体、金底黑边，2 秒内从右边缘滑两次（或点"分"按钮）打开侧边小窗启动器；点 App 时先收启动器，再在主线程走 FBProcessManager + FBApplicationProcessLaunchTransaction 拉起进程、经 FBSceneManager 建 scene、用 _UIScenePresenter 把 App 的画面嵌进圆角 35、带阴影的 320x480 悬浮窗（44pt 标题栏可拖动、红关闭钮、黄最小化钮、右下角缩放手柄），一次只开一个悬浮窗；macOS 编。FB 事务本身是异步的，主线程不被启动堵住。开关默认关，改动后需要重新启动 SpringBoard（respring）才生效。日志在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。测前先把计算器彻底关掉（在 App 切换器里划掉），不然 scene 可能只剩白窗。v24 1.0.24 真机：点启动器里的计算器后进安全模式（崩溃日志定死：启动放后台队列，BSTransaction 的 begin 断言主队列）；v23 1.0.23 真机：按钮看得见、启动器能开能关，但点 App 会卡 5 秒以上（系统打开 App 的方法在 SpringBoard 里打不开 App，四次全失败）、App 全屏打开、手机随后自己重启（看门狗）；v22 1.0.22 装得上、不黑屏，但按钮看不见、滑两次打不开启动器；v21 1.0.21 已通过真机测试（不黑屏、感应带建成）；v20 1.0.20 装完不黑屏但不加载（只编 arm64 的包注不进 arm64e 的 SpringBoard）、v18 1.0.18、v17 1.0.17、v16 1.0.16 与 v14 1.0.14 装完启动黑屏、v12 1.0.12 装完进安全模式、v11 1.0.11 装完约 5 秒后卡住、v1.0.0 装完即进安全模式，均已下架，不要再装。</string>
 		</dict>
 		<dict>
 			<key>cell</key>

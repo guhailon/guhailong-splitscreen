@@ -1,18 +1,22 @@
-// GuHaiLongSplitScreen v1.0.24 (v24) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.25 (v25) — 顾海龙集团原创分屏插件（实验版）
 //
 // 目标：iPhone 11 / iOS 16.5 / Dopamine (rootless)，iphoneos-arm64。
 //
-// ── v24：5.2，一个托管 App 悬浮窗（macOS 编） ──────────────
-// v23（1.0.23）皇上真机实测（2026-11-13 10:33）：金色"分"按钮看得见、
-// 点得动，启动器打得开，但点计算器后手机卡住 5 秒以上、随后手机自己
-// 重启了一次，而且计算器是全屏打开、没有分屏。日志证明了两件事：
-//   (a) v23 用的系统打开 App 的方法在 SpringBoard 里根本打不开
-//       App（ok=0，四次全失败）——这条路死了，v24 把它整个删掉，不再用；
-//   (b) 卡住是因为 v23 在主线程上同步调那个打开方法、等它返回才收
-//       启动器——主线程被堵 5 秒以上，SpringBoard 的看门狗把它杀掉
-//       重启了。所以 v24 的启动必须异步：先收启动器，再在后台队列
-//       走 FB 事务，场景创建回主线程做；启动的每一步都不堵主线程。
-// v24 只做 5.2：点启动器里的 App，不再全屏打开，而是按 V5_DESIGN.md
+// ── v25：5.2 修 v24 的安全模式（macOS 编） ──────────────
+// v24（1.0.24）皇上真机实测（2026-11-13 11:09）：点启动器里的计算器，
+// 手机直接进安全模式。崩溃日志（SpringBoard-2026-11-13-110826.ips）
+// 定死了原因：EXC_BREAKPOINT，崩在 -[BSTransaction begin] 里，
+// 后台队列（com.apple.root.default-qos）。FBApplicationProcessLaunch-
+// Transaction 是 BSTransaction 的子类，begin 里面断言当前队列必须是
+// 主队列（BSDispatchQueueAssert）——v24 把启动放后台队列，begin 一调
+// 就触发断言，把 SpringBoard 杀进安全模式。RBS 那些调用在后台队列都
+// 成功了，只有 begin 崩。所以 v25 只改一件事：启动放回主线程做
+// （和参考实现 FrontBoardAppLauncher 一模一样——它就是在主线程点按
+// 回调里拉起进程）。FB 事务本身是异步的：begin 立刻返回、完成走回调，
+// 主线程不会被堵（v23 那种 5 秒卡死是同步打开调用造成的，那条路已
+// 经删了，不会重演）。先收启动器不变；每一步都记日志，下次再崩直接
+// 定位到具体调用。
+// v25 还是 5.2：点启动器里的 App，不再全屏打开，而是按 V5_DESIGN.md
 // §2.2 把它的 live scene 嵌进一个 FV 风格的悬浮窗（圆角 35、有阴影、
 // 离屏幕边缘有距离、44pt 标题栏可拖动、红关闭钮、黄最小化钮、右下角
 // 缩放手柄）。先只支持一个悬浮窗；计算器先测（测前先把计算器彻底
@@ -32,9 +36,9 @@
 // 字串常量）。编译完要验 dylib 里没有 __cfstring 段，也没有通知中心的
 // 登记调用。不要用任何已废弃 API（v23 首编的教训：取主窗口的旧 API 在
 // iOS 13 起已废弃，Theos 默认 -Werror 会把它当编译错误）。
-// 感应带与启动器不看开关：v24 永远建带，只测功能；开关的门以后再加。
+// 感应带与启动器不看开关：v25 永远建带，只测功能；开关的门以后再加。
 // 横屏不处理：只按竖屏算位置。
-// v1–v23 的完整历史与诊断见 BUILD_LOG.md。5.2 的完整设计见
+// v1–v24 的完整历史与诊断见 BUILD_LOG.md。5.2 的完整设计见
 // V5_DESIGN.md §2、§4.4、§5.2 与附录 D。开源学习见
 // OPEN_SOURCE_RESEARCH_2.md。
 
@@ -338,32 +342,32 @@ if (recognizer.state != UIGestureRecognizerStateEnded) return;
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v24 edge swipe 2nd, opening launcher");
+GHLSSLogLine("v25 edge swipe 2nd, opening launcher");
 [self showLauncher];
 } else {
 GHLSSLastSwipeTime = now;
-GHLSSLogLine("v24 edge swipe 1st, armed");
+GHLSSLogLine("v25 edge swipe 1st, armed");
 }
 }
 
 // 金色"分"按钮：点一次就开启动器（备用触发，不用滑两次）。
 - (void)handleHandleButton:(id)sender {
-GHLSSLogLine("v24 handle button tapped, opening launcher");
+GHLSSLogLine("v25 handle button tapped, opening launcher");
 [self showLauncher];
 }
 
-// 点启动器里的一个 App：v24 不再全屏打开（那条路在 SpringBoard 里
+// 点启动器里的一个 App：v25 不再全屏打开（那条路在 SpringBoard 里
 // 是死的：在 SpringBoard 里打开 App 返回 NO，四次全失败，还把主线程
 // 堵 5 秒以上、触发看门狗重启）。
-// 新流程：先收启动器，再异步走 FB 事务建 scene、嵌进悬浮窗。
-// 主线程上只做记日志与收窗，启动本身不在主线程上堵。
+// 新流程：先收启动器，再在主线程走 FB 事务建 scene、嵌进悬浮窗。
+// FB 事务是异步的：begin 立刻返回，场景创建走回调；主线程不被堵。
 - (void)handleAppButton:(UIButton *)sender {
 NSInteger idx = sender.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 const char *bid = GHLSSAppBundleIDs[idx];
 const char *name = GHLSSAppNames[idx];
 char buf[256];
-snprintf(buf, sizeof(buf), "v24 app tapped %s", bid);
+snprintf(buf, sizeof(buf), "v25 app tapped %s", bid);
 GHLSSLogLine(buf);
 // 一个悬浮窗：已经有窗在，就不再开第二个。
 if (GHLSSHostedWindow) {
@@ -373,44 +377,48 @@ if (GHLSSHostedMinimized && strcmp(GHLSSHostedBundleID, bid) == 0) {
 return;
 }
 if (strcmp(GHLSSHostedBundleID, bid) == 0) {
-GHLSSLogLine("v24 window already open");
+GHLSSLogLine("v25 window already open");
 [self dismissLauncher];
 return;
 }
-snprintf(buf, sizeof(buf), "v24 window busy, ignoring tap %s", bid);
+snprintf(buf, sizeof(buf), "v25 window busy, ignoring tap %s", bid);
 GHLSSLogLine(buf);
 return;
 }
 if (GHLSSHostedLaunching) {
-GHLSSLogLine("v24 launch in progress, ignoring tap");
+GHLSSLogLine("v25 launch in progress, ignoring tap");
 return;
 }
 // 先收启动器（v23 卡死的教训：收窗是便宜操作，先做；
-// 启动是慢操作，后做、异步做）。
+// 启动是慢操作，后做——但要在主线程做，v24 放后台队列崩了）。
 [self dismissLauncher];
 [self launchHostedApp:bid name:name];
 }
 
-// 异步启动：进程拉起那部分在后台队列做，主线程绝不被堵。
-//（v23 的看门狗重启就是主线程被同步打开调用堵 5 秒以上造成的。）
+// v25：启动必须在主线程做——v24 把它放后台队列，BSTransaction 的 begin
+// 在里面断言当前队列是主队列（BSDispatchQueueAssert），直接把 SpringBoard
+// 杀进安全模式（.ips：EXC_BREAKPOINT，-[BSTransaction begin]，后台队列）。
+// 参考实现 FrontBoardAppLauncher 就是在主线程点按回调里做这一模一样的
+// 调用。FB 事务本身是异步的：begin 立刻返回、完成走回调，主线程不会被堵
+//（v23 那种 5 秒卡死是同步打开调用造成的，那条路已经删了，不会重演）。
+// 每一步都记日志，下次再崩直接定位到具体调用。
 - (void)launchHostedApp:(const char *)bundleID name:(const char *)name {
 char *bidCopy = strdup(bundleID);
 char *nameCopy = strdup(name);
 if (!bidCopy || !nameCopy) {
 if (bidCopy) free(bidCopy);
 if (nameCopy) free(nameCopy);
-GHLSSLogLine("v24 launch failed no memory");
+GHLSSLogLine("v25 launch failed no memory");
 return;
 }
 GHLSSHostedLaunching = YES;
 char buf[256];
-snprintf(buf, sizeof(buf), "v24 launch start %s", bundleID);
+snprintf(buf, sizeof(buf), "v25 launch start %s", bundleID);
 GHLSSLogLine(buf);
-dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 @try {
 NSString *bidStr = [NSString stringWithCString:bidCopy encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v24 launch failed bad bundle id");
+GHLSSLogLine("v25 launch failed bad bundle id");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
@@ -418,12 +426,13 @@ return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
 if (!identity) {
-GHLSSLogLine("v24 launch failed no identity");
+GHLSSLogLine("v25 launch failed no identity");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
+GHLSSLogLine("v25 identity ok");
 // 先看 App 是不是已经在跑（单场景 App 已有全屏版时，再建
 // 第二个 scene 可能只剩白窗——测前要先把目标 App 彻底关掉）。
 RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:identity];
@@ -431,7 +440,7 @@ RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:
 int pid = handle ? [handle pid] : 0;
 if (pid > 0) {
 char pbuf[128];
-snprintf(pbuf, sizeof(pbuf), "v24 app already running pid=%d", pid);
+snprintf(pbuf, sizeof(pbuf), "v25 app already running pid=%d", pid);
 GHLSSLogLine(pbuf);
 // 已经在跑：不走事务，直接去建 scene（和参考实现同一做法）。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -441,15 +450,32 @@ free(nameCopy);
 });
 return;
 }
+GHLSSLogLine("v25 handle pid=0");
 FBProcessManager *manager = [FBProcessManager sharedInstance];
+if (!manager) {
+GHLSSLogLine("v25 manager failed nil");
+GHLSSHostedLaunching = NO;
+free(bidCopy);
+free(nameCopy);
+return;
+}
+GHLSSLogLine("v25 manager ok");
 FBApplicationProcessLaunchTransaction *transaction = [[FBApplicationProcessLaunchTransaction alloc] initWithProcessIdentity:identity executionContextProvider:^id(void) {
-GHLSSLogLine("v24 launch provider called");
+GHLSSLogLine("v25 launch provider called");
 FBMutableProcessExecutionContext *context = [FBMutableProcessExecutionContext new];
 context.identity = identity;
 context.environment = [NSDictionary dictionary];
 context.launchIntent = 4;
 return [manager launchProcessWithContext:context];
 }];
+if (!transaction) {
+GHLSSLogLine("v25 transaction failed nil");
+GHLSSHostedLaunching = NO;
+free(bidCopy);
+free(nameCopy);
+return;
+}
+GHLSSLogLine("v25 transaction created");
 [transaction setCompletionBlock:^{
 // 事务完成可能跑在任意队列——场景创建回主线程做。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -459,15 +485,15 @@ free(nameCopy);
 });
 }];
 [transaction begin];
-GHLSSLogLine("v24 launch transaction begun");
+GHLSSLogLine("v25 begin called");
+GHLSSLogLine("v25 launch transaction begun");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v24 launch failed exception");
+GHLSSLogLine("v25 launch failed exception");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 }
-});
 }
 
 // 在主线程建 scene + presenter（V5_DESIGN.md §2.2 第 2–5 步）。
@@ -476,11 +502,11 @@ free(nameCopy);
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name {
 @try {
 char buf[256];
-snprintf(buf, sizeof(buf), "v24 scene start %s", bundleID);
+snprintf(buf, sizeof(buf), "v25 scene start %s", bundleID);
 GHLSSLogLine(buf);
 NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v24 scene failed no bid");
+GHLSSLogLine("v25 scene failed no bid");
 return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
@@ -488,10 +514,10 @@ RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:
 RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:nil];
 int pid = handle ? [handle pid] : 0;
 if (pid <= 0) {
-GHLSSLogLine("v24 scene failed no process");
+GHLSSLogLine("v25 scene failed no process");
 return;
 }
-snprintf(buf, sizeof(buf), "v24 process launched pid=%d", pid);
+snprintf(buf, sizeof(buf), "v25 process launched pid=%d", pid);
 GHLSSLogLine(buf);
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 [manager registerProcessForAuditToken:[handle auditToken]];
@@ -525,18 +551,18 @@ clientSettings.statusBarStyle = 0;
 parameters.clientSettings = clientSettings;
 FBScene *scene = [[FBSceneManager sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
 if (!scene) {
-GHLSSLogLine("v24 scene failed nil scene");
+GHLSSLogLine("v25 scene failed nil scene");
 return;
 }
-GHLSSLogLine("v24 scene created");
+GHLSSLogLine("v25 scene created");
 id presenterManager = [scene uiPresentationManager];
 if (!presenterManager) {
-GHLSSLogLine("v24 presenter failed no manager");
+GHLSSLogLine("v25 presenter failed no manager");
 return;
 }
 _UIScenePresenter *presenter = [presenterManager createPresenterWithIdentifier:sceneID];
 if (!presenter) {
-GHLSSLogLine("v24 presenter failed nil");
+GHLSSLogLine("v25 presenter failed nil");
 return;
 }
 [presenter modifyPresentationContext:^(UIMutableScenePresentationContext *context) {
@@ -544,14 +570,14 @@ context.appearanceStyle = 2;
 }];
 [presenter activate];
 if (!presenter.presentationView) {
-GHLSSLogLine("v24 presenter failed no view");
+GHLSSLogLine("v25 presenter failed no view");
 return;
 }
-GHLSSLogLine("v24 presenter ready");
+GHLSSLogLine("v25 presenter ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:scene presenter:presenter sceneID:sceneID pid:pid];
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v24 scene failed exception");
+GHLSSLogLine("v25 scene failed exception");
 } @finally {
 GHLSSHostedLaunching = NO;
 }
@@ -573,7 +599,7 @@ UIWindowScene *hostedScene = GHLSSActiveWindowScene();
 if (hostedScene) {
 GHLSSHostedWindow.windowScene = hostedScene;
 } else {
-GHLSSLogLine("v24 hosted scene nil");
+GHLSSLogLine("v25 hosted scene nil");
 }
 // 窗的阴影与圆角（画在窗的 layer 上；内容容器自己裁圆角）。
 GHLSSHostedWindow.layer.cornerRadius = GHLSS_HOSTED_CORNER;
@@ -661,10 +687,10 @@ strncpy(GHLSSHostedBundleID, bundleID, sizeof(GHLSSHostedBundleID) - 1);
 GHLSSHostedBundleID[sizeof(GHLSSHostedBundleID) - 1] = '\0';
 GHLSSHostedPid = pid;
 GHLSSHostedMinimized = NO;
-GHLSSLogLine("v24 window shown");
+GHLSSLogLine("v25 window shown");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v24 window failed exception");
+GHLSSLogLine("v25 window failed exception");
 }
 }
 
@@ -682,7 +708,7 @@ if (GHLSSHostedPresenter) {
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v24 close failed");
+GHLSSLogLine("v25 close failed");
 }
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedWindow = nil;
@@ -700,30 +726,30 @@ GHLSSHostedMinimized = NO;
 if (GHLSSLauncherWindow) {
 GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert + 1.0;
 }
-GHLSSLogLine("v24 window closed");
+GHLSSLogLine("v25 window closed");
 }
 
 - (void)minimizeHostedWindow {
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedMinimized = YES;
-GHLSSLogLine("v24 window minimized");
+GHLSSLogLine("v25 window minimized");
 }
 
 - (void)restoreHostedWindow {
 if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
 GHLSSHostedWindow.hidden = NO;
 GHLSSHostedMinimized = NO;
-GHLSSLogLine("v24 window restored");
+GHLSSLogLine("v25 window restored");
 }
 
 - (void)handleHostedClose:(id)sender {
-GHLSSLogLine("v24 hosted close tapped");
+GHLSSLogLine("v25 hosted close tapped");
 [self closeHostedWindow];
 }
 
 - (void)handleHostedMinimize:(id)sender {
-GHLSSLogLine("v24 hosted minimize tapped");
+GHLSSLogLine("v25 hosted minimize tapped");
 [self minimizeHostedWindow];
 }
 
@@ -783,27 +809,27 @@ settings.interfaceOrientation = UIInterfaceOrientationPortrait;
 settings.deviceOrientation = UIDeviceOrientationPortrait;
 }];
 char buf[128];
-snprintf(buf, sizeof(buf), "v24 scene resized %d,%d", (int)size.width, (int)size.height);
+snprintf(buf, sizeof(buf), "v25 scene resized %d,%d", (int)size.width, (int)size.height);
 GHLSSLogLine(buf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v24 scene resize failed");
+GHLSSLogLine("v25 scene resize failed");
 }
 }
 
 - (void)handleCloseButton:(id)sender {
-GHLSSLogLine("v24 close button tapped");
+GHLSSLogLine("v25 close button tapped");
 [self dismissLauncher];
 }
 
 - (void)handleBackgroundTap:(UITapGestureRecognizer *)recognizer {
-GHLSSLogLine("v24 background tapped, dismissing launcher");
+GHLSSLogLine("v25 background tapped, dismissing launcher");
 [self dismissLauncher];
 }
 
 - (void)showLauncher {
 if (GHLSSLauncherVisible) {
-GHLSSLogLine("v24 launcher already open");
+GHLSSLogLine("v25 launcher already open");
 return;
 }
 if (!GHLSSLauncherWindow) {
@@ -817,14 +843,14 @@ GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert + 1.0;
 }
 GHLSSLauncherWindow.hidden = NO;
 GHLSSLauncherVisible = YES;
-GHLSSLogLine("v24 launcher opened");
+GHLSSLogLine("v25 launcher opened");
 }
 
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherWindow.hidden = YES;
 GHLSSLauncherVisible = NO;
-GHLSSLogLine("v24 launcher dismissed");
+GHLSSLogLine("v25 launcher dismissed");
 }
 
 // 建启动器窗（第一次打开时才建）：全屏透明窗 + 右侧 220pt 暗色面板。
@@ -840,9 +866,9 @@ GHLSSLauncherWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *launcherScene = GHLSSActiveWindowScene();
 if (launcherScene) {
 GHLSSLauncherWindow.windowScene = launcherScene;
-GHLSSLogLine("v24 launcher scene found");
+GHLSSLogLine("v25 launcher scene found");
 } else {
-GHLSSLogLine("v24 launcher scene nil");
+GHLSSLogLine("v25 launcher scene nil");
 }
 UIViewController *launcherVC = [[UIViewController alloc] init];
 UIView *rootView = [[UIView alloc] initWithFrame:screenBounds];
@@ -878,7 +904,7 @@ iconView.image = icon;
 } else {
 iconView.backgroundColor = [UIColor grayColor];
 char ibuf[192];
-snprintf(ibuf, sizeof(ibuf), "v24 icon nil for %s", GHLSSAppBundleIDs[i]);
+snprintf(ibuf, sizeof(ibuf), "v25 icon nil for %s", GHLSSAppBundleIDs[i]);
 GHLSSLogLine(ibuf);
 }
 iconView.layer.cornerRadius = 10.0;
@@ -900,13 +926,13 @@ closeButton.titleLabel.font = [UIFont systemFontOfSize:16];
 [closeButton addTarget:self action:@selector(handleCloseButton:) forControlEvents:UIControlEventTouchUpInside];
 [panel addSubview:closeButton];
 GHLSSLauncherWindow.rootViewController = launcherVC;
-GHLSSLogLine("v24 launcher built");
+GHLSSLogLine("v25 launcher built");
 }
 
 @end
 
 %ctor {
-// v24 的 %ctor 和 v21/v22/v23 一模一样，只做一行纯 C 调用：
+// v25 的 %ctor 和 v21/v22/v23/v24 一模一样，只做一行纯 C 调用：
 // 5 秒后在主队列跑一个 block。不登记通知、不写日志、不读文件、
 // 不调系统日志、不建窗、不 hook。
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
@@ -932,8 +958,8 @@ CFRelease(v);
 if (domain) CFRelease(domain);
 if (key) CFRelease(key);
 char buf[128];
-snprintf(buf, sizeof(buf), "v24 deferred setup ran, switch=%s", state);
-GHLSSLogLine("v24 deferred setup ran");
+snprintf(buf, sizeof(buf), "v25 deferred setup ran, switch=%s", state);
+GHLSSLogLine("v25 deferred setup ran");
 GHLSSLogLine(buf);
 // 右边缘感应带：24pt 宽、全高、透明，层级在 SpringBoard 内容之上。
 // v23 的修法：窗显式挂 windowScene（没挂 scene 的窗可能不显示，
@@ -947,9 +973,9 @@ GHLSSStripWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *stripScene = GHLSSActiveWindowScene();
 if (stripScene) {
 GHLSSStripWindow.windowScene = stripScene;
-GHLSSLogLine("v24 window scene found");
+GHLSSLogLine("v25 window scene found");
 } else {
-GHLSSLogLine("v24 window scene nil");
+GHLSSLogLine("v25 window scene nil");
 }
 UIViewController *stripVC = [[UIViewController alloc] init];
 GHLSSPlainStripView *stripView = [[GHLSSPlainStripView alloc] initWithFrame:CGRectMake(0, 0, stripWidth, screenBounds.size.height)];
@@ -957,14 +983,14 @@ stripView.backgroundColor = [UIColor clearColor];
 stripVC.view = stripView;
 GHLSSStripWindow.rootViewController = stripVC;
 GHLSSStripWindow.hidden = NO;
-GHLSSLogLine("v24 edge strip built");
+GHLSSLogLine("v25 edge strip built");
 // 诊断日志：窗与带子到底是什么状态（真机一看就知道上没上屏）。
 char dbuf[256];
 CGRect wf = GHLSSStripWindow.frame;
-snprintf(dbuf, sizeof(dbuf), "v24 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
+snprintf(dbuf, sizeof(dbuf), "v25 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
 GHLSSLogLine(dbuf);
 CGRect sf = stripView.frame;
-snprintf(dbuf, sizeof(dbuf), "v24 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v25 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
 GHLSSLogLine(dbuf);
 // 5.1 的处理器（唯一的自定义处理类）。
 GHLSSLauncherShared = [[GHLSSLauncher alloc] init];
@@ -973,7 +999,7 @@ UIScreenEdgePanGestureRecognizer *edgePan = [[UIScreenEdgePanGestureRecognizer a
 edgePan.edges = UIRectEdgeRight;
 edgePan.delegate = GHLSSLauncherShared;
 [stripView addGestureRecognizer:edgePan];
-GHLSSLogLine("v24 edge gesture added");
+GHLSSLogLine("v25 edge gesture added");
 // 金色"分"按钮（感应带上的可见把手，备用触发）。
 // v23 做大做显眼：24 宽 x 64 高、14pt 粗体、金底黑边（v22 的 12x48
 // 太小，就算显示了也难看见）。
@@ -988,9 +1014,9 @@ handleButton.layer.borderColor = [UIColor blackColor].CGColor;
 handleButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [handleButton addTarget:GHLSSLauncherShared action:@selector(handleHandleButton:) forControlEvents:UIControlEventTouchUpInside];
 [stripView addSubview:handleButton];
-GHLSSLogLine("v24 handle button added");
+GHLSSLogLine("v25 handle button added");
 CGRect bf = handleButton.frame;
-snprintf(dbuf, sizeof(dbuf), "v24 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v25 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
 GHLSSLogLine(dbuf);
 });
 }
