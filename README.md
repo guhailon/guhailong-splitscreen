@@ -1,4 +1,4 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.21（实验版 v21）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.22（实验版 v22）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
 
@@ -10,6 +10,22 @@
 - 架构：`iphoneos-arm64`，`arm64 / arm64e`，SDK 16.5
 
 其他版本、其他越狱工具均不在目标内，不保证能用。
+
+## v22 是什么（5.1）
+
+v22 在 v21 的基础上加 5.1：边缘滑动 + 侧边小窗启动器。
+
+- 右边缘感应带（12pt 透明窗）上多了一个看得见的金色「分」按钮
+  （备用触发）。
+- 感应带上挂 `UIScreenEdgePanGestureRecognizer`（右边缘）：2 秒内
+  滑两次打开启动器（防误触），点「分」按钮则点一次就开。
+- 启动器：右边缘 220pt 宽、暗色半透明，列 5 个系统 App（计算器、
+  时钟、备忘录、设置、照片），带图标；点 App 全屏打开（5.2 才做
+  scene 托管），点窗外或「关闭」收起。
+- 关键测试：手势识别器在 macOS 编的包里能不能工作（v14/v16 的
+  手势在 Linux 编的包里黑屏；v21 只证明了自定义类）。
+- 一切照旧：`%ctor` 里只调 `dispatch_after`，一个写死的字串都不用，
+  不登记通知，不建 scene，不 hook；macOS（GitHub Actions）上编。
 
 ## v21 是什么
 
