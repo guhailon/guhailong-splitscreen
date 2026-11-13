@@ -172,6 +172,11 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 @interface UIApplicationSceneSettings : NSObject
 @end
 
+// BSCornerRadiusConfiguration 在 BaseBoard 里，完整声明在下面；
+// 这里先前置声明（UIMutableApplicationSceneSettings 的
+// cornerRadiusConfiguration 属性要用到它）。
+@class BSCornerRadiusConfiguration;
+
 @interface UIMutableApplicationSceneSettings : UIApplicationSceneSettings
 @property (nonatomic, assign) BOOL canShowAlerts;
 @property (nonatomic, assign) NSInteger interruptionPolicy;
