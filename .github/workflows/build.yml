@@ -55,5 +55,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@main
         with:
-          name: com.guhailong.splitscreen_1.0.29_iphoneos-arm64
+          name: com.guhailong.splitscreen_1.0.30_iphoneos-arm64
           path: packages/*.deb

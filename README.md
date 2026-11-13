@@ -1,6 +1,14 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.29（实验版 v29）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.30（实验版 v30）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v30 是什么（5.2 修恢复后黑窗——恢复时再推一遍 foreground）
+
+v29 真机（2026-11-13 15:12–15:14）：锁屏修好了——开悬浮窗锁屏，再开屏密码能输；计算器也能画了（截图为证：数字键全画出来了）。但新 bug：**最小化悬浮窗 → 锁屏 → 解锁 → 再点同一个 App 恢复窗，内容是黑的**（截图为证：标题栏和按钮都在，内容区全黑）；点 X 关窗再打开就正常（新 scene、建窗时推了 foreground）。原因是锁屏把 scene 的 foreground 状态弄丢了，恢复时只取消 hidden、没再推 foreground，scene 就一直黑着。
+
+v30 只改一个变量：**`restoreHostedWindow` 里，取消 hidden 之后，用建窗时同一个已证明能用的 `updateSettingsWithBlock:` 把 `foreground=YES` 再推一遍，并记一行日志（`foreground pushed on restore`）**；单独包 `@try/@catch`，出错只记日志。锁屏层级（v29 的 `Alert - 4/-3/-2/-1`）、sceneID（v28 的固定格式）、其余什么都不动。
+
+测法：最小化计算器悬浮窗 → 锁屏 → 解锁 → 再点计算器恢复——必须画出来，不能黑；再测锁屏密码还能输（v29 的修不能丢）。
 
 ## v29 是什么（修锁屏密码输不进去——所有窗层级降到锁屏之下）
 

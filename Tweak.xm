@@ -1,6 +1,20 @@
-// GuHaiLongSplitScreen v1.0.29 (v29) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.30 (v30) — 顾海龙集团原创分屏插件（实验版）
 //
 // 目标：iPhone 11 / iOS 16.5 / Dopamine (rootless)，iphoneos-arm64。
+//
+// ── v30：5.2 修恢复后黑窗——恢复时再推一遍 foreground（macOS 编） ──
+// v29 真机实测（2026-11-13 15:12–15:14）：锁屏修好了——开悬浮窗锁
+// 屏，再开屏密码能输；计算器也能画了（截图为证：数字键全画出来了）。
+// 但新 bug：最小化悬浮窗 → 锁屏 → 解锁 → 再点同一个 App 恢复窗，
+// 内容是黑的（截图为证：标题栏和按钮都在，内容区全黑）；点 X 关窗
+// 再打开就正常（新 scene、建窗时推了 foreground）。原因是锁屏把
+// scene 的 foreground 状态弄丢了，恢复时只取消 hidden、没再推
+// foreground，scene 就一直黑着。v30 只改一个变量：restoreHostedWindow
+// 里，取消 hidden 之后，用建窗时同一个已证明能用的
+// updateSettingsWithBlock: 把 foreground=YES 再推一遍，并记一行
+// 日志（foreground pushed on restore）；单独包 @try/@catch，出错
+// 只记日志。锁屏层级（v29 的 Alert - 4/-3/-2/-1）、sceneID（v28 的
+// 固定格式）、其余什么都不动。
 //
 // ── v29：修锁屏密码输不进去——所有窗层级降到锁屏之下（macOS 编） ──
 // 皇上 2026-11-13 14:51 复现并确认：锁屏再开屏，锁屏密码输不进去，
@@ -416,17 +430,17 @@ if (recognizer.state != UIGestureRecognizerStateEnded) return;
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v29 edge swipe 2nd, opening launcher");
+GHLSSLogLine("v30 edge swipe 2nd, opening launcher");
 [self showLauncher];
 } else {
 GHLSSLastSwipeTime = now;
-GHLSSLogLine("v29 edge swipe 1st, armed");
+GHLSSLogLine("v30 edge swipe 1st, armed");
 }
 }
 
 // 金色"分"按钮：点一次就开启动器（备用触发，不用滑两次）。
 - (void)handleHandleButton:(id)sender {
-GHLSSLogLine("v29 handle button tapped, opening launcher");
+GHLSSLogLine("v30 handle button tapped, opening launcher");
 [self showLauncher];
 }
 
@@ -441,7 +455,7 @@ if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 const char *bid = GHLSSAppBundleIDs[idx];
 const char *name = GHLSSAppNames[idx];
 char buf[256];
-snprintf(buf, sizeof(buf), "v29 app tapped %s", bid);
+snprintf(buf, sizeof(buf), "v30 app tapped %s", bid);
 GHLSSLogLine(buf);
 // 一个悬浮窗：已经有窗在，就不再开第二个。
 if (GHLSSHostedWindow) {
@@ -451,16 +465,16 @@ if (GHLSSHostedMinimized && strcmp(GHLSSHostedBundleID, bid) == 0) {
 return;
 }
 if (strcmp(GHLSSHostedBundleID, bid) == 0) {
-GHLSSLogLine("v29 window already open");
+GHLSSLogLine("v30 window already open");
 [self dismissLauncher];
 return;
 }
-snprintf(buf, sizeof(buf), "v29 window busy, ignoring tap %s", bid);
+snprintf(buf, sizeof(buf), "v30 window busy, ignoring tap %s", bid);
 GHLSSLogLine(buf);
 return;
 }
 if (GHLSSHostedLaunching) {
-GHLSSLogLine("v29 launch in progress, ignoring tap");
+GHLSSLogLine("v30 launch in progress, ignoring tap");
 return;
 }
 // 先收启动器（v23 卡死的教训：收窗是便宜操作，先做；
@@ -482,17 +496,17 @@ char *nameCopy = strdup(name);
 if (!bidCopy || !nameCopy) {
 if (bidCopy) free(bidCopy);
 if (nameCopy) free(nameCopy);
-GHLSSLogLine("v29 launch failed no memory");
+GHLSSLogLine("v30 launch failed no memory");
 return;
 }
 GHLSSHostedLaunching = YES;
 char buf[256];
-snprintf(buf, sizeof(buf), "v29 launch start %s", bundleID);
+snprintf(buf, sizeof(buf), "v30 launch start %s", bundleID);
 GHLSSLogLine(buf);
 @try {
 NSString *bidStr = [NSString stringWithCString:bidCopy encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v29 launch failed bad bundle id");
+GHLSSLogLine("v30 launch failed bad bundle id");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
@@ -500,13 +514,13 @@ return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
 if (!identity) {
-GHLSSLogLine("v29 launch failed no identity");
+GHLSSLogLine("v30 launch failed no identity");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v29 identity ok");
+GHLSSLogLine("v30 identity ok");
 // 先看 App 是不是已经在跑（单场景 App 已有全屏版时，再建
 // 第二个 scene 可能只剩白窗——测前要先把目标 App 彻底关掉）。
 RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:identity];
@@ -514,7 +528,7 @@ RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:
 int pid = handle ? [handle pid] : 0;
 if (pid > 0) {
 char pbuf[128];
-snprintf(pbuf, sizeof(pbuf), "v29 app already running pid=%d", pid);
+snprintf(pbuf, sizeof(pbuf), "v30 app already running pid=%d", pid);
 GHLSSLogLine(pbuf);
 // 已经在跑：不走事务，直接去建 scene（和参考实现同一做法）。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -524,18 +538,18 @@ free(nameCopy);
 });
 return;
 }
-GHLSSLogLine("v29 handle pid=0");
+GHLSSLogLine("v30 handle pid=0");
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 if (!manager) {
-GHLSSLogLine("v29 manager failed nil");
+GHLSSLogLine("v30 manager failed nil");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v29 manager ok");
+GHLSSLogLine("v30 manager ok");
 FBApplicationProcessLaunchTransaction *transaction = [[FBApplicationProcessLaunchTransaction alloc] initWithProcessIdentity:identity executionContextProvider:^id(void) {
-GHLSSLogLine("v29 launch provider called");
+GHLSSLogLine("v30 launch provider called");
 FBMutableProcessExecutionContext *context = [FBMutableProcessExecutionContext new];
 context.identity = identity;
 context.environment = [NSDictionary dictionary];
@@ -543,13 +557,13 @@ context.launchIntent = 4;
 return [manager launchProcessWithContext:context];
 }];
 if (!transaction) {
-GHLSSLogLine("v29 transaction failed nil");
+GHLSSLogLine("v30 transaction failed nil");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v29 transaction created");
+GHLSSLogLine("v30 transaction created");
 [transaction setCompletionBlock:^{
 // 事务完成可能跑在任意队列——场景创建回主线程做。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -559,11 +573,11 @@ free(nameCopy);
 });
 }];
 [transaction begin];
-GHLSSLogLine("v29 begin called");
-GHLSSLogLine("v29 launch transaction begun");
+GHLSSLogLine("v30 begin called");
+GHLSSLogLine("v30 launch transaction begun");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 launch failed exception");
+GHLSSLogLine("v30 launch failed exception");
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
@@ -576,11 +590,11 @@ free(nameCopy);
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name {
 @try {
 char buf[256];
-snprintf(buf, sizeof(buf), "v29 scene start %s", bundleID);
+snprintf(buf, sizeof(buf), "v30 scene start %s", bundleID);
 GHLSSLogLine(buf);
 NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v29 scene failed no bid");
+GHLSSLogLine("v30 scene failed no bid");
 return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
@@ -588,10 +602,10 @@ RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:
 RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:nil];
 int pid = handle ? [handle pid] : 0;
 if (pid <= 0) {
-GHLSSLogLine("v29 scene failed no process");
+GHLSSLogLine("v30 scene failed no process");
 return;
 }
-snprintf(buf, sizeof(buf), "v29 process launched pid=%d", pid);
+snprintf(buf, sizeof(buf), "v30 process launched pid=%d", pid);
 GHLSSLogLine(buf);
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 [manager registerProcessForAuditToken:[handle auditToken]];
@@ -629,18 +643,18 @@ clientSettings.statusBarStyle = 0;
 parameters.clientSettings = clientSettings;
 FBScene *scene = [[FBSceneManager sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
 if (!scene) {
-GHLSSLogLine("v29 scene failed nil scene");
+GHLSSLogLine("v30 scene failed nil scene");
 return;
 }
-GHLSSLogLine("v29 scene created");
+GHLSSLogLine("v30 scene created");
 id presenterManager = [scene uiPresentationManager];
 if (!presenterManager) {
-GHLSSLogLine("v29 presenter failed no manager");
+GHLSSLogLine("v30 presenter failed no manager");
 return;
 }
 _UIScenePresenter *presenter = [presenterManager createPresenterWithIdentifier:sceneID];
 if (!presenter) {
-GHLSSLogLine("v29 presenter failed nil");
+GHLSSLogLine("v30 presenter failed nil");
 return;
 }
 [presenter modifyPresentationContext:^(UIMutableScenePresentationContext *context) {
@@ -648,7 +662,7 @@ context.appearanceStyle = 2;
 }];
 [presenter activate];
 if (!presenter.presentationView) {
-GHLSSLogLine("v29 presenter failed no view");
+GHLSSLogLine("v30 presenter failed no view");
 return;
 }
 // v28：记 presenterView 的尺寸与有没有 layer——计算器在 v26 还是黑的
@@ -657,11 +671,11 @@ return;
 @try {
 char pbuf[128];
 UIView *pv = presenter.presentationView;
-snprintf(pbuf, sizeof(pbuf), "v29 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
+snprintf(pbuf, sizeof(pbuf), "v30 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
 GHLSSLogLine(pbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 presentationView failed");
+GHLSSLogLine("v30 presentationView failed");
 }
 // v28：scene 建好了、presenter 也 activate 了，但 v25 的窗是黑的——
 // 计算器进程没往 scene 里画。KonbanXV 的做法是建完 scene 就把
@@ -672,28 +686,28 @@ GHLSSLogLine("v29 presentationView failed");
 // 单独包 @try/@catch，出错只记日志、继续建窗。
 @try {
 char cbuf[128];
-snprintf(cbuf, sizeof(cbuf), "v29 scene contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(cbuf, sizeof(cbuf), "v30 scene contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(cbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 scene contentState failed");
+GHLSSLogLine("v30 scene contentState failed");
 }
 @try {
 [scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
 settings.foreground = YES;
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v29 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(fbuf, sizeof(fbuf), "v30 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 foreground push failed");
+GHLSSLogLine("v30 foreground push failed");
 }
-GHLSSLogLine("v29 presenter ready");
+GHLSSLogLine("v30 presenter ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:scene presenter:presenter sceneID:sceneID pid:pid];
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 scene failed exception");
+GHLSSLogLine("v30 scene failed exception");
 } @finally {
 GHLSSHostedLaunching = NO;
 }
@@ -716,7 +730,7 @@ UIWindowScene *hostedScene = GHLSSActiveWindowScene();
 if (hostedScene) {
 GHLSSHostedWindow.windowScene = hostedScene;
 } else {
-GHLSSLogLine("v29 hosted scene nil");
+GHLSSLogLine("v30 hosted scene nil");
 }
 // 窗的阴影与圆角（画在窗的 layer 上；内容容器自己裁圆角）。
 GHLSSHostedWindow.layer.cornerRadius = GHLSS_HOSTED_CORNER;
@@ -804,7 +818,7 @@ strncpy(GHLSSHostedBundleID, bundleID, sizeof(GHLSSHostedBundleID) - 1);
 GHLSSHostedBundleID[sizeof(GHLSSHostedBundleID) - 1] = '\0';
 GHLSSHostedPid = pid;
 GHLSSHostedMinimized = NO;
-GHLSSLogLine("v29 window shown");
+GHLSSLogLine("v30 window shown");
 // v28：1.5 秒重试 + 4 秒再重试一次。v26 的 1.5 秒重试在真机日志里
 // 一次都没出现——不知道是重试块根本没跑，还是窗在 1.5 秒内就被
 // 关/最小化了、守卫条件直接 return 没留日志。所以两次重试的块一跑
@@ -813,7 +827,7 @@ GHLSSLogLine("v29 window shown");
 // retry2。再包一层 @try/@catch，重试绝不能拖垮 SpringBoard。
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v29 foreground retry check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v30 foreground retry check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!GHLSSHostedScene || !GHLSSHostedWindow || GHLSSHostedMinimized) return;
 @try {
@@ -822,17 +836,17 @@ if ([GHLSSHostedScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v29 foreground retry contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v30 foreground retry contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 foreground retry failed");
+GHLSSLogLine("v30 foreground retry failed");
 }
 });
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v29 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v30 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(GHLSSHostedScene ? [GHLSSHostedScene contentState] : 0), GHLSSHostedMinimized ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!GHLSSHostedScene || !GHLSSHostedWindow || GHLSSHostedMinimized) return;
 @try {
@@ -841,17 +855,17 @@ if ([GHLSSHostedScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v29 foreground retry2 contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v30 foreground retry2 contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 foreground retry2 failed");
+GHLSSLogLine("v30 foreground retry2 failed");
 }
 });
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 window failed exception");
+GHLSSLogLine("v30 window failed exception");
 }
 }
 
@@ -869,7 +883,7 @@ if (GHLSSHostedPresenter) {
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 close failed");
+GHLSSLogLine("v30 close failed");
 }
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedWindow = nil;
@@ -888,30 +902,47 @@ if (GHLSSLauncherWindow) {
 // v29：启动器回到基准层级，仍在 Alert 之下（相对顺序不变，见 buildHostedWindow 的注释）。
 GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert - 3.0;
 }
-GHLSSLogLine("v29 window closed");
+GHLSSLogLine("v30 window closed");
 }
 
 - (void)minimizeHostedWindow {
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedMinimized = YES;
-GHLSSLogLine("v29 window minimized");
+GHLSSLogLine("v30 window minimized");
 }
 
 - (void)restoreHostedWindow {
 if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
 GHLSSHostedWindow.hidden = NO;
 GHLSSHostedMinimized = NO;
-GHLSSLogLine("v29 window restored");
+GHLSSLogLine("v30 window restored");
+// v30：最小化后锁屏再解锁、恢复窗时内容是黑的——锁屏把 scene 的
+// foreground 状态弄丢了，只取消 hidden 不够；恢复时也要把
+// foreground=YES 再推一遍（建窗时同一个已证明能用的做法），
+// 单独包 @try/@catch，出错只记日志、继续恢复。
+@try {
+if (GHLSSHostedScene) {
+[GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+settings.foreground = YES;
+}];
+char fbuf[128];
+snprintf(fbuf, sizeof(fbuf), "v30 foreground pushed on restore contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+GHLSSLogLine(fbuf);
+}
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v30 foreground push on restore failed");
+}
 }
 
 - (void)handleHostedClose:(id)sender {
-GHLSSLogLine("v29 hosted close tapped");
+GHLSSLogLine("v30 hosted close tapped");
 [self closeHostedWindow];
 }
 
 - (void)handleHostedMinimize:(id)sender {
-GHLSSLogLine("v29 hosted minimize tapped");
+GHLSSLogLine("v30 hosted minimize tapped");
 [self minimizeHostedWindow];
 }
 
@@ -971,27 +1002,27 @@ settings.interfaceOrientation = UIInterfaceOrientationPortrait;
 settings.deviceOrientation = UIDeviceOrientationPortrait;
 }];
 char buf[128];
-snprintf(buf, sizeof(buf), "v29 scene resized %d,%d", (int)size.width, (int)size.height);
+snprintf(buf, sizeof(buf), "v30 scene resized %d,%d", (int)size.width, (int)size.height);
 GHLSSLogLine(buf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v29 scene resize failed");
+GHLSSLogLine("v30 scene resize failed");
 }
 }
 
 - (void)handleCloseButton:(id)sender {
-GHLSSLogLine("v29 close button tapped");
+GHLSSLogLine("v30 close button tapped");
 [self dismissLauncher];
 }
 
 - (void)handleBackgroundTap:(UITapGestureRecognizer *)recognizer {
-GHLSSLogLine("v29 background tapped, dismissing launcher");
+GHLSSLogLine("v30 background tapped, dismissing launcher");
 [self dismissLauncher];
 }
 
 - (void)showLauncher {
 if (GHLSSLauncherVisible) {
-GHLSSLogLine("v29 launcher already open");
+GHLSSLogLine("v30 launcher already open");
 return;
 }
 if (!GHLSSLauncherWindow) {
@@ -1005,14 +1036,14 @@ GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert - 3.0;
 }
 GHLSSLauncherWindow.hidden = NO;
 GHLSSLauncherVisible = YES;
-GHLSSLogLine("v29 launcher opened");
+GHLSSLogLine("v30 launcher opened");
 }
 
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherWindow.hidden = YES;
 GHLSSLauncherVisible = NO;
-GHLSSLogLine("v29 launcher dismissed");
+GHLSSLogLine("v30 launcher dismissed");
 }
 
 // 建启动器窗（第一次打开时才建）：全屏透明窗 + 右侧 220pt 暗色面板。
@@ -1029,9 +1060,9 @@ GHLSSLauncherWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *launcherScene = GHLSSActiveWindowScene();
 if (launcherScene) {
 GHLSSLauncherWindow.windowScene = launcherScene;
-GHLSSLogLine("v29 launcher scene found");
+GHLSSLogLine("v30 launcher scene found");
 } else {
-GHLSSLogLine("v29 launcher scene nil");
+GHLSSLogLine("v30 launcher scene nil");
 }
 UIViewController *launcherVC = [[UIViewController alloc] init];
 UIView *rootView = [[UIView alloc] initWithFrame:screenBounds];
@@ -1067,7 +1098,7 @@ iconView.image = icon;
 } else {
 iconView.backgroundColor = [UIColor grayColor];
 char ibuf[192];
-snprintf(ibuf, sizeof(ibuf), "v29 icon nil for %s", GHLSSAppBundleIDs[i]);
+snprintf(ibuf, sizeof(ibuf), "v30 icon nil for %s", GHLSSAppBundleIDs[i]);
 GHLSSLogLine(ibuf);
 }
 iconView.layer.cornerRadius = 10.0;
@@ -1089,7 +1120,7 @@ closeButton.titleLabel.font = [UIFont systemFontOfSize:16];
 [closeButton addTarget:self action:@selector(handleCloseButton:) forControlEvents:UIControlEventTouchUpInside];
 [panel addSubview:closeButton];
 GHLSSLauncherWindow.rootViewController = launcherVC;
-GHLSSLogLine("v29 launcher built");
+GHLSSLogLine("v30 launcher built");
 }
 
 @end
@@ -1121,8 +1152,8 @@ CFRelease(v);
 if (domain) CFRelease(domain);
 if (key) CFRelease(key);
 char buf[128];
-snprintf(buf, sizeof(buf), "v29 deferred setup ran, switch=%s", state);
-GHLSSLogLine("v29 deferred setup ran");
+snprintf(buf, sizeof(buf), "v30 deferred setup ran, switch=%s", state);
+GHLSSLogLine("v30 deferred setup ran");
 GHLSSLogLine(buf);
 // 右边缘感应带：24pt 宽、全高、透明，层级在 SpringBoard 内容之上。
 // v23 的修法：窗显式挂 windowScene（没挂 scene 的窗可能不显示，
@@ -1137,9 +1168,9 @@ GHLSSStripWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *stripScene = GHLSSActiveWindowScene();
 if (stripScene) {
 GHLSSStripWindow.windowScene = stripScene;
-GHLSSLogLine("v29 window scene found");
+GHLSSLogLine("v30 window scene found");
 } else {
-GHLSSLogLine("v29 window scene nil");
+GHLSSLogLine("v30 window scene nil");
 }
 UIViewController *stripVC = [[UIViewController alloc] init];
 GHLSSPlainStripView *stripView = [[GHLSSPlainStripView alloc] initWithFrame:CGRectMake(0, 0, stripWidth, screenBounds.size.height)];
@@ -1147,14 +1178,14 @@ stripView.backgroundColor = [UIColor clearColor];
 stripVC.view = stripView;
 GHLSSStripWindow.rootViewController = stripVC;
 GHLSSStripWindow.hidden = NO;
-GHLSSLogLine("v29 edge strip built");
+GHLSSLogLine("v30 edge strip built");
 // 诊断日志：窗与带子到底是什么状态（真机一看就知道上没上屏）。
 char dbuf[256];
 CGRect wf = GHLSSStripWindow.frame;
-snprintf(dbuf, sizeof(dbuf), "v29 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
+snprintf(dbuf, sizeof(dbuf), "v30 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
 GHLSSLogLine(dbuf);
 CGRect sf = stripView.frame;
-snprintf(dbuf, sizeof(dbuf), "v29 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v30 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
 GHLSSLogLine(dbuf);
 // 5.1 的处理器（唯一的自定义处理类）。
 GHLSSLauncherShared = [[GHLSSLauncher alloc] init];
@@ -1163,7 +1194,7 @@ UIScreenEdgePanGestureRecognizer *edgePan = [[UIScreenEdgePanGestureRecognizer a
 edgePan.edges = UIRectEdgeRight;
 edgePan.delegate = GHLSSLauncherShared;
 [stripView addGestureRecognizer:edgePan];
-GHLSSLogLine("v29 edge gesture added");
+GHLSSLogLine("v30 edge gesture added");
 // 金色"分"按钮（感应带上的可见把手，备用触发）。
 // v23 做大做显眼：24 宽 x 64 高、14pt 粗体、金底黑边（v22 的 12x48
 // 太小，就算显示了也难看见）。
@@ -1178,9 +1209,9 @@ handleButton.layer.borderColor = [UIColor blackColor].CGColor;
 handleButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [handleButton addTarget:GHLSSLauncherShared action:@selector(handleHandleButton:) forControlEvents:UIControlEventTouchUpInside];
 [stripView addSubview:handleButton];
-GHLSSLogLine("v29 handle button added");
+GHLSSLogLine("v30 handle button added");
 CGRect bf = handleButton.frame;
-snprintf(dbuf, sizeof(dbuf), "v29 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v30 button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
 GHLSSLogLine(dbuf);
 });
 }
