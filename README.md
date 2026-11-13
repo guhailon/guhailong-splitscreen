@@ -1,6 +1,14 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.33（实验版 v33）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.34（实验版 v34）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v34 是什么（留着固定 sceneID，关窗改藏窗不销毁）
+
+v33 真机（2026-11-13 17:08）：**开计算器就是黑屏**，没进安全模式——崩是没崩，但主 App 画不出来，比 v32 还糟。元凶定死是新 UUID sceneID：这次测的只是全新打开计算器，没走切换逻辑；v33 相对 v32 对全新打开唯一的区别就是 sceneID 从固定改成每次新 UUID。历史对得上：v25–v27（新 UUID）计算器黑；v28（固定 ID，高层级）黑（层级问题）；v29–v32（固定 ID，低层级）计算器能画；v33（新 UUID，低层级）又黑了。结论：**已在跑着的单 scene App（计算器）要画出来，需要固定 sceneID `sceneID:<bundleID>-default`**（即 App 自己的默认 scene ID）；全新 UUID 的 scene 它认不出来、不往里画。v28「sceneID 假说已死」是错的——当时是层级问题盖住了 sceneID 的作用；两个条件（固定 ID + 低层级）都要，缺一不可。
+
+但固定 ID 的残留撞 ID 崩是真的（.ips 定死：EXC_BREAKPOINT，`FBWorkspace registerHost:...fromRemnant:` 里断言；同一固定 ID 关窗重开 5 次都好、第 6、7 次崩）。v34 的修法不靠新 ID，靠改关窗的生命周期：**① 关窗（X）不再销毁 scene——只藏窗、推后台、记最小化，scene 留着；重开同一个 App 直接复用旧 scene（推前景、显示窗），不再建新 scene，同一 ID 一个 SpringBoard 会话里只建一次。② 切走别的 App 时才真正销毁（新方法 `destroyHostedScene`，旧关窗体；新 App 的固定 ID 不同，不撞）。③ `createHostedScene` 入口加复用守卫：已有同 App 的 scene 且 presenter/view 还活着、进程还是同一个 pid，就直接复用、不建新 scene；scene 旧了就先销毁再建。**单窗切换（v33 的）原样保留。残留风险：A→B→A 切回来时，A 的 scene 在第一次切走时已销毁，重建同一固定 ID——v32 的崩要攒 ~6 次同 ID 关窗重开才触发，单次切回远不到阈值，但反复来回切可能攒够；若真机再现，v35 再做每 App 留一个 scene、会话内永不销毁。
+
+测法：开计算器悬浮窗 → 点启动器里的时钟 → 计算器窗关掉、时钟悬浮窗出来；再点计算器 → 时钟窗关掉、计算器悬浮窗出来（切回来，计算器必须画出来、不能黑）；关窗（X）再点计算器 → 窗直接回来、计算器画出来（复用，不建新 scene）；关窗重开同一个 App 6 次以上不进安全模式；锁屏密码还能按；日志里应有 `v34 reusing existing scene …`、`v34 switching from … to …` 与 `v34 destroying scene …`。
 
 ## v33 是什么（单窗切换 + 每次新 sceneID）
 
