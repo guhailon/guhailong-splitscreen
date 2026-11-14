@@ -206,6 +206,27 @@ static NSString *GHLSSLogTailNewestFirst(void) {
     return [last componentsJoinedByString:GHLSSRuntimeString("\n")];
 }
 
+// v43：prefs 側寫檔日誌（搜索閃退診斷用，跟 dylib 寫同一份
+// 檔案；設定 App 也是 mobile 身份，寫得動；寫不動就靜靜算了，
+// 不彈框、不擋路）。
+static void GHLSSPrefsLogLine(const char *line) {
+    if (!line) return;
+    NSString *path = GHLSSLogFilePath();
+    NSString *text = [NSString stringWithCString:line encoding:NSUTF8StringEncoding];
+    if (!text) return;
+    NSString *entry = [text stringByAppendingString:GHLSSRuntimeString("\n")];
+    NSData *data = [entry dataUsingEncoding:NSUTF8StringEncoding];
+    if (!data) return;
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:path];
+    if (fh) {
+        [fh seekToEndOfFile];
+        [fh writeData:data];
+        [fh closeFile];
+    } else {
+        [data writeToFile:path atomically:NO];
+    }
+}
+
 // v42：圖片居中裁方形（頭像用，512px）＋按最長邊縮放（背景圖用，1024px）。
 static UIImage *GHLSSPrefsSquareCropImage(UIImage *image, CGFloat size) {
     if (!image || !image.CGImage) return nil;
@@ -1236,6 +1257,35 @@ static const GHLSSSearchEntry GHLSSSearchIndex[] = {
 };
 static const int GHLSSSearchIndexCount = (int)(sizeof(GHLSSSearchIndex) / sizeof(GHLSSSearchIndex[0]));
 
+// v43：搜索結果要跳的 plist 白名單（18 份真實檔案；不在裡面的
+// 名字一律不載，免得 loadSpecifiersFromPlistName 拿到壞名字）。
+static BOOL GHLSSPrefsIsKnownPlistName(const char *name) {
+    if (!name || name[0] == '\0') return NO;
+    static const char *known[] = {"ARC", "ARCButtons", "Advanced", "AppSort", "Banner", "DesktopIcons", "Floating", "FloatingIcon", "GestureCustom", "Info", "Keyboard", "Other", "Root", "Scheduler", "Search", "Shadow", "ThreeScreen", "ToolbarSort"};
+    size_t n = sizeof(known) / sizeof(known[0]);
+    for (size_t i = 0; i < n; i++) {
+        if (strcmp(name, known[i]) == 0) return YES;
+    }
+    return NO;
+}
+
+// v43 熱修復：v42 的搜索頁點主頁「搜索设置」一進去就閃退
+// （還沒打字、還沒點結果）。靜態查過：索引的 plist 名全部對得
+// 上真實檔案，GHLSSSettingsSearchController 在 macOS 包的 prefs
+// 二進制裡（llvm-nm 看得到），20 張 plist 都能解析，query 為
+// nil 也有判——沒找到單一確鑿的行。最可疑的是 v42 那套機制：
+// 程式裡現拼 PSLinkCell＋detail:[GHLSSPlistPageController class]
+// ＋自訂 plistName 鍵，全設定頁只有這裡這樣寫（別處的 link 都是
+// plist 裡的 detail 字串，由 PreferenceLoader 照規矩解）；加上
+// viewDidLoad 裡 [super viewDidLoad] 先跑、query 後設的時序。
+// v43 把三個可疑點一次拿掉：(1) 結果行改 PSButtonCell＋action，
+// 自己手動 push（跟日誌頁的按鈕同一套寫法）；(2) plist 名改走
+// 非保留字 key ghlssTargetPlist，PlistPage 那邊先對白名單才載；
+// (3) query 在 [super viewDidLoad] 之前就設好。另外加檔日誌
+// 診斷（viewDidLoad／specifiers 進出、打字、點結果、PlistPage
+// 載入），下次再閃退才有證據；specifiers 搭 try／catch，萬一
+// 組裝出錯只顯示錯誤頁腳、不閃退。外觀小變化：結果行變藍色
+// 操作列樣式，不再有 > 箭頭；功能一樣，點一下跳頁。
 @interface GHLSSSettingsSearchController : PSListController <UISearchBarDelegate>
 @property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, strong) NSString *query;
@@ -1244,48 +1294,91 @@ static const int GHLSSSearchIndexCount = (int)(sizeof(GHLSSSearchIndex) / sizeof
 @implementation GHLSSSettingsSearchController
 
 - (void)viewDidLoad {
-    [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-search viewDidLoad entry");
+    self.query = GHLSSRuntimeString("");
     UISearchBar *bar = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 44)];
     bar.placeholder = GHLSSRuntimeString("搜尋設定（標題 + 副標題）");
     bar.delegate = self;
     self.searchBar = bar;
-    self.query = GHLSSRuntimeString("");
+    [super viewDidLoad];
     self.tableView.tableHeaderView = bar;
+    GHLSSPrefsLogLine("v43 prefs-search viewDidLoad exit");
 }
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
     (void)searchBar;
     self.query = searchText ? searchText : GHLSSRuntimeString("");
+    GHLSSPrefsLogLine("v43 prefs-search textDidChange");
     [self reloadSpecifiers];
 }
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
-        NSMutableArray *specs = [NSMutableArray array];
-        PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-        [group setProperty:GHLSSRuntimeString("打字篩全部設定項（標題 + 副標題），點結果跳到那一頁（只跳頁，不跳到那一行）；索引是靜態對照表，不是全文搜索——plist 裡沒寫的說明文字搜不到。") forKey:GHLSSRuntimeString("footerText")];
-        [specs addObject:group];
-        NSString *q = self.query;
-        for (int i = 0; i < GHLSSSearchIndexCount; i++) {
-            NSString *title = GHLSSRuntimeString(GHLSSSearchIndex[i].title);
-            NSString *subtitle = GHLSSRuntimeString(GHLSSSearchIndex[i].subtitle);
-            if (q && [q length] > 0) {
-                BOOL inTitle = ([title rangeOfString:q options:NSCaseInsensitiveSearch].location != NSNotFound);
-                BOOL inSubtitle = ([subtitle rangeOfString:q options:NSCaseInsensitiveSearch].location != NSNotFound);
-                if (!inTitle && !inSubtitle) continue;
+        GHLSSPrefsLogLine("v43 prefs-search specifiers entry");
+        @try {
+            NSMutableArray *specs = [NSMutableArray array];
+            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
+            [group setProperty:GHLSSRuntimeString("打字篩全部設定項（標題 + 副標題），點結果跳到那一頁（只跳頁，不跳到那一行）；索引是靜態對照表，不是全文搜索——plist 裡沒寫的說明文字搜不到。") forKey:GHLSSRuntimeString("footerText")];
+            [specs addObject:group];
+            NSString *q = self.query;
+            if (!q) q = GHLSSRuntimeString("");
+            for (int i = 0; i < GHLSSSearchIndexCount; i++) {
+                NSString *title = GHLSSRuntimeString(GHLSSSearchIndex[i].title);
+                NSString *subtitle = GHLSSRuntimeString(GHLSSSearchIndex[i].subtitle);
+                if ([q length] > 0) {
+                    BOOL inTitle = ([title rangeOfString:q options:NSCaseInsensitiveSearch].location != NSNotFound);
+                    BOOL inSubtitle = ([subtitle rangeOfString:q options:NSCaseInsensitiveSearch].location != NSNotFound);
+                    if (!inTitle && !inSubtitle) continue;
+                }
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:title target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+                [spec setProperty:GHLSSRuntimeString("ghlssOpenSearchResult") forKey:GHLSSRuntimeString("action")];
+                [spec setProperty:GHLSSRuntimeString(GHLSSSearchIndex[i].plist) forKey:GHLSSRuntimeString("ghlssTargetPlist")];
+                [specs addObject:spec];
             }
-            PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:title target:self set:nil get:nil detail:[GHLSSPlistPageController class] cell:PSLinkCell edit:nil];
-            [spec setProperty:GHLSSRuntimeString(GHLSSSearchIndex[i].plist) forKey:GHLSSRuntimeString("plistName")];
-            [specs addObject:spec];
+            if ([specs count] == 1) {
+                PSSpecifier *emptyGroup = [PSSpecifier emptyGroupSpecifier];
+                [emptyGroup setProperty:GHLSSRuntimeString("沒有符合的設定項，換個關鍵字試試。") forKey:GHLSSRuntimeString("footerText")];
+                [specs addObject:emptyGroup];
+            }
+            _specifiers = specs;
+        } @catch (NSException *e) {
+            char buf[512];
+            snprintf(buf, sizeof(buf), "v43 prefs-search specifiers EXCEPTION %s %s", [[e name] UTF8String], [[e reason] UTF8String]);
+            GHLSSPrefsLogLine(buf);
+            NSMutableArray *safe = [NSMutableArray array];
+            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
+            [group setProperty:GHLSSRuntimeString("搜索頁組裝出錯（已記進日誌），先回主頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [safe addObject:group];
+            _specifiers = safe;
         }
-        if ([specs count] == 1) {
-            PSSpecifier *emptyGroup = [PSSpecifier emptyGroupSpecifier];
-            [emptyGroup setProperty:GHLSSRuntimeString("沒有符合的設定項，換個關鍵字試試。") forKey:GHLSSRuntimeString("footerText")];
-            [specs addObject:emptyGroup];
-        }
-        _specifiers = specs;
+        char buf2[128];
+        snprintf(buf2, sizeof(buf2), "v43 prefs-search specifiers exit count %lu", (unsigned long)[_specifiers count]);
+        GHLSSPrefsLogLine(buf2);
     }
     return _specifiers;
+}
+
+// v43：點搜索結果——自己手動 push（不再走程式現拼的 detail 類），
+// 目標 plist 先對白名單，不對就彈提示、不 push、不閃退。
+- (void)ghlssOpenSearchResult:(PSSpecifier *)specifier {
+    NSString *plist = specifier.properties[GHLSSRuntimeString("ghlssTargetPlist")];
+    const char *cname = plist ? [plist UTF8String] : NULL;
+    char buf[256];
+    snprintf(buf, sizeof(buf), "v43 prefs-search open result plist %s", cname ? cname : "(nil)");
+    GHLSSPrefsLogLine(buf);
+    if (!plist || [plist length] == 0 || !GHLSSPrefsIsKnownPlistName(cname)) {
+        GHLSSPrefsLogLine("v43 prefs-search open result REJECTED unknown plist");
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("這個設定頁打不開") message:GHLSSRuntimeString("搜尋索引裡的頁面名字不對，已經記進日誌。") preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    GHLSSPlistPageController *page = [[GHLSSPlistPageController alloc] init];
+    page.specifier = specifier;
+    page.parentController = self;
+    page.rootController = self.rootController;
+    [self pushController:page];
+    GHLSSPrefsLogLine("v43 prefs-search open result pushed");
 }
 
 @end
@@ -1553,16 +1646,34 @@ static NSString *GHLSSGestureActionName(const char *value) {
 // plistName 載入那份 plist。繼承主頁控制器，所以備份／導出／
 // 導入／恢復／重置／布局預設那些按鈕動作在這裡也一樣能用。
 // （接口聲明在文件前面搜索控制器之前，這裡只寫實作。）
+// v43：改讀 ghlssTargetPlist（非保留字 key），先對白名單才載，
+// 載入失敗只顯示空白頁、不閃退；進出寫檔日誌。
 @implementation GHLSSPlistPageController
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
-        NSString *plistName = self.specifier.properties[GHLSSRuntimeString("plistName")];
-        if (plistName && [plistName length] > 0) {
-            _specifiers = [self loadSpecifiersFromPlistName:plistName target:self];
+        NSString *targetPlist = self.specifier.properties[GHLSSRuntimeString("ghlssTargetPlist")];
+        const char *cname = targetPlist ? [targetPlist UTF8String] : NULL;
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v43 prefs-search plistpage entry plist %s", cname ? cname : "(nil)");
+        GHLSSPrefsLogLine(buf);
+        if (targetPlist && [targetPlist length] > 0 && GHLSSPrefsIsKnownPlistName(cname)) {
+            @try {
+                _specifiers = [self loadSpecifiersFromPlistName:targetPlist target:self];
+            } @catch (NSException *e) {
+                char ebuf[512];
+                snprintf(ebuf, sizeof(ebuf), "v43 prefs-search plistpage EXCEPTION %s %s", [[e name] UTF8String], [[e reason] UTF8String]);
+                GHLSSPrefsLogLine(ebuf);
+                _specifiers = [NSMutableArray array];
+            }
+            if (!_specifiers) _specifiers = [NSMutableArray array];
         } else {
+            GHLSSPrefsLogLine("v43 prefs-search plistpage REJECTED unknown plist");
             _specifiers = [NSMutableArray array];
         }
+        char buf2[128];
+        snprintf(buf2, sizeof(buf2), "v43 prefs-search plistpage exit count %lu", (unsigned long)[_specifiers count]);
+        GHLSSPrefsLogLine(buf2);
     }
     return _specifiers;
 }
