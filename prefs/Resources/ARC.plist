@@ -25,6 +25,12 @@
 			<string>arc总开关</string>
 		</dict>
 		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>關了 ARC 打不開（邊緣滑動、哆啦A夢鈕、懸浮球都叫不出來）；浮窗本身還能從三屏設置里開。</string>
+		</dict>
+		<dict>
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
@@ -175,6 +181,45 @@
 			<string>gameModeEnabled</string>
 			<key>label</key>
 			<string>游戏模式</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>demoModeEnabled</string>
+			<key>label</key>
+			<string>演示模式</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>演示模式開了藏哆啦A夢鈕／貼邊小卡／任務欄／通知橫幅，屏幕乾乾淨淨好截圖錄影；退出點屏幕角落的半透明小點。ARC 里也有同一個開關，兩邊同步。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>arcEnabled</string>
+				<string>arcHideOnScreenshot</string>
+				<string>arcHaptics</string>
+				<string>arcTouchSound</string>
+				<string>arcOpenMode</string>
+				<string>arcEdgeDistance</string>
+				<string>gameModeEnabled</string>
+				<string>demoModeEnabled</string>
+			</array>
 		</dict>
 	</array>
 	<key>title</key>

@@ -64,6 +64,20 @@
 			<key>footerText</key>
 			<string>关了阴影，浮窗没有阴影；透明度和模糊半径只在阴影开着时起作用。</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>shadowEnabled</string>
+				<string>shadowOpacity</string>
+				<string>shadowRadius</string>
+			</array>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>浮窗阴影设置</string>

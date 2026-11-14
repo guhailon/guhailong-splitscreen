@@ -44,6 +44,19 @@
 			<key>footerText</key>
 			<string>开新浮窗时，屏幕顶上短暂显示「已打开 &lt;App&gt;」；关了就不显示。</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>notificationBanner</string>
+				<string>bannerDuration</string>
+			</array>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>通知横幅设置</string>

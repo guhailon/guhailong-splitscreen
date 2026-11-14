@@ -26,6 +26,18 @@
 			<key>label</key>
 			<string>桌面图标</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>desktopIconEnabled</string>
+			</array>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>桌面图标设置</string>

@@ -8,9 +8,23 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>v41 是实验版（哆啦A夢鈕终于能拖了：之前是手势代理把钮上的触摸都拒了，现已修好，拖完记住高度；双击哆啦A夢轮切浮窗；收起的窗改成贴边 peek：缩到边缘露一截活内容、上下叠着，点哪截叫回哪个；启动器改 ARC 式：暗背景 + 一列圆形 App 图标直接浮在上面，没有白色相框，顶上有搜索框，分置顶/最近/全部三段，已开的带绿点，长按置顶，常用三开一次开三个，游戏模式开关也在里面；三屏 = 主 App 占大半 + 窄竖屏侧窗贴边、中间分隔线可拖；任何 App 都能加入启动器（ARC 里点「＋」或三屏设置里的选择应用，最多 12 个）；设定页改成 floating-view 的结构：三屏/ARC/浮窗/其他杂项 + 操作性功能。开关默认关，改动后重新启动 SpringBoard（respring）才生效；调度类开关（手势、长按时间）改完立刻生效。日志在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。</string>
+			<string>v42 是實驗版（新增：浮窗設定卡片——ARC 里點「設置」開一張白卡＋金邊、龍頭＋v1.0.42，點外面或 X 收起、直接回原來的 App；卡片頭像／背景圖能換，相冊選圖；查看日誌在設定里直接看；三屏組合最多存 3 對；手勢自定義；懸浮球；低電量自動收窗；智能配對推薦；演示模式；浮窗大小預設、置頂鎖定、貼邊吸附、重啟恢復、全屏藏哆啦A夢鈕、鍵盤上移、底部任務欄、浮窗透明度；主頁搜索、常用開關、布局預設、配置方案、新手／專家模式、每頁重置、手勢總覽。開關默認關，改動後重新啟動 SpringBoard（respring）才生效；調度類開關（手勢、長按時間）改完立刻生效；任務欄／懸浮球／演示模式改完 2 秒內生效。日誌在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。</string>
 			<key>label</key>
-			<string>顾海龙集团分屏 v1.0.41（实验版 v41）</string>
+			<string>顾海龙集团分屏 v1.0.42（实验版 v42）</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSSettingsSearchController</string>
+			<key>label</key>
+			<string>搜索设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>常用开关</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -25,6 +39,152 @@
 			<string>enabled</string>
 			<key>label</key>
 			<string>启用分屏</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>arcEnabled</string>
+			<key>label</key>
+			<string>ARC总开关</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>gameModeEnabled</string>
+			<key>label</key>
+			<string>游戏模式</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>demoModeEnabled</string>
+			<key>label</key>
+			<string>演示模式</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>演示模式開了藏哆啦A夢鈕／貼邊小卡／任務欄／通知橫幅，屏幕乾乾淨淨好截圖錄影；退出點屏幕角落的半透明小點。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>50</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>safeDistance</string>
+			<key>label</key>
+			<string>与刘海方向安全距离</string>
+			<key>max</key>
+			<real>100</real>
+			<key>min</key>
+			<real>0</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>遊戲布局：遊戲模式開、ARC 開、固定中心關、圓角 20、安全距離 20、陰影開、任務欄關、全屏藏哆啦A夢鈕開、演示模式關、浮窗大。工作布局：遊戲模式關、固定中心開、圓角 35、安全距離 50、任務欄開、浮窗中、側窗寬中、重啟恢復開。默認布局：全部回到預設值（遊戲模式關、ARC 開、固定中心關、圓角 35、安全距離 50、陰影開、任務欄關、全屏藏哆啦A夢鈕開、演示模式關、浮窗中、側窗寬中、重啟恢復開）。</string>
+			<key>label</key>
+			<string>布局预设</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssApplyLayoutGame</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>游戏布局</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssApplyLayoutWork</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>工作布局</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssApplyLayoutDefault</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>默认布局</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSProfilesListController</string>
+			<key>label</key>
+			<string>配置方案</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSGesturesListController</string>
+			<key>label</key>
+			<string>手势总览</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Advanced</string>
+			<key>label</key>
+			<string>高级设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>新手模式開了主頁不顯示「高級設置」那一頁（進階項都在那頁）；改了之後退出再進設定頁生效。</string>
+			<key>label</key>
+			<string>新手／专家模式</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>noviceMode</string>
+			<key>label</key>
+			<string>新手模式（只显示常用开关）</string>
 		</dict>
 		<dict>
 			<key>cell</key>

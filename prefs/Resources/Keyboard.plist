@@ -26,6 +26,24 @@
 			<key>label</key>
 			<string>键盘弹出时浮窗自动上移</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>探針：鍵盤通知由 App 行程發，可能到不了 SpringBoard；收到了窗才上移、收起回原位，收不到就不動。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>keyboardAvoidEnabled</string>
+			</array>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>浮窗键盘设置</string>

@@ -21,6 +21,146 @@
 			<string>通知横幅设置</string>
 		</dict>
 		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>新窗的尺寸：小 280×600、中 350×757、大 414×800（iPhone 11 邏輯尺寸 414×896；計算器在「中」時保持 320×693）。控制條點 ± 展開後也能點小／中／大換尺寸。</string>
+			<key>label</key>
+			<string>浮窗大小预设</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>medium</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>windowSizePreset</string>
+			<key>label</key>
+			<string>浮窗大小预设</string>
+			<key>validTitles</key>
+			<array>
+				<string>小（280×600）</string>
+				<string>中（350×757）</string>
+				<string>大（414×800）</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>small</string>
+				<string>medium</string>
+				<string>large</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>taskbarEnabled</string>
+			<key>label</key>
+			<string>底部任务栏</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>屏幕底下一條任務欄，開著的窗都在上面（圖標＋綠點），點一下切到那個窗；開了 2 秒內建好，不用 respring。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>1</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>windowOpacityGlobal</string>
+			<key>label</key>
+			<string>浮窗透明度</string>
+			<key>max</key>
+			<real>1</real>
+			<key>min</key>
+			<real>0.5</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>新窗的預設透明度（0.5–1.0）；每窗在控制條點「透」單獨調，松手記住。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>restoreWindowsAfterRespring</string>
+			<key>label</key>
+			<string>重启后自动恢复浮窗</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>記住關機／重啟前開著的 App 和位置，SpringBoard 重啟後自動重新打開。注意：scene 撐不過重啟，恢復是重建 scene 重新開 App，不是接續舊 scene；只恢復看得見的浮窗，收起的 peek 不恢復。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>lowBatteryAutoDock</string>
+			<key>label</key>
+			<string>低电量自动收窗</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>20</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>lowBatteryThreshold</string>
+			<key>label</key>
+			<string>电量阈值（%）</string>
+			<key>max</key>
+			<real>30</real>
+			<key>min</key>
+			<real>10</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>電量低於閾值（10–30%，預設 20%）時自動把看得見的浮窗都收成貼邊小卡，並彈通知橫幅提示；電量回到閾值＋5% 以上才重新待命。</string>
+		</dict>
+		<dict>
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
@@ -38,7 +178,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>开启此开关，屏幕转向发生改变或拖拽全屏打开应用后，都不记录位置，固定为屏幕中心。关着时记住每个 App 上次的位置/大小（v40 的做法）。</string>
+			<string>開啟此開關，屏幕轉向發生改變或拖拽全屏打開應用後，都不記錄位置，固定為屏幕中心。關著時記住每個 App 上次的位置／大小（v40 的做法）。注意：這一項跟「記住位置」互斥——開了固定中心就不記住位置，關了才記住；兩邊是同一份行為，不要兩頭都指望。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -112,7 +252,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>自定义侧边小窗位置、手势。</string>
+			<string>自定义侧边小窗位置、手势。貼邊吸附：拖窗到左右邊緣放手自動吸住對齊（留 8pt），拖到頂部放手自動放大到全屏尺寸；放手才吸，拖著不跳。浮窗置頂：控制條點「釘」釘住那個窗、別的窗蓋不住，再點取消。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -158,6 +298,28 @@
 			<array>
 				<string>close</string>
 				<string>side</string>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>windowSizePreset</string>
+				<string>taskbarEnabled</string>
+				<string>windowOpacityGlobal</string>
+				<string>restoreWindowsAfterRespring</string>
+				<string>lowBatteryAutoDock</string>
+				<string>lowBatteryThreshold</string>
+				<string>centerOnOpen</string>
+				<string>cornerRadius</string>
+				<string>safeDistance</string>
+				<string>tapOutsideEnabled</string>
+				<string>tapOutsideAction</string>
 			</array>
 		</dict>
 	</array>

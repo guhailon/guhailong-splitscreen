@@ -58,6 +58,20 @@
 			<key>footerText</key>
 			<string>开着时搜到的 App 即使没加入启动器也列出来，点了先加入再打开；关了只搜已在启动器里的。搜索只筛后台缓存的已安装 App 清单，不每次列举。</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>arcSearchEnabled</string>
+				<string>searchResultLimit</string>
+				<string>searchShowsNotInLauncher</string>
+			</array>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>搜索界面设置</string>

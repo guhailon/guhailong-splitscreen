@@ -71,6 +71,14 @@
 			<string>浮窗手势</string>
 		</dict>
 		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GestureCustom</string>
+			<key>label</key>
+			<string>手势自定义</string>
+		</dict>
+		<dict>
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
@@ -149,6 +157,23 @@
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>0.3–1.0 秒，默认 0.5 秒。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>edgeSwipeCount</string>
+				<string>edgeSwipeSide</string>
+				<string>windowDragEnabled</string>
+				<string>sideWindowGestures</string>
+				<string>doraemonDoubleTapEnabled</string>
+				<string>longPressDuration</string>
+			</array>
 		</dict>
 	</array>
 	<key>title</key>

@@ -80,6 +80,34 @@
 			<key>footerText</key>
 			<string>关了钮不显示，ARC 只能从边缘滑动叫出。大小和左右边改了要重新启动 SpringBoard 才生效；高度直接拖钮就改。</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSCardAvatarListController</string>
+			<key>label</key>
+			<string>卡片头像设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>浮窗設定卡片頂上的龍頭頭像：相冊選圖、居中裁方形；長按頭像或點恢復回默認龍頭。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>doraemonIconSize</string>
+				<string>doraemonSide</string>
+				<string>doraemonVisible</string>
+			</array>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>悬浮图标设置</string>

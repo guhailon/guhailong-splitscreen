@@ -80,6 +80,21 @@
 			<key>label</key>
 			<string>显示 App 名字</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSPageResetController</string>
+			<key>label</key>
+			<string>重置本页为默认</string>
+			<key>pageKeys</key>
+			<array>
+				<string>arcIconSize</string>
+				<string>arcColumnSide</string>
+				<string>arcShowOpenDots</string>
+				<string>arcShowNames</string>
+			</array>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>arc-层数/按钮设置</string>
