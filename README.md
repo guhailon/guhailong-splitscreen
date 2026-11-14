@@ -1,6 +1,14 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.43（实验版 v43）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.44（实验版 v44）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v44 是什么（熱修復：搜索還是閃退＋配置還是不行）
+
+**診斷（皇上 16:02 裝了 1.0.43 回報「還是閃退問題都沒有解決，配置都不行」，發來 GuHaiLongSplitScreen-12.log，6775 行，兩件事都定死了）：**日誌寫入是同步的（NSFileHandle 寫完即關），所以缺掉的行就是死點。**配置五項（確鑿根因，代碼定死）：**日誌裡每個動作都是兩行——`v43 prefs-config tap: action ghlssBackupConfig target GuHaiLongSplitScreenRootListController` 接著 `v43 prefs-config tap: target does not respond`，五項配置＋兩個布局按鈕全是這樣。`GHLSSDispatchButtonTap` 用 `NSSelectorFromString` 直接轉 action 字串（例如 `ghlssBackupConfig`，沒有冒號），再問 `respondsToSelector`——但方法宣告是 `-(void)ghlssBackupConfig:(PSSpecifier *)specifier`，真正的 selector 是 `ghlssBackupConfig:`（有冒號），所以 respondsToSelector 永遠回 NO，派發直接 return YES 把點按吞掉，什麼都不做。**搜索閃退（範圍縮到一行）：**日誌最後三行是第二次開搜索頁：`viewDidLoad entry` → `specifiers entry` → `specifiers exit count 73`，然後日誌就斷了——沒有 `viewDidLoad exit`，兩次開搜索頁都是這樣。viewDidLoad 裡 `[super viewDidLoad]`（73 項都建好了）之後只有一行 `self.tableView.tableHeaderView = bar;`，再下一行就是 exit 日誌，所以閃退點就在 `tableHeaderView = bar` 那一步附近（UISearchBar 當 tableHeaderView），或是 viewDidLoad 返回後第一次渲染 cell 那一步。
+
+**修法：**（1）派發先補冒號：轉 SEL 之前裸名先試、不回應就補 `:` 再試，兩個都記日誌；兩個都不回應時不再 return YES 吞掉點按，改成 return NO 交回 super 走框架。這也解釋了為什麼框架自己的派發在 v42 也不動——框架也是拿同一個裸名字串轉 SEL，respondsToSelector 永遠回 NO。（2）搜索條不再在 viewDidLoad 裡掛 tableHeaderView，改到 viewDidAppear 再掛（view 已進視窗、表格已佈局），只掛一次、搭 try／catch；加更細的步驟日誌：tableHeaderView 賦值前／後各一行、viewDidAppear 入口、第一個 cell 建好一行——下次再閃退要能直接指認死在哪一步。specifiers 的 try／catch 和白名單、ghlssTargetPlist 機制不動；其他全部 v42.1 功能保留。卡片頭版本字仍是 v1.0.42（v42.1 沒動，這次也沒動）。
+
+測法：見 BUILD_LOG §119 的 v42.2 真機測試清單。
 
 ## v43 是什么（熱修復：搜索設置閃退＋查看日誌置頂）
 
