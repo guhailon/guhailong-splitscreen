@@ -8,7 +8,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>顧海龍集團分屏 v1.0.54（實驗版 v54）</string>
+			<string>顧海龍集團分屏 v1.0.55（實驗版 v55）</string>
 			<key>label</key>
 			<string>版本</string>
 		</dict>
@@ -21,6 +21,16 @@
 			<string>statusEnabledState</string>
 			<key>label</key>
 			<string>插件開關</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>（讀取中）</string>
+			<key>key</key>
+			<string>statusLiveState</string>
+			<key>label</key>
+			<string>分屏實時狀態</string>
 		</dict>
 		<dict>
 			<key>cell</key>

@@ -74,20 +74,6 @@
 			<key>footerText</key>
 			<string>哆啦A夢鈕的圖片可以自己換：相冊選圖、居中裁方形；長按或點恢復回默認哆啦A夢圖。鈕大小改完 2 秒內生效，不用重啟。</string>
 		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSCardAvatarListController</string>
-			<key>label</key>
-			<string>卡片头像设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>浮窗設定卡片頂上的龍頭頭像：相冊選圖、居中裁方形；長按頭像或點恢復回默認龍頭。</string>
-		</dict>
 	</array>
 	<key>title</key>
 	<string>悬浮图标设置</string>

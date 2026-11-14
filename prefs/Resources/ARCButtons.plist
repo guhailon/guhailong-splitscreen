@@ -116,6 +116,36 @@
 			<key>label</key>
 			<string>显示 App 名字</string>
 		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>right</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>arcSlideSide</string>
+			<key>label</key>
+			<string>启动器滑出方向</string>
+			<key>validTitles</key>
+			<array>
+				<string>左侧边出</string>
+				<string>右侧边出</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>left</string>
+				<string>right</string>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>啟動器 App 圖標從左／右側邊緣扇形滑出，弧心錨在邊緣（哆啦A夢鈕或滑動手指的位置）；改了下次開啟動器生效。跟浮窗滑出方向是兩個設定，各管各的。</string>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>arc-层数/按钮设置</string>
