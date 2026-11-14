@@ -1,4 +1,4 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.39（实验版 v39）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.40（实验版 v40）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
 

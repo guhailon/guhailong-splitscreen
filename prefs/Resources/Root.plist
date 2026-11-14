@@ -8,9 +8,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>目标：iPhone 11 / iOS 16.5 / Dopamine。v39 是实验版（哆啦A夢鈕读图路径先试 /var/jb 再试 /Library，修 rootless 下图读不到、退回金色「分」；内容区 layer anchorPoint 改 (0,0)，sublayerTransform 绕左上缩，修计算器/设置位置往右下偏；解锁时把 foreground 推回去，修关屏再进去浮窗黑）：v38 是实验版（已在跑的 App 托管它已有的主 scene（KonbanXV 的路，不 createScene、不撞固定 ID，修切到已在跑的设置时进安全模式）；无标题栏大窗（一般 App 350x757、计算器 320x693，内容从顶到底贴边填满，窗顶 16pt 细条点一下展开/收起 36pt 控制条）；哆啦A夢鈕（56pt 圆钮，大笑 3D 版，右边缘））：v37 是实验版（反向耦合缩放：所有 App 的 scene frame = 内容尺寸 ÷ scale、图层 sublayerTransform 缩回，任意窗尺寸都贴边填满；标题栏加 ± 缩放滑杆 0.5–2.0；frame 更新时顺带把安全区 insets 重设为 0）：v36 是实验版（计算器窗改高、只按宽缩放，内容 320 宽贴边、没有白边、按键约 62pt，修 v35 计算器两侧的白边；内容区底色由白改黑，建窗时记 presenterView 的实际 frame）：v35 是实验版（一个 SpringBoard 会话里永远不销毁 scene——关窗和切走都只藏窗 + 推后台，每个 App 留一个 scene，切回来直接复用，修切到设置时进安全模式；计算器的 scene frame 改成全屏尺寸、presentationView 按比例缩放到窗里，修计算器画面没对准）：v34 是实验版（sceneID 改回固定格式；关窗藏窗不销毁、重开直接复用旧 scene，修固定 ID 多次关窗重开后撞残留进安全模式；切走别的 App 时才销毁；单窗切换不变；层级仍是 v29 的 Alert - 4/-3/-2/-1）：v32 是实验版（锁屏时把悬浮窗也临时藏起来，解锁时再显示回来；v31 只推后台化不够，密码还是按不动；sceneID 仍是 v28 的固定格式 sceneID:&lt;bundleID&gt;-default）：v29 1.0.29 真机：锁屏修好了（开悬浮窗锁屏，再开屏密码能输），计算器也能画了（数字键全画出来了）；但新 bug：最小化后锁屏再解锁、恢复窗时内容是黑的，关窗再打开就正常。窗显式挂 windowScene，感应带 24pt 宽，哆啦A夢鈕 56pt 圆钮（大笑 3D 版，图读不到时退回金色圆钮 + 「分」字），2 秒内从右边缘滑两次（或点哆啦A夢鈕）打开侧边小窗启动器；点 App 时先收启动器，再在主线程走 FBProcessManager + FBApplicationProcessLaunchTransaction 拉起进程、经 FBSceneManager 建 scene、用 _UIScenePresenter 把 App 的画面嵌进圆角 35、带阴影的 320x480 悬浮窗（44pt 标题栏可拖动、红关闭钮、黄最小化钮、右下角缩放手柄），一次只开一个悬浮窗；macOS 编。FB 事务本身是异步的，主线程不被启动堵住。开关默认关，改动后需要重新启动 SpringBoard（respring）才生效。日志在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。测前先把计算器彻底关掉（在 App 切换器里划掉），不然 scene 可能只剩白窗。v26 1.0.26 真机：设置、时钟、照片、备忘录全能在悬浮窗里显示，只有计算器还是黑的（3 次全黑；等 10 秒还是黑；重新越狱后还是黑——是计算器本身不吃现在的 scene 设置）；contentState 全是 1、一次都不是 2，连能画出来的 App 也是 1；1.5 秒重试一次都没记到日志。v27 1.0.27 是诊断版（1.5 秒 + 4 秒重试、无条件记日志、记 presenterView），没部署到源。v25 1.0.25 真机：悬浮窗出来了、不进安全模式、不卡，但窗里全黑、计算器画不出来；v24 1.0.24 真机：点启动器里的计算器后进安全模式（崩溃日志定死：启动放后台队列，BSTransaction 的 begin 断言主队列）；v23 1.0.23 真机：按钮看得见、启动器能开能关，但点 App 会卡 5 秒以上（系统打开 App 的方法在 SpringBoard 里打不开 App，四次全失败）、App 全屏打开、手机随后自己重启（看门狗）；v22 1.0.22 装得上、不黑屏，但按钮看不见、滑两次打不开启动器；v21 1.0.21 已通过真机测试（不黑屏、感应带建成）；v20 1.0.20 装完不黑屏但不加载（只编 arm64 的包注不进 arm64e 的 SpringBoard）、v18 1.0.18、v17 1.0.17、v16 1.0.16 与 v14 1.0.14 装完启动黑屏、v12 1.0.12 装完进安全模式、v11 1.0.11 装完约 5 秒后卡住、v1.0.0 装完即进安全模式，均已下架，不要再装。</string>
+			<string>目标：iPhone 11 / iOS 16.5 / Dopamine。v40 是实验版（多窗：一次开多个浮窗，最多 5 个；最小化/拖到右緣收起贴边成看得见的小卡，点卡恢复、卡上小 X 彻底关掉；拖动细条加宽到 24pt、pill 72x6 更明显；哆啦A夢鈕可沿右边缘上下拖、长按 0.5 秒一键关全部浮窗；启动器改白底圆角面板；设定页加選擇應用 5 个开关、小窗显示位置左/右、点窗外事件开关+關閉/側邊、与劉海方向安全距离滑杆；每个 App 单独记住上次的位置/大小/缩放；窗顶细条中央显示 App 名；右下角 36x36 手柄拖动调尺寸（白色角落括号标记）；锁屏/解锁管全部窗）：v39 是实验版（哆啦A夢鈕读图路径先试 /var/jb 再试 /Library，修 rootless 下图读不到、退回金色「分」；内容区 layer anchorPoint 改 (0,0)，sublayerTransform 绕左上缩，修计算器/设置位置往右下偏；解锁时把 foreground 推回去，修关屏再进去浮窗黑）：v38 是实验版（已在跑的 App 托管它已有的主 scene（KonbanXV 的路，不 createScene、不撞固定 ID，修切到已在跑的设置时进安全模式）；无标题栏大窗（一般 App 350x757、计算器 320x693，内容从顶到底贴边填满，窗顶 16pt 细条点一下展开/收起 36pt 控制条）；哆啦A夢鈕（56pt 圆钮，大笑 3D 版，右边缘））：v37 是实验版（反向耦合缩放：所有 App 的 scene frame = 内容尺寸 ÷ scale、图层 sublayerTransform 缩回，任意窗尺寸都贴边填满；标题栏加 ± 缩放滑杆 0.5–2.0；frame 更新时顺带把安全区 insets 重设为 0）：v36 是实验版（计算器窗改高、只按宽缩放，内容 320 宽贴边、没有白边、按键约 62pt，修 v35 计算器两侧的白边；内容区底色由白改黑，建窗时记 presenterView 的实际 frame）：v35 是实验版（一个 SpringBoard 会话里永远不销毁 scene——关窗和切走都只藏窗 + 推后台，每个 App 留一个 scene，切回来直接复用，修切到设置时进安全模式；计算器的 scene frame 改成全屏尺寸、presentationView 按比例缩放到窗里，修计算器画面没对准）：v34 是实验版（sceneID 改回固定格式；关窗藏窗不销毁、重开直接复用旧 scene，修固定 ID 多次关窗重开后撞残留进安全模式；切走别的 App 时才销毁；单窗切换不变；层级仍是 v29 的 Alert - 4/-3/-2/-1）：v32 是实验版（锁屏时把悬浮窗也临时藏起来，解锁时再显示回来；v31 只推后台化不够，密码还是按不动；sceneID 仍是 v28 的固定格式 sceneID:&lt;bundleID&gt;-default）：v29 1.0.29 真机：锁屏修好了（开悬浮窗锁屏，再开屏密码能输），计算器也能画了（数字键全画出来了）；但新 bug：最小化后锁屏再解锁、恢复窗时内容是黑的，关窗再打开就正常。窗显式挂 windowScene，感应带 24pt 宽，哆啦A夢鈕 56pt 圆钮（大笑 3D 版，图读不到时退回金色圆钮 + 「分」字），2 秒内从右边缘滑两次（或点哆啦A夢鈕）打开侧边小窗启动器；点 App 时先收启动器，再在主线程走 FBProcessManager + FBApplicationProcessLaunchTransaction 拉起进程、经 FBSceneManager 建 scene、用 _UIScenePresenter 把 App 的画面嵌进圆角 35、带阴影的 320x480 悬浮窗（44pt 标题栏可拖动、红关闭钮、黄最小化钮、右下角缩放手柄），一次只开一个悬浮窗；macOS 编。FB 事务本身是异步的，主线程不被启动堵住。开关默认关，改动后需要重新启动 SpringBoard（respring）才生效。日志在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。测前先把计算器彻底关掉（在 App 切换器里划掉），不然 scene 可能只剩白窗。v26 1.0.26 真机：设置、时钟、照片、备忘录全能在悬浮窗里显示，只有计算器还是黑的（3 次全黑；等 10 秒还是黑；重新越狱后还是黑——是计算器本身不吃现在的 scene 设置）；contentState 全是 1、一次都不是 2，连能画出来的 App 也是 1；1.5 秒重试一次都没记到日志。v27 1.0.27 是诊断版（1.5 秒 + 4 秒重试、无条件记日志、记 presenterView），没部署到源。v25 1.0.25 真机：悬浮窗出来了、不进安全模式、不卡，但窗里全黑、计算器画不出来；v24 1.0.24 真机：点启动器里的计算器后进安全模式（崩溃日志定死：启动放后台队列，BSTransaction 的 begin 断言主队列）；v23 1.0.23 真机：按钮看得见、启动器能开能关，但点 App 会卡 5 秒以上（系统打开 App 的方法在 SpringBoard 里打不开 App，四次全失败）、App 全屏打开、手机随后自己重启（看门狗）；v22 1.0.22 装得上、不黑屏，但按钮看不见、滑两次打不开启动器；v21 1.0.21 已通过真机测试（不黑屏、感应带建成）；v20 1.0.20 装完不黑屏但不加载（只编 arm64 的包注不进 arm64e 的 SpringBoard）、v18 1.0.18、v17 1.0.17、v16 1.0.16 与 v14 1.0.14 装完启动黑屏、v12 1.0.12 装完进安全模式、v11 1.0.11 装完约 5 秒后卡住、v1.0.0 装完即进安全模式，均已下架，不要再装。</string>
 			<key>label</key>
-			<string>顾海龙集团分屏 v1.0.39（实验版 v39）</string>
+			<string>顾海龙集团分屏 v1.0.40（实验版 v40）</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -25,6 +25,190 @@
 			<string>enabled</string>
 			<key>label</key>
 			<string>启用分屏</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>只显示打开的 App；只有测过的 5 个 App 可选（计算器、时钟、备忘录、设置、照片），没测过的 App 不放进来，免得点了黑屏。启动器里的顺序固定是计算器、时钟、备忘录、设置、照片。</string>
+			<key>label</key>
+			<string>选择应用</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>appCalculatorEnabled</string>
+			<key>label</key>
+			<string>计算器</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>appClockEnabled</string>
+			<key>label</key>
+			<string>时钟</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>appNotesEnabled</string>
+			<key>label</key>
+			<string>备忘录</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>appSettingsEnabled</string>
+			<key>label</key>
+			<string>设置</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>appPhotosEnabled</string>
+			<key>label</key>
+			<string>照片</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>启动器从哪边滑出、贴边小卡贴在哪边，都跟着这个选。哆啦A夢鈕一直在右边缘（长按关全部、短按开启動器），不受这个选影响。</string>
+			<key>label</key>
+			<string>小窗显示位置</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>right</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>windowPosition</string>
+			<key>label</key>
+			<string>小窗显示位置</string>
+			<key>validTitles</key>
+			<array>
+				<string>主屏左侧</string>
+				<string>主屏右侧</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>left</string>
+				<string>right</string>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>如果开启此开关，且存在主窗口浮窗，会有阴影背景出现，点击阴影背景时关闭浮窗或者移到侧边。关掉时不出阴影背景、点窗外不做事。</string>
+			<key>label</key>
+			<string>点击浮窗外部事件</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>tapOutsideEnabled</string>
+			<key>label</key>
+			<string>点击浮窗外部事件</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>side</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>tapOutsideAction</string>
+			<key>label</key>
+			<string>点窗外动作</string>
+			<key>validTitles</key>
+			<array>
+				<string>关闭浮窗</string>
+				<string>侧边</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>close</string>
+				<string>side</string>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>浮窗与刘海方向安全距离，如果在这个安全距离内，浮窗会自动回弹。拖窗时窗顶离刘海（屏幕顶缘）不到这个值就自动回弹（夹住位置，让窗顶至少离顶缘这个距离）。</string>
+			<key>label</key>
+			<string>与刘海方向安全距离</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>50</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>safeDistance</string>
+			<key>label</key>
+			<string>与刘海方向安全距离</string>
+			<key>max</key>
+			<real>100</real>
+			<key>min</key>
+			<real>0</real>
+			<key>showValue</key>
+			<true/>
 		</dict>
 	</array>
 	<key>title</key>
