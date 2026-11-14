@@ -50,6 +50,42 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
+			<string>浮窗裡 App 圖標排幾圈同心弧，1–4 層，預設 2 層；改了下次開 ARC 生效。圖標少於層數時不留空層。</string>
+			<key>label</key>
+			<string>ARC 層數</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>2</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>arcLayerCount</string>
+			<key>label</key>
+			<string>ARC 層數</string>
+			<key>validTitles</key>
+			<array>
+				<string>1 層</string>
+				<string>2 層</string>
+				<string>3 層</string>
+				<string>4 層</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>1</string>
+				<string>2</string>
+				<string>3</string>
+				<string>4</string>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
 			<string>没选时跟小窗显示位置走。</string>
 		</dict>
 		<dict>

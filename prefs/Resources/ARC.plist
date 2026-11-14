@@ -22,6 +22,14 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSAppSortListController</string>
+			<key>label</key>
+			<string>三屏 App 排序</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>邊緣滑動、哆啦A夢鈕都能叫出 ARC；浮窗也能從三屏設置里開。</string>
@@ -59,6 +67,14 @@
 			<string>Scheduler</string>
 			<key>label</key>
 			<string>手势区域设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSGesturesListController</string>
+			<key>label</key>
+			<string>手勢總覽</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

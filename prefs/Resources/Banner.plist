@@ -22,6 +22,26 @@
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>bannerOpensFloatingWindow</string>
+			<key>label</key>
+			<string>通知横幅打开浮窗</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>點插件自己的通知橫幅可以把浮窗叫回來；系統通知橫幅出現時為那個 App 開浮窗（探針：沒有可靠 hook 點，輪詢認 App）。預設關。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
 			<real>1.5</real>
