@@ -22,7 +22,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>注意⚠️：重启用户空间方可生效。</string>
+			<string>本頁改完馬上生效，不用重啟用戶空間。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

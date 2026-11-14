@@ -30,7 +30,7 @@
 			<key>cell</key>
 			<string>PSLinkCell</string>
 			<key>detail</key>
-			<string>ToolbarSort</string>
+			<string>GHLSSToolbarSortListController</string>
 			<key>label</key>
 			<string>三屏工具栏排序</string>
 		</dict>
@@ -38,7 +38,7 @@
 			<key>cell</key>
 			<string>PSLinkCell</string>
 			<key>detail</key>
-			<string>AppSort</string>
+			<string>GHLSSAppSortListController</string>
 			<key>label</key>
 			<string>三屏 App 排序</string>
 		</dict>
@@ -346,6 +346,8 @@
 				<string>sideShadowEnabled</string>
 				<string>sideShadowOpacity</string>
 				<string>sideShadowRadius</string>
+				<string>toolbarOrder</string>
+				<string>threeScreenAppOrder</string>
 			</array>
 		</dict>
 	</array>

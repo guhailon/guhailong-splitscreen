@@ -128,6 +128,12 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>「全屏打开」是探針：系統不一定放行，打不開時自動退回浮窗；浮窗和三屏是確定的。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSLinkCell</string>
 			<key>detail</key>
 			<string>ARCButtons</string>

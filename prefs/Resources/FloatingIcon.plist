@@ -78,7 +78,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>关了钮不显示，ARC 只能从边缘滑动叫出。大小和左右边改了要重新启动 SpringBoard 才生效；高度直接拖钮就改。</string>
+			<string>关了钮不显示，ARC 只能从边缘滑动叫出。大小、左右边改完 2 秒内生效，不用重启；高度直接拖钮就改。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
