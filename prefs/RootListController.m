@@ -422,6 +422,11 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
     return YES;
 }
 
+// v47：見下面 GHLSSHandlePlistDetailTap 的定義——定義要用到白名單
+// GHLSSPrefsIsKnownPlistName 與 PlistPage 的接口聲明，都在文件後面，
+// 這裡先給原型（主頁控制器與 PlistPage 共用同一個 didSelectRow）。
+static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView *tableView, NSIndexPath *indexPath);
+
 // v43：手動派發 PSButtonCell 點按——不再賭框架會不會從 action 字串派發。
 // 診斷：plist 的 action 字串、程式現拼的 action 字串、方法、target 全部合規，
 // 但皇上在 v42 真機測到五個操作行點了完全沒反應；框架內部到底讀
@@ -436,7 +441,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     NSString *actionName = [spec propertyForKey:GHLSSRuntimeString("action")];
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (!actionName || [actionName length] == 0) {
-        GHLSSPrefsLogLine("v46 prefs-config tap: button without action");
+        GHLSSPrefsLogLine("v47 prefs-config tap: button without action");
         return YES;
     }
     const char *actionC = [actionName UTF8String];
@@ -444,29 +449,29 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     id target = spec.target;
     if (!target) target = controller;
     char buf[320];
-    snprintf(buf, sizeof(buf), "v46 prefs-config tap: action %s target %s", actionC ? actionC : "?", [NSStringFromClass([target class]) UTF8String]);
+    snprintf(buf, sizeof(buf), "v47 prefs-config tap: action %s target %s", actionC ? actionC : "?", [NSStringFromClass([target class]) UTF8String]);
     GHLSSPrefsLogLine(buf);
     // v44：action 字串是裸名（沒有冒號），但方法都帶一個參數（PSSpecifier *），
     // 真正的 selector 有冒號（例如 ghlssBackupConfig:）。裸名先試，不回應就補冒號再試。
     // 這也是為什麼框架自己的派發在 v42 也不動——框架也是拿同一個裸名字串轉 SEL，
     // respondsToSelector 永遠回 NO，點按就這樣被靜靜吞掉了。
     if (![target respondsToSelector:action]) {
-        GHLSSPrefsLogLine("v46 prefs-config tap: bare name does not respond, trying colon");
+        GHLSSPrefsLogLine("v47 prefs-config tap: bare name does not respond, trying colon");
         NSString *colonName = [actionName stringByAppendingString:GHLSSRuntimeString(":")];
         SEL colonAction = NSSelectorFromString(colonName);
         if ([target respondsToSelector:colonAction]) {
             action = colonAction;
-            GHLSSPrefsLogLine("v46 prefs-config tap: colon selector responds");
+            GHLSSPrefsLogLine("v47 prefs-config tap: colon selector responds");
         }
     }
     if (![target respondsToSelector:action]) {
-        GHLSSPrefsLogLine("v46 prefs-config tap: target does not respond to bare or colon, falling through to super");
+        GHLSSPrefsLogLine("v47 prefs-config tap: target does not respond to bare or colon, falling through to super");
         return NO;
     }
     // v44：變數 SEL 不能用 performSelector（-Werror 下 -Warc-performSelector-leaks），
     // 用 v41 就在用的 objc_msgSend 寫法。
     ((void (*)(id, SEL, id))objc_msgSend)(target, action, spec);
-    snprintf(buf, sizeof(buf), "v46 prefs-config tap: dispatched %s", [NSStringFromSelector(action) UTF8String]);
+    snprintf(buf, sizeof(buf), "v47 prefs-config tap: dispatched %s", [NSStringFromSelector(action) UTF8String]);
     GHLSSPrefsLogLine(buf);
     return YES;
 }
@@ -481,12 +486,15 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 - (void)viewDidLoad {
     [super viewDidLoad];
     char buf[160];
-    snprintf(buf, sizeof(buf), "v46 prefs-page: %s", [NSStringFromClass([self class]) UTF8String]);
+    snprintf(buf, sizeof(buf), "v47 prefs-page: %s", [NSStringFromClass([self class]) UTF8String]);
     GHLSSPrefsLogLine(buf);
 }
 
 // v43：按鈕行自己派發（見上面 GHLSSDispatchButtonTap）；其他行走框架。
+// v47：plist 名 detail 的連結行先攔下來自己推 PlistPage（見下面
+// GHLSSHandlePlistDetailTap），不再走框架預設——框架推的原生頁是空的。
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSHandlePlistDetailTap(self, tableView, indexPath)) return;
     if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
     [super tableView:tableView didSelectRowAtIndexPath:indexPath];
 }
@@ -546,7 +554,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[256];
         const char *keyC = [key UTF8String];
         const char *valC = [[value description] UTF8String];
-        snprintf(buf, sizeof(buf), "v46 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
+        snprintf(buf, sizeof(buf), "v47 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
         GHLSSPrefsLogLine(buf);
     }
     if (domain) CFRelease(domain);
@@ -583,9 +591,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         }
         if (presenter) {
             [presenter presentViewController:alert animated:YES completion:nil];
-            GHLSSPrefsLogLine("v46 prefs-config alert shown");
+            GHLSSPrefsLogLine("v47 prefs-config alert shown");
         } else {
-            GHLSSPrefsLogLine("v46 prefs-config alert FAILED: no presenter");
+            GHLSSPrefsLogLine("v47 prefs-config alert FAILED: no presenter");
         }
     });
 }
@@ -593,7 +601,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // 備份配置：設定檔複製一份到備份檔。
 - (void)ghlssBackupConfig:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-config backup entry");
+    GHLSSPrefsLogLine("v47 prefs-config backup entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSPrefsFilePath();
     NSString *dst = GHLSSBackupFilePath();
@@ -601,7 +609,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
     if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
     if (![fm fileExistsAtPath:src]) {
-        GHLSSPrefsLogLine("v46 prefs-config backup: no prefs file");
+        GHLSSPrefsLogLine("v47 prefs-config backup: no prefs file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有配置文件可备份") message:GHLSSRuntimeString("先改一个设置，配置文件才会生成。")];
         return;
     }
@@ -610,12 +618,12 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
     if (ok) {
         char buf[512];
-        snprintf(buf, sizeof(buf), "v46 prefs-config backup: copied to %s", [dst UTF8String]);
+        snprintf(buf, sizeof(buf), "v47 prefs-config backup: copied to %s", [dst UTF8String]);
         GHLSSPrefsLogLine(buf);
     } else {
         char buf[768];
         const char *errC = [[err localizedDescription] UTF8String];
-        snprintf(buf, sizeof(buf), "v46 prefs-config backup: copy failed %s -> %s : %s", [src UTF8String], [dst UTF8String], errC ? errC : "?");
+        snprintf(buf, sizeof(buf), "v47 prefs-config backup: copy failed %s -> %s : %s", [src UTF8String], [dst UTF8String], errC ? errC : "?");
         GHLSSPrefsLogLine(buf);
     }
     if (ok) {
@@ -628,7 +636,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // 導出配置（非備份配置）：設定檔複製一份到導出檔，導入時讀它。
 - (void)ghlssExportConfig:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-config export entry");
+    GHLSSPrefsLogLine("v47 prefs-config export entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSPrefsFilePath();
     NSString *dst = GHLSSExportFilePath();
@@ -636,7 +644,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
     if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
     if (![fm fileExistsAtPath:src]) {
-        GHLSSPrefsLogLine("v46 prefs-config export: no prefs file");
+        GHLSSPrefsLogLine("v47 prefs-config export: no prefs file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有配置文件可导出") message:GHLSSRuntimeString("先改一个设置，配置文件才会生成。")];
         return;
     }
@@ -645,12 +653,12 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
     if (ok) {
         char buf[512];
-        snprintf(buf, sizeof(buf), "v46 prefs-config export: copied to %s", [dst UTF8String]);
+        snprintf(buf, sizeof(buf), "v47 prefs-config export: copied to %s", [dst UTF8String]);
         GHLSSPrefsLogLine(buf);
     } else {
         char buf[768];
         const char *errC = [[err localizedDescription] UTF8String];
-        snprintf(buf, sizeof(buf), "v46 prefs-config export: copy failed %s -> %s : %s", [src UTF8String], [dst UTF8String], errC ? errC : "?");
+        snprintf(buf, sizeof(buf), "v47 prefs-config export: copy failed %s -> %s : %s", [src UTF8String], [dst UTF8String], errC ? errC : "?");
         GHLSSPrefsLogLine(buf);
     }
     if (ok) {
@@ -665,18 +673,18 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // 看著就像沒反應。改成讀出字典、逐鍵用 CFPreferencesSetAppValue 寫進去，快取才會更新。
 - (void)ghlssImportConfig:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-config import entry");
+    GHLSSPrefsLogLine("v47 prefs-config import entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSExportFilePath();
     if (![fm fileExistsAtPath:src]) {
-        GHLSSPrefsLogLine("v46 prefs-config import: no export file");
+        GHLSSPrefsLogLine("v47 prefs-config import: no export file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有找到导出的配置文件") message:GHLSSRuntimeString("先点「导出配置」，再导入。")];
         return;
     }
     NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:src];
     if (!dict) {
         char buf[512];
-        snprintf(buf, sizeof(buf), "v46 prefs-config import: export file unreadable %s", [src UTF8String]);
+        snprintf(buf, sizeof(buf), "v47 prefs-config import: export file unreadable %s", [src UTF8String]);
         GHLSSPrefsLogLine(buf);
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导入失败") message:GHLSSRuntimeString("导出的配置文件读不出来。")];
         return;
@@ -691,7 +699,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
     [self reloadSpecifiers];
     char buf[512];
-    snprintf(buf, sizeof(buf), "v46 prefs-config import: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
+    snprintf(buf, sizeof(buf), "v47 prefs-config import: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
     GHLSSPrefsLogLine(buf);
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导入配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
 }
@@ -700,18 +708,18 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // v43：同導入，改走 CFPreferences 逐鍵寫入（見上）。
 - (void)ghlssRestoreConfig:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-config restore entry");
+    GHLSSPrefsLogLine("v47 prefs-config restore entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSBackupFilePath();
     if (![fm fileExistsAtPath:src]) {
-        GHLSSPrefsLogLine("v46 prefs-config restore: no backup file");
+        GHLSSPrefsLogLine("v47 prefs-config restore: no backup file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有找到备份文件") message:GHLSSRuntimeString("先点「备份配置」，再恢复。")];
         return;
     }
     NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:src];
     if (!dict) {
         char buf[512];
-        snprintf(buf, sizeof(buf), "v46 prefs-config restore: backup file unreadable %s", [src UTF8String]);
+        snprintf(buf, sizeof(buf), "v47 prefs-config restore: backup file unreadable %s", [src UTF8String]);
         GHLSSPrefsLogLine(buf);
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("恢复失败") message:GHLSSRuntimeString("备份文件读不出来。")];
         return;
@@ -726,7 +734,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
     [self reloadSpecifiers];
     char buf[512];
-    snprintf(buf, sizeof(buf), "v46 prefs-config restore: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
+    snprintf(buf, sizeof(buf), "v47 prefs-config restore: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
     GHLSSPrefsLogLine(buf);
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已从备份恢复配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
 }
@@ -737,7 +745,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // 再刪檔案。
 - (void)ghlssResetConfig:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-config reset entry");
+    GHLSSPrefsLogLine("v47 prefs-config reset entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *dst = GHLSSPrefsFilePath();
     CFIndex clearedCount = 0;
@@ -762,7 +770,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
     [self reloadSpecifiers];
     char buf[320];
-    snprintf(buf, sizeof(buf), "v46 prefs-config reset: cleared %ld keys, file %s removed %d", (long)clearedCount, [dst UTF8String], removed ? 1 : 0);
+    snprintf(buf, sizeof(buf), "v47 prefs-config reset: cleared %ld keys, file %s removed %d", (long)clearedCount, [dst UTF8String], removed ? 1 : 0);
     GHLSSPrefsLogLine(buf);
     if (removed) {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已重置为默认配置") message:GHLSSRuntimeString("全部设置已恢复默认（备份文件还在），请重新启动 SpringBoard 生效。")];
@@ -776,7 +784,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 //（浮窗尺寸／任務欄／懸浮球那幾項 2 秒 tick 會自己跟上）。
 - (void)ghlssApplyLayoutGame:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-layout: game applied");
+    GHLSSPrefsLogLine("v47 prefs-layout: game applied");
     GHLSSWritePrefsBool("gameModeEnabled", YES);
     GHLSSWritePrefsBool("arcEnabled", YES);
     GHLSSWritePrefsBool("centerOnOpen", NO);
@@ -793,7 +801,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)ghlssApplyLayoutWork:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-layout: work applied");
+    GHLSSPrefsLogLine("v47 prefs-layout: work applied");
     GHLSSWritePrefsBool("gameModeEnabled", NO);
     GHLSSWritePrefsBool("centerOnOpen", YES);
     GHLSSWritePrefsDouble("cornerRadius", 35);
@@ -808,7 +816,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)ghlssApplyLayoutDefault:(PSSpecifier *)specifier {
     (void)specifier;
-    GHLSSPrefsLogLine("v46 prefs-layout: default applied");
+    GHLSSPrefsLogLine("v47 prefs-layout: default applied");
     GHLSSWritePrefsBool("gameModeEnabled", NO);
     GHLSSWritePrefsBool("arcEnabled", YES);
     GHLSSWritePrefsBool("centerOnOpen", NO);
@@ -839,7 +847,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // v43：記進了哪一頁。
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: AppPicker");
+    GHLSSPrefsLogLine("v47 prefs-page: AppPicker");
 }
 
 - (NSArray *)specifiers {
@@ -926,7 +934,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         BOOL ok = GHLSSSetAppInLauncherPrefs([bidStr UTF8String], on);
         // v43：記自選 App 加／減（槽位滿了也會記，開關彈回關的原因就有了）。
         char buf[320];
-        snprintf(buf, sizeof(buf), "v46 prefs-set: sel %s = %d ok %d", [bidStr UTF8String], on ? 1 : 0, ok ? 1 : 0);
+        snprintf(buf, sizeof(buf), "v47 prefs-set: sel %s = %d ok %d", [bidStr UTF8String], on ? 1 : 0, ok ? 1 : 0);
         GHLSSPrefsLogLine(buf);
         if (!ok && on) {
             // 自選槽位滿了（7 個）：開關彈回關，告訴用戶。
@@ -950,7 +958,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     char buf[256];
     const char *keyC = [key UTF8String];
     const char *valC = [[value description] UTF8String];
-    snprintf(buf, sizeof(buf), "v46 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
+    snprintf(buf, sizeof(buf), "v47 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
     GHLSSPrefsLogLine(buf);
 }
 
@@ -975,7 +983,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: AppSort");
+    GHLSSPrefsLogLine("v47 prefs-page: AppSort");
     self.navigationItem.rightBarButtonItem = self.editButtonItem;
     // 現在的順序：順序表裡的先按表裡的順序，沒在表裡的接在後面。
     NSMutableArray *ordered = [NSMutableArray array];
@@ -1064,7 +1072,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     NSString *joined = [self.orderedBids componentsJoinedByString:GHLSSRuntimeString(",")];
     GHLSSWritePrefsCString("threeScreenAppOrder", [joined UTF8String]);
     char buf[256];
-    snprintf(buf, sizeof(buf), "v46 prefs-sort: app order moved %s %ld -> %ld", [bid UTF8String], (long)from, (long)to);
+    snprintf(buf, sizeof(buf), "v47 prefs-sort: app order moved %s %ld -> %ld", [bid UTF8String], (long)from, (long)to);
     GHLSSPrefsLogLine(buf);
 }
 
@@ -1091,7 +1099,7 @@ static const char *GHLSSToolbarSortNames[5] = {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: ToolbarSort");
+    GHLSSPrefsLogLine("v47 prefs-page: ToolbarSort");
     self.navigationItem.rightBarButtonItem = self.editButtonItem;
     // 現在的順序：順序表裡的先按表裡的順序，缺的按預設補回來。
     NSMutableArray *ordered = [NSMutableArray array];
@@ -1171,7 +1179,7 @@ static const char *GHLSSToolbarSortNames[5] = {
     NSString *joined = [self.orderedIDs componentsJoinedByString:GHLSSRuntimeString(",")];
     GHLSSWritePrefsCString("toolbarOrder", [joined UTF8String]);
     char buf[256];
-    snprintf(buf, sizeof(buf), "v46 prefs-sort: toolbar order moved %s %ld -> %ld", [tid UTF8String], (long)from, (long)to);
+    snprintf(buf, sizeof(buf), "v47 prefs-sort: toolbar order moved %s %ld -> %ld", [tid UTF8String], (long)from, (long)to);
     GHLSSPrefsLogLine(buf);
 }
 
@@ -1199,7 +1207,7 @@ static const char *GHLSSToolbarSortNames[5] = {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: LogViewer");
+    GHLSSPrefsLogLine("v47 prefs-page: LogViewer");
     UITextView *tv = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 420)];
     tv.font = [UIFont systemFontOfSize:11];
     tv.editable = NO;
@@ -1271,7 +1279,7 @@ static const char *GHLSSToolbarSortNames[5] = {
 // v43：記進了哪一頁。
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: PairList");
+    GHLSSPrefsLogLine("v47 prefs-page: PairList");
 }
 
 // v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
@@ -1409,7 +1417,7 @@ static const char *GHLSSToolbarSortNames[5] = {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: CardAvatar");
+    GHLSSPrefsLogLine("v47 prefs-page: CardAvatar");
     CGFloat w = [UIScreen mainScreen].bounds.size.width;
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 160)];
     container.backgroundColor = [UIColor whiteColor];
@@ -1520,7 +1528,7 @@ static const char *GHLSSToolbarSortNames[5] = {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: CardBg");
+    GHLSSPrefsLogLine("v47 prefs-page: CardBg");
     CGFloat w = [UIScreen mainScreen].bounds.size.width;
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 200)];
     container.backgroundColor = [UIColor whiteColor];
@@ -1744,7 +1752,7 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
 }
 
 - (void)viewDidLoad {
-    GHLSSPrefsLogLine("v46 prefs-search viewDidLoad entry");
+    GHLSSPrefsLogLine("v47 prefs-search viewDidLoad entry");
     self.query = GHLSSRuntimeString("");
     UISearchBar *bar = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 44)];
     bar.placeholder = GHLSSRuntimeString("搜尋設定（標題 + 副標題）");
@@ -1755,24 +1763,24 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
     // v43 的日誌停在 specifiers exit count 73 之後、viewDidLoad exit 之前，
     // 死點就在 tableHeaderView = bar 那一步附近（或是緊接著的第一次 cell 渲染）。
     // 搜索條改到 viewDidAppear 再掛（view 已進視窗、表格已佈局），只掛一次。
-    GHLSSPrefsLogLine("v46 prefs-search viewDidLoad exit");
+    GHLSSPrefsLogLine("v47 prefs-search viewDidLoad exit");
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    GHLSSPrefsLogLine("v46 prefs-search viewDidAppear entry");
+    GHLSSPrefsLogLine("v47 prefs-search viewDidAppear entry");
     if (self.searchBar && !self.searchHeaderInstalled) {
-        GHLSSPrefsLogLine("v46 prefs-search before tableHeaderView");
+        GHLSSPrefsLogLine("v47 prefs-search before tableHeaderView");
         @try {
             self.tableView.tableHeaderView = self.searchBar;
             self.searchHeaderInstalled = YES;
         } @catch (NSException *e) {
             const char *reason = [e reason] ? [[e reason] UTF8String] : NULL;
             char buf[256];
-            snprintf(buf, sizeof(buf), "v46 prefs-search tableHeaderView EXCEPTION %s", reason ? reason : "?");
+            snprintf(buf, sizeof(buf), "v47 prefs-search tableHeaderView EXCEPTION %s", reason ? reason : "?");
             GHLSSPrefsLogLine(buf);
         }
-        GHLSSPrefsLogLine("v46 prefs-search after tableHeaderView");
+        GHLSSPrefsLogLine("v47 prefs-search after tableHeaderView");
     }
 }
 
@@ -1782,7 +1790,7 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     if (!GHLSSSearchFirstCellLogged) {
         GHLSSSearchFirstCellLogged = YES;
-        GHLSSPrefsLogLine("v46 prefs-search first cell built");
+        GHLSSPrefsLogLine("v47 prefs-search first cell built");
     }
     return cell;
 }
@@ -1790,13 +1798,13 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
     (void)searchBar;
     self.query = searchText ? searchText : GHLSSRuntimeString("");
-    GHLSSPrefsLogLine("v46 prefs-search textDidChange");
+    GHLSSPrefsLogLine("v47 prefs-search textDidChange");
     [self reloadSpecifiers];
 }
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
-        GHLSSPrefsLogLine("v46 prefs-search specifiers entry");
+        GHLSSPrefsLogLine("v47 prefs-search specifiers entry");
         @try {
             NSMutableArray *specs = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
@@ -1825,7 +1833,7 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
             _specifiers = specs;
         } @catch (NSException *e) {
             char buf[512];
-            snprintf(buf, sizeof(buf), "v46 prefs-search specifiers EXCEPTION %s %s", [[e name] UTF8String], [[e reason] UTF8String]);
+            snprintf(buf, sizeof(buf), "v47 prefs-search specifiers EXCEPTION %s %s", [[e name] UTF8String], [[e reason] UTF8String]);
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
@@ -1834,7 +1842,7 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
             _specifiers = safe;
         }
         char buf2[128];
-        snprintf(buf2, sizeof(buf2), "v46 prefs-search specifiers exit count %lu", (unsigned long)[_specifiers count]);
+        snprintf(buf2, sizeof(buf2), "v47 prefs-search specifiers exit count %lu", (unsigned long)[_specifiers count]);
         GHLSSPrefsLogLine(buf2);
     }
     return _specifiers;
@@ -1846,10 +1854,10 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
     NSString *plist = specifier.properties[GHLSSRuntimeString("ghlssTargetPlist")];
     const char *cname = plist ? [plist UTF8String] : NULL;
     char buf[256];
-    snprintf(buf, sizeof(buf), "v46 prefs-search open result plist %s", cname ? cname : "(nil)");
+    snprintf(buf, sizeof(buf), "v47 prefs-search open result plist %s", cname ? cname : "(nil)");
     GHLSSPrefsLogLine(buf);
     if (!plist || [plist length] == 0 || !GHLSSPrefsIsKnownPlistName(cname)) {
-        GHLSSPrefsLogLine("v46 prefs-search open result REJECTED unknown plist");
+        GHLSSPrefsLogLine("v47 prefs-search open result REJECTED unknown plist");
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("這個設定頁打不開") message:GHLSSRuntimeString("搜尋索引裡的頁面名字不對，已經記進日誌。") preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
@@ -1860,10 +1868,64 @@ static BOOL GHLSSSearchFirstCellLogged = NO;
     page.parentController = self;
     page.rootController = self.rootController;
     [self pushController:page];
-    GHLSSPrefsLogLine("v46 prefs-search open result pushed");
+    GHLSSPrefsLogLine("v47 prefs-search open result pushed");
 }
 
 @end
+
+// v47：攔截 plist 名 detail 的連結行，自己手動推 PlistPage。
+// 根因（皇上 2026-11-14 19:29 報：系統設定裡點「三屏设置」進去什麼都
+// 沒有，「ARC设置」也一樣，主頁本身正常）：Root.plist 裡五個子頁連結行
+// （三屏設置 detail=ThreeScreen、arc 設置 detail=ARC、浮窗設置
+// detail=Floating、其他雜項功能 detail=Other、高級設置 detail=Advanced）
+// 的 detail 是 plist 名、沒有 action，點按走到框架預設的處理——它 new
+// 一個原生的 PSListController 來載那份 plist，但那個原生控制器的 bundle
+// 不是我們這個 PreferenceLoader bundle（我們 bundle 裡的 plist 它找不
+// 到），specifiers 載出來是空的：頁面推得出來，裡面一行都沒有。類名
+// detail 的行不受影響（框架直接 alloc 那個類，類在我們二進制裡，
+// specifiers 由類自己載），所以搜索設置／配置方案／手勢總覽都正常，
+// 主頁（我們自己的控制器自己載 Root.plist）也正常。PreferenceLoader
+// 登記檔裡根控制器就是用類名登記的（isController），也是同一道理。
+// 修法：連結行點按時先在這裡攔下來——detail 是白名單裡的 plist 名，就
+// 照搜索結果那條路（ghlssOpenSearchResult）手動推一個
+// GHLSSPlistPageController：把 plist 名寫進 specifier 的非保留字鍵
+// ghlssTargetPlist，再 push。PlistPage 的 specifiers 是在我們自己的
+// 子類身上載 plist（bundle 對得上），內容就出來了。detail 是類名、
+// 或不在白名單裡的，一律回 NO 交回框架／super，不動它。
+// PlistPage 繼承主頁控制器（同一個 didSelectRow），所以子頁裡的嵌套
+// plist 連結（浮窗設置裡的陰影／橫幅／鍵盤／調度、其他雜項裡的搜索界面／
+// 桌面圖標／懸浮圖標、三屏／ARC／高級設置裡的調度／手勢自定義）走同
+// 一個攔截，一次全修；類名 detail 的嵌套行（排序頁、選擇應用、重置本頁、
+// 日誌／頭像／背景）繼續走框架，本來就正常。
+// 回傳 YES 表示這一行已經處理了（呼叫方直接 return，不要再走 super）。
+static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView *tableView, NSIndexPath *indexPath) {
+    if (!controller || !indexPath) return NO;
+    PSSpecifier *spec = [controller specifierAtIndexPath:indexPath];
+    if (!spec) return NO;
+    if (spec.cellType != PSLinkCell) return NO;
+    NSString *detail = spec.properties[GHLSSRuntimeString("detail")];
+    if (!detail || [detail length] == 0) return NO;
+    const char *detailC = [detail UTF8String];
+    // 類名 detail——框架直接 alloc 那個類，本來就正常，不攔。
+    if (NSClassFromString(detail) != Nil) return NO;
+    if (!GHLSSPrefsIsKnownPlistName(detailC)) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v47 prefs-nav REJECTED unknown plist detail %s", detailC ? detailC : "?");
+        GHLSSPrefsLogLine(buf);
+        return NO;
+    }
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    [spec setProperty:detail forKey:GHLSSRuntimeString("ghlssTargetPlist")];
+    GHLSSPlistPageController *page = [[GHLSSPlistPageController alloc] init];
+    page.specifier = spec;
+    page.parentController = controller;
+    page.rootController = controller.rootController;
+    [controller pushController:page];
+    char buf[256];
+    snprintf(buf, sizeof(buf), "v47 prefs-nav push plist %s", detailC ? detailC : "?");
+    GHLSSPrefsLogLine(buf);
+    return YES;
+}
 
 // v42：手勢總覽——一頁列出全部手勢跟目前的設定值（只讀，
 // 改去調度設置／手勢自定義那頁）。
@@ -1885,7 +1947,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
 // v43：記進了哪一頁。
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: Gestures");
+    GHLSSPrefsLogLine("v47 prefs-page: Gestures");
 }
 
 - (NSArray *)specifiers {
@@ -1984,7 +2046,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
 // v43：記進了哪一頁。
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: Profiles");
+    GHLSSPrefsLogLine("v47 prefs-page: Profiles");
 }
 
 // v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
@@ -2112,7 +2174,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
 // v43：記進了哪一頁。
 - (void)viewDidLoad {
     [super viewDidLoad];
-    GHLSSPrefsLogLine("v46 prefs-page: PageReset");
+    GHLSSPrefsLogLine("v47 prefs-page: PageReset");
 }
 
 // v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
@@ -2142,7 +2204,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     (void)specifier;
     NSArray *keys = self.specifier.properties[GHLSSRuntimeString("pageKeys")];
     char buf[160];
-    snprintf(buf, sizeof(buf), "v46 prefs-reset-page: %lu keys", (unsigned long)(keys ? [keys count] : 0));
+    snprintf(buf, sizeof(buf), "v47 prefs-reset-page: %lu keys", (unsigned long)(keys ? [keys count] : 0));
     GHLSSPrefsLogLine(buf);
     if (keys) {
         for (NSString *k in keys) {
@@ -2150,7 +2212,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
             GHLSSDeletePrefsKey([k UTF8String]);
         }
     }
-    GHLSSPrefsLogLine("v46 prefs-reset-page: done");
+    GHLSSPrefsLogLine("v47 prefs-reset-page: done");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已重置本頁為默認") message:GHLSSRuntimeString("這一頁的設置已恢復預設值（別頁不動），2 秒內／下次開窗生效，不用重啟用戶空間。") preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -2171,24 +2233,24 @@ static NSString *GHLSSGestureActionName(const char *value) {
         NSString *targetPlist = self.specifier.properties[GHLSSRuntimeString("ghlssTargetPlist")];
         const char *cname = targetPlist ? [targetPlist UTF8String] : NULL;
         char buf[256];
-        snprintf(buf, sizeof(buf), "v46 prefs-search plistpage entry plist %s", cname ? cname : "(nil)");
+        snprintf(buf, sizeof(buf), "v47 prefs-search plistpage entry plist %s", cname ? cname : "(nil)");
         GHLSSPrefsLogLine(buf);
         if (targetPlist && [targetPlist length] > 0 && GHLSSPrefsIsKnownPlistName(cname)) {
             @try {
                 _specifiers = [self loadSpecifiersFromPlistName:targetPlist target:self];
             } @catch (NSException *e) {
                 char ebuf[512];
-                snprintf(ebuf, sizeof(ebuf), "v46 prefs-search plistpage EXCEPTION %s %s", [[e name] UTF8String], [[e reason] UTF8String]);
+                snprintf(ebuf, sizeof(ebuf), "v47 prefs-search plistpage EXCEPTION %s %s", [[e name] UTF8String], [[e reason] UTF8String]);
                 GHLSSPrefsLogLine(ebuf);
                 _specifiers = [NSMutableArray array];
             }
             if (!_specifiers) _specifiers = [NSMutableArray array];
         } else {
-            GHLSSPrefsLogLine("v46 prefs-search plistpage REJECTED unknown plist");
+            GHLSSPrefsLogLine("v47 prefs-search plistpage REJECTED unknown plist");
             _specifiers = [NSMutableArray array];
         }
         char buf2[128];
-        snprintf(buf2, sizeof(buf2), "v46 prefs-search plistpage exit count %lu", (unsigned long)[_specifiers count]);
+        snprintf(buf2, sizeof(buf2), "v47 prefs-search plistpage exit count %lu", (unsigned long)[_specifiers count]);
         GHLSSPrefsLogLine(buf2);
     }
     return _specifiers;

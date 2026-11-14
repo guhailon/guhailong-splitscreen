@@ -1,6 +1,18 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.46（实验版 v46）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.47（实验版 v47）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v47 是什么（熱修復：系統設定五個子頁點進去空白）
+
+**皇上 2026-11-14 19:29：**系統設定裡點「三屏设置」進去什麼都沒有，「ARC设置」也一樣；主頁本身正常（行都在）。
+
+**根因（代碼＋現象雙重定死）：**Root.plist 裡五個子頁連結行（三屏設置 detail=ThreeScreen、arc 設置 detail=ARC、浮窗設置 detail=Floating、其他雜項功能 detail=Other、高級設置 detail=Advanced）的 detail 是 plist 名、沒有 action，點按走到框架預設的處理——它 new 一個原生的 PSListController 來載那份 plist，但那個原生控制器的 bundle 不是我們這個 PreferenceLoader bundle（我們 bundle 裡的 plist 它找不到），specifiers 載出來是空的：頁面推得出來，裡面一行都沒有。類名 detail 的行不受影響（框架直接 alloc 那個類，類在我們二進制裡，specifiers 由類自己載），所以搜索設置／配置方案／手勢總覽都正常，主頁（我們自己的控制器自己載 Root.plist）也正常；PreferenceLoader 登記檔裡根控制器就是用類名登記的（isController），也是同一道理。子頁裡的嵌套 plist 連結（浮窗設置裡的陰影／橫幅／鍵盤／調度、其他雜項裡的搜索界面／桌面圖標／懸浮圖標、三屏／ARC／高級設置裡的調度／手勢自定義）同一個機制，全是空白；類名 detail 的嵌套行（排序頁、選擇應用、重置本頁、日誌／頭像／背景）本來就正常。
+
+**修法：**主頁控制器（`GuHaiLongSplitScreenRootListController`）的 `didSelectRow` 裡先攔截：連結行（PSLinkCell）的 detail 是白名單裡的 plist 名，就照搜索結果那條路（`ghlssOpenSearchResult`）手動推一個 `GHLSSPlistPageController`——把 plist 名寫進 specifier 的非保留字鍵 `ghlssTargetPlist` 再 push。PlistPage 的 specifiers 是在我們自己的子類身上載 plist（bundle 對得上），內容就出來了。detail 是類名、或不在白名單裡的，一律不攔、交回框架。PlistPage 繼承主頁控制器（同一個 didSelectRow），嵌套連結一次全修；v42.2 的冒號派發、v42.4 的排序頁和全部功能不動。加診斷日誌 `v47 prefs-nav push plist <名字>`（白名單外是 `v47 prefs-nav REJECTED unknown plist detail <名字>`）。
+
+**誠實狀態：**修法對症（機制與搜索結果那條已驗證的路完全相同，主頁載 Root.plist 也是同一調用），但沒真機驗過——五頁子頁＋嵌套連結要皇上逐個點開確認；萬一某頁還是空白，日誌裡 `v47 prefs-nav` 那行會直接指認推沒推、推了哪份 plist。
+
+測法：見 BUILD_LOG §125 的 v42.5 真機測試清單。
 
 ## v46 是什么（設置補完：排序真拖動＋開關馬上生效）
 
