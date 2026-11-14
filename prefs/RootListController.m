@@ -463,6 +463,15 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 @implementation GuHaiLongSplitScreenRootListController
 
+// v43：記進了哪一頁（PlistPage 繼承這裡，類名是 GHLSSPlistPageController，
+// 具體哪份 plist 由 specifiers 裡的 plistpage entry 行給出）。
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    char buf[160];
+    snprintf(buf, sizeof(buf), "v43 prefs-page: %s", [NSStringFromClass([self class]) UTF8String]);
+    GHLSSPrefsLogLine(buf);
+}
+
 // v43：按鈕行自己派發（見上面 GHLSSDispatchButtonTap）；其他行走框架。
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
@@ -519,6 +528,13 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         CFStringRef cfKey = (__bridge CFStringRef)key;
         CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, domain);
         CFPreferencesAppSynchronize(domain);
+        // v43：記開關／滑桿／分段改了什麼值（只記用戶改動，不記讀取；
+        // readPreferenceValue 每行渲染都跑，記了會刷爆日誌）。
+        char buf[256];
+        const char *keyC = [key UTF8String];
+        const char *valC = [[value description] UTF8String];
+        snprintf(buf, sizeof(buf), "v43 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
+        GHLSSPrefsLogLine(buf);
     }
     if (domain) CFRelease(domain);
 }
@@ -579,7 +595,16 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     NSError *err = nil;
     [fm removeItemAtPath:dst error:nil];
     BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
-    GHLSSPrefsLogLine(ok ? "v43 prefs-config backup: copied" : "v43 prefs-config backup: copy failed");
+    if (ok) {
+        char buf[512];
+        snprintf(buf, sizeof(buf), "v43 prefs-config backup: copied to %s", [dst UTF8String]);
+        GHLSSPrefsLogLine(buf);
+    } else {
+        char buf[768];
+        const char *errC = [[err localizedDescription] UTF8String];
+        snprintf(buf, sizeof(buf), "v43 prefs-config backup: copy failed %s -> %s : %s", [src UTF8String], [dst UTF8String], errC ? errC : "?");
+        GHLSSPrefsLogLine(buf);
+    }
     if (ok) {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已备份配置") message:GHLSSRuntimeString("备份在 GuHaiLongSplitScreen-backup.plist，恢复时读这个文件。")];
     } else {
@@ -605,7 +630,16 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     [fm removeItemAtPath:dst error:nil];
     NSError *err = nil;
     BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
-    GHLSSPrefsLogLine(ok ? "v43 prefs-config export: copied" : "v43 prefs-config export: copy failed");
+    if (ok) {
+        char buf[512];
+        snprintf(buf, sizeof(buf), "v43 prefs-config export: copied to %s", [dst UTF8String]);
+        GHLSSPrefsLogLine(buf);
+    } else {
+        char buf[768];
+        const char *errC = [[err localizedDescription] UTF8String];
+        snprintf(buf, sizeof(buf), "v43 prefs-config export: copy failed %s -> %s : %s", [src UTF8String], [dst UTF8String], errC ? errC : "?");
+        GHLSSPrefsLogLine(buf);
+    }
     if (ok) {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导出配置") message:GHLSSRuntimeString("导出在 GuHaiLongSplitScreen-export.plist，导入时读这个文件。")];
     } else {
@@ -628,7 +662,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
     NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:src];
     if (!dict) {
-        GHLSSPrefsLogLine("v43 prefs-config import: export file unreadable");
+        char buf[512];
+        snprintf(buf, sizeof(buf), "v43 prefs-config import: export file unreadable %s", [src UTF8String]);
+        GHLSSPrefsLogLine(buf);
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导入失败") message:GHLSSRuntimeString("导出的配置文件读不出来。")];
         return;
     }
@@ -641,7 +677,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         CFRelease(domain);
     }
     [self reloadSpecifiers];
-    GHLSSPrefsLogLine("v43 prefs-config import: applied via CFPreferences");
+    char buf[512];
+    snprintf(buf, sizeof(buf), "v43 prefs-config import: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
+    GHLSSPrefsLogLine(buf);
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导入配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
 }
 
@@ -659,7 +697,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
     NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:src];
     if (!dict) {
-        GHLSSPrefsLogLine("v43 prefs-config restore: backup file unreadable");
+        char buf[512];
+        snprintf(buf, sizeof(buf), "v43 prefs-config restore: backup file unreadable %s", [src UTF8String]);
+        GHLSSPrefsLogLine(buf);
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("恢复失败") message:GHLSSRuntimeString("备份文件读不出来。")];
         return;
     }
@@ -672,7 +712,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         CFRelease(domain);
     }
     [self reloadSpecifiers];
-    GHLSSPrefsLogLine("v43 prefs-config restore: applied via CFPreferences");
+    char buf[512];
+    snprintf(buf, sizeof(buf), "v43 prefs-config restore: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
+    GHLSSPrefsLogLine(buf);
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已从备份恢复配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
 }
 
@@ -685,12 +727,13 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     GHLSSPrefsLogLine("v43 prefs-config reset entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *dst = GHLSSPrefsFilePath();
+    CFIndex clearedCount = 0;
     CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
     if (domain) {
         CFArrayRef keys = CFPreferencesCopyKeyList(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         if (keys) {
-            CFIndex count = CFArrayGetCount(keys);
-            for (CFIndex i = 0; i < count; i++) {
+            clearedCount = CFArrayGetCount(keys);
+            for (CFIndex i = 0; i < clearedCount; i++) {
                 CFStringRef k = (CFStringRef)CFArrayGetValueAtIndex(keys, i);
                 CFPreferencesSetAppValue(k, NULL, domain);
             }
@@ -705,8 +748,8 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         removed = [fm removeItemAtPath:dst error:&err];
     }
     [self reloadSpecifiers];
-    char buf[128];
-    snprintf(buf, sizeof(buf), "v43 prefs-config reset: file removed %d", removed ? 1 : 0);
+    char buf[320];
+    snprintf(buf, sizeof(buf), "v43 prefs-config reset: cleared %ld keys, file %s removed %d", (long)clearedCount, [dst UTF8String], removed ? 1 : 0);
     GHLSSPrefsLogLine(buf);
     if (removed) {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已重置为默认配置") message:GHLSSRuntimeString("全部设置已恢复默认（备份文件还在），请重新启动 SpringBoard 生效。")];
@@ -720,6 +763,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 //（浮窗尺寸／任務欄／懸浮球那幾項 2 秒 tick 會自己跟上）。
 - (void)ghlssApplyLayoutGame:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-layout: game applied");
     GHLSSWritePrefsBool("gameModeEnabled", YES);
     GHLSSWritePrefsBool("arcEnabled", YES);
     GHLSSWritePrefsBool("centerOnOpen", NO);
@@ -736,6 +780,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)ghlssApplyLayoutWork:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-layout: work applied");
     GHLSSWritePrefsBool("gameModeEnabled", NO);
     GHLSSWritePrefsBool("centerOnOpen", YES);
     GHLSSWritePrefsDouble("cornerRadius", 35);
@@ -750,6 +795,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)ghlssApplyLayoutDefault:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-layout: default applied");
     GHLSSWritePrefsBool("gameModeEnabled", NO);
     GHLSSWritePrefsBool("arcEnabled", YES);
     GHLSSWritePrefsBool("centerOnOpen", NO);
@@ -776,6 +822,12 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @end
 
 @implementation GHLSSAppPickerListController
+
+// v43：記進了哪一頁。
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: AppPicker");
+}
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
@@ -859,6 +911,10 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     if ([key hasPrefix:selPrefix]) {
         NSString *bidStr = [key substringFromIndex:[selPrefix length]];
         BOOL ok = GHLSSSetAppInLauncherPrefs([bidStr UTF8String], on);
+        // v43：記自選 App 加／減（槽位滿了也會記，開關彈回關的原因就有了）。
+        char buf[320];
+        snprintf(buf, sizeof(buf), "v43 prefs-set: sel %s = %d ok %d", [bidStr UTF8String], on ? 1 : 0, ok ? 1 : 0);
+        GHLSSPrefsLogLine(buf);
         if (!ok && on) {
             // 自選槽位滿了（7 個）：開關彈回關，告訴用戶。
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("自选 App 已满") message:GHLSSRuntimeString("最多加 7 个自选 App，先关掉一个再加。") preferredStyle:UIAlertControllerStyleAlert];
@@ -877,6 +933,12 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         CFPreferencesAppSynchronize(domain);
         CFRelease(domain);
     }
+    // v43：記固定 App 開關改了什麼值。
+    char buf[256];
+    const char *keyC = [key UTF8String];
+    const char *valC = [[value description] UTF8String];
+    snprintf(buf, sizeof(buf), "v43 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
+    GHLSSPrefsLogLine(buf);
 }
 
 @end
@@ -903,6 +965,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: LogViewer");
     UITextView *tv = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 420)];
     tv.font = [UIFont systemFontOfSize:11];
     tv.editable = NO;
@@ -970,6 +1033,12 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @end
 
 @implementation GHLSSPairListController
+
+// v43：記進了哪一頁。
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: PairList");
+}
 
 // v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1106,6 +1175,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: CardAvatar");
     CGFloat w = [UIScreen mainScreen].bounds.size.width;
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 160)];
     container.backgroundColor = [UIColor whiteColor];
@@ -1216,6 +1286,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: CardBg");
     CGFloat w = [UIScreen mainScreen].bounds.size.width;
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 200)];
     container.backgroundColor = [UIColor whiteColor];
@@ -1541,6 +1612,12 @@ static NSString *GHLSSGestureActionName(const char *value) {
 
 @implementation GHLSSGesturesListController
 
+// v43：記進了哪一頁。
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: Gestures");
+}
+
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
@@ -1633,6 +1710,12 @@ static NSString *GHLSSGestureActionName(const char *value) {
 @end
 
 @implementation GHLSSProfilesListController
+
+// v43：記進了哪一頁。
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: Profiles");
+}
 
 // v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1756,6 +1839,12 @@ static NSString *GHLSSGestureActionName(const char *value) {
 
 @implementation GHLSSPageResetController
 
+// v43：記進了哪一頁。
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    GHLSSPrefsLogLine("v43 prefs-page: PageReset");
+}
+
 // v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
@@ -1782,12 +1871,16 @@ static NSString *GHLSSGestureActionName(const char *value) {
 - (void)ghlssResetThisPage:(PSSpecifier *)specifier {
     (void)specifier;
     NSArray *keys = self.specifier.properties[GHLSSRuntimeString("pageKeys")];
+    char buf[160];
+    snprintf(buf, sizeof(buf), "v43 prefs-reset-page: %lu keys", (unsigned long)(keys ? [keys count] : 0));
+    GHLSSPrefsLogLine(buf);
     if (keys) {
         for (NSString *k in keys) {
             if (![k isKindOfClass:[NSString class]]) continue;
             GHLSSDeletePrefsKey([k UTF8String]);
         }
     }
+    GHLSSPrefsLogLine("v43 prefs-reset-page: done");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已重置本頁為默認") message:GHLSSRuntimeString("這一頁的設置已恢復預設值（別頁不動），請重新啟動 SpringBoard 生效。") preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
