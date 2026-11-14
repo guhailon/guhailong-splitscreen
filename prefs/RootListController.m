@@ -965,7 +965,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @end
 
 // ── v46 排序頁 ──
-// 兩個排序頁都是動態頁（行數看啟動器裡有幾個 App／工具欄固定 5 顆鈕），
+// 兩個排序頁都是動態頁（行數看啟動器裡有幾個 App／工具欄固定 4 顆鈕），
 // 表格常駐編輯模式：進頁就能拖右邊的手柄換順序，鬆手立刻存 prefs。
 // PSListController 的表格只有一個 section（一個 PSGroupCell + 若干行），
 // moveRowAtIndexPath 的 row 下標直接對到 orderedBids／orderedIDs 的下標。
@@ -1078,17 +1078,19 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 
 @end
 
-// v46：「三屏工具欄排序」——拖動換浮窗控制條五顆鈕的左右順序
-// （關閉／最小化／透明度／釘選／縮放）。順序存 prefs 鍵
-// toolbarOrder（逗號分隔）；預設 close,minimize,opacity,pin,scale。
-// 前兩顆排左邊，後三顆排右邊；窄側窗只放得下關閉／最小化／縮放。
+// v46：「三屏工具欄排序」——拖動換浮窗控制條四顆鈕的左右順序
+// （關閉／最小化／釘選／縮放）。順序存 prefs 鍵
+// toolbarOrder（逗號分隔）；預設 close,minimize,pin,scale。
+// v47：「透」拿掉，舊順序表裡殘留的 "opacity" 讀進來直接過濾掉
+// （只認下面四個識別字，不會崩、不會出幽靈行）。
+// 前兩顆排左邊，後兩顆排右邊；窄側窗只放得下關閉／最小化／縮放。
 // 新開的窗照新順序；活動窗 2 秒內跟著重排（tick 裡調
 // GHLSSRelayoutActiveTitleBar）。
-static const char *GHLSSToolbarSortIDs[5] = {
-    "close", "minimize", "opacity", "pin", "scale"
+static const char *GHLSSToolbarSortIDs[4] = {
+    "close", "minimize", "pin", "scale"
 };
-static const char *GHLSSToolbarSortNames[5] = {
-    "关闭", "最小化", "透明度", "钉选", "缩放"
+static const char *GHLSSToolbarSortNames[4] = {
+    "关闭", "最小化", "钉选", "缩放"
 };
 
 @interface GHLSSToolbarSortListController : PSListController
@@ -1110,14 +1112,14 @@ static const char *GHLSSToolbarSortNames[5] = {
         if (rawStr && [rawStr length] > 0) {
             NSArray *parts = [rawStr componentsSeparatedByString:GHLSSRuntimeString(",")];
             for (NSString *tid in parts) {
-                for (int i = 0; i < 5; i++) {
+                for (int i = 0; i < 4; i++) {
                     NSString *known = [NSString stringWithCString:GHLSSToolbarSortIDs[i] encoding:NSUTF8StringEncoding];
                     if ([tid isEqualToString:known] && ![ordered containsObject:tid]) [ordered addObject:tid];
                 }
             }
         }
     }
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         NSString *known = [NSString stringWithCString:GHLSSToolbarSortIDs[i] encoding:NSUTF8StringEncoding];
         if (![ordered containsObject:known]) [ordered addObject:known];
     }
@@ -1133,11 +1135,11 @@ static const char *GHLSSToolbarSortNames[5] = {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
         PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-        [group setProperty:GHLSSRuntimeString("五颗钮：关闭（红 X）、最小化（黄 -）、透明度（透）、钉选（钉）、缩放（±）。拖右边的手柄换顺序，松手立刻存；前两颗排左边，后三颗排右边；窄侧窗只放得下关闭／最小化／缩放。新开的窗照新顺序，活动窗 2 秒内跟着重排。") forKey:GHLSSRuntimeString("footerText")];
+        [group setProperty:GHLSSRuntimeString("四颗钮：关闭、最小化、钉选、缩放，都是毛玻璃圆钮、白符号。拖右边的手柄换顺序，松手立刻存；前两颗排左边，后两颗排右边；窄侧窗只放得下关闭／最小化／缩放。新开的窗照新顺序，活动窗 2 秒内跟着重排。") forKey:GHLSSRuntimeString("footerText")];
         [specs addObject:group];
         for (NSString *tid in self.orderedIDs) {
             NSString *name = tid;
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 4; i++) {
                 NSString *known = [NSString stringWithCString:GHLSSToolbarSortIDs[i] encoding:NSUTF8StringEncoding];
                 if ([tid isEqualToString:known]) { name = GHLSSRuntimeString(GHLSSToolbarSortNames[i]); break; }
             }

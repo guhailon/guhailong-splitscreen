@@ -994,11 +994,10 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)showNotificationBannerWithText:(const char *)text;
 - (void)openAppFullscreen:(const char *)bundleID;
 - (void)handleScreenCaptureChanged:(NSNotification *)note;
-// v42：控制條新鈕（釘選/透明度）+ 尺寸預設 + 手勢自定義（綁細條）。
+// v42：控制條新鈕（釘選）+ 尺寸預設 + 手勢自定義（綁細條）。
+// v47：「透」拿掉，下面三個方法一起刪（handleOpacityButton／
+// handleOpacitySlider／handleOpacitySliderEnded）。
 - (void)handlePinButton:(UIButton *)sender;
-- (void)handleOpacityButton:(UIButton *)sender;
-- (void)handleOpacitySlider:(UISlider *)sender;
-- (void)handleOpacitySliderEnded:(UISlider *)sender;
 - (void)handleSizePresetButton:(UIButton *)sender;
 - (void)handleGestureTripleTap:(UITapGestureRecognizer *)recognizer;
 - (void)handleGestureSwipeVertical:(UISwipeGestureRecognizer *)recognizer;
@@ -1094,7 +1093,7 @@ static CGFloat GHLSSHostedScaleRatio = 1.0;
 // 标题栏的缩放按钮（±）与滑杆条（UISlider + 百分比），见 buildHostedWindow。
 static UIButton *GHLSSHostedScaleButton = nil;
 // v46：控制條的關閉／最小化鈕（排序頁要能重排整條控制條，
-// 五顆鈕都要有全局指針 + 每 App 緩存，和 ±／釘／透同一做法）。
+// 四顆鈕都要有全局指針 + 每 App 緩存，和 ±／釘同一做法）。
 static UIButton *GHLSSHostedCloseButton = nil;
 static UIButton *GHLSSHostedMinButton = nil;
 static UIView *GHLSSHostedScaleSliderBar = nil;
@@ -1172,12 +1171,9 @@ static UIButton *GHLSSCacheScaleButtons[GHLSS_APP_COUNT];
 static UIView *GHLSSCacheScaleSliderBars[GHLSS_APP_COUNT];
 static UISlider *GHLSSCacheScaleSliders[GHLSS_APP_COUNT];
 static UILabel *GHLSSCacheScaleLabels[GHLSS_APP_COUNT];
-// v42：每 App 的透明度滑桿條（跟縮放條同一做法）+ 釘選鈕（控制條裡）。
-static UIView *GHLSSCacheOpacitySliderBars[GHLSS_APP_COUNT];
-static UISlider *GHLSSCacheOpacitySliders[GHLSS_APP_COUNT];
-static UILabel *GHLSSCacheOpacityLabels[GHLSS_APP_COUNT];
+// v42：每 App 的釘選鈕（控制條裡；v47「透」拿掉，透明度滑桿條的
+// 三個緩存數組一起刪）。
 static UIButton *GHLSSCachePinButtons[GHLSS_APP_COUNT];
-static UIButton *GHLSSCacheOpacityButtons[GHLSS_APP_COUNT];
 // v46：控制條關閉／最小化鈕的每 App 緩存（同上）。
 static UIButton *GHLSSCacheCloseButtons[GHLSS_APP_COUNT];
 static UIButton *GHLSSCacheMinButtons[GHLSS_APP_COUNT];
@@ -1224,12 +1220,8 @@ static char GHLSSARCPairMain[128] = {0};
 static char GHLSSARCPairOther[128] = {0};
 // v42：側窗分隔線當次厚度（建窗時讀設定記下，拖動時用同一份）。
 static CGFloat GHLSSHostedSideDividerThickness = 16.0;
-// v42：透明度滑桿條的活動量（跟縮放條同一做法）。
-static UIView *GHLSSHostedOpacitySliderBar = nil;
-static UISlider *GHLSSHostedOpacitySlider = nil;
-static UILabel *GHLSSHostedOpacityLabel = nil;
+// v42：釘選鈕的活動量（v47「透」拿掉，透明度滑桿條的三個活動量一起刪）。
 static UIButton *GHLSSHostedPinButton = nil;
-static UIButton *GHLSSHostedOpacityButton = nil;
 // 当前活动的是缓存里的第几个 App（-1 = 没有活动窗）。
 static int GHLSSActiveAppIndex = -1;
 
@@ -1291,12 +1283,8 @@ GHLSSCacheScaleButtons[i] = GHLSSHostedScaleButton;
 GHLSSCacheScaleSliderBars[i] = GHLSSHostedScaleSliderBar;
 GHLSSCacheScaleSliders[i] = GHLSSHostedScaleSlider;
 GHLSSCacheScaleLabels[i] = GHLSSHostedScaleLabel;
-// v42：透明度滑桿條 + 釘選鈕跟著同一份緩存走。
-GHLSSCacheOpacitySliderBars[i] = GHLSSHostedOpacitySliderBar;
-GHLSSCacheOpacitySliders[i] = GHLSSHostedOpacitySlider;
-GHLSSCacheOpacityLabels[i] = GHLSSHostedOpacityLabel;
+// v42：釘選鈕跟著同一份緩存走（v47「透」拿掉）。
 GHLSSCachePinButtons[i] = GHLSSHostedPinButton;
-GHLSSCacheOpacityButtons[i] = GHLSSHostedOpacityButton;
 // v46：關閉／最小化鈕跟著同一份緩存走。
 GHLSSCacheCloseButtons[i] = GHLSSHostedCloseButton;
 GHLSSCacheMinButtons[i] = GHLSSHostedMinButton;
@@ -1329,12 +1317,8 @@ GHLSSHostedScaleButton = GHLSSCacheScaleButtons[idx];
 GHLSSHostedScaleSliderBar = GHLSSCacheScaleSliderBars[idx];
 GHLSSHostedScaleSlider = GHLSSCacheScaleSliders[idx];
 GHLSSHostedScaleLabel = GHLSSCacheScaleLabels[idx];
-// v42：透明度滑桿條 + 釘選鈕跟著同一份緩存走。
-GHLSSHostedOpacitySliderBar = GHLSSCacheOpacitySliderBars[idx];
-GHLSSHostedOpacitySlider = GHLSSCacheOpacitySliders[idx];
-GHLSSHostedOpacityLabel = GHLSSCacheOpacityLabels[idx];
+// v42：釘選鈕跟著同一份緩存走（v47「透」拿掉）。
 GHLSSHostedPinButton = GHLSSCachePinButtons[idx];
-GHLSSHostedOpacityButton = GHLSSCacheOpacityButtons[idx];
 // v46：關閉／最小化鈕跟著同一份緩存走。
 GHLSSHostedCloseButton = GHLSSCacheCloseButtons[idx];
 GHLSSHostedMinButton = GHLSSCacheMinButtons[idx];
@@ -1365,12 +1349,8 @@ GHLSSHostedScaleButton = nil;
 GHLSSHostedScaleSliderBar = nil;
 GHLSSHostedScaleSlider = nil;
 GHLSSHostedScaleLabel = nil;
-// v42：透明度滑桿條 + 釘選鈕一起清。
-GHLSSHostedOpacitySliderBar = nil;
-GHLSSHostedOpacitySlider = nil;
-GHLSSHostedOpacityLabel = nil;
+// v42：釘選鈕一起清（v47「透」拿掉）。
 GHLSSHostedPinButton = nil;
-GHLSSHostedOpacityButton = nil;
 // v46：關閉／最小化鈕一起清。
 GHLSSHostedCloseButton = nil;
 GHLSSHostedMinButton = nil;
@@ -1440,12 +1420,8 @@ GHLSSCacheScaleButtons[idx] = nil;
 GHLSSCacheScaleSliderBars[idx] = nil;
 GHLSSCacheScaleSliders[idx] = nil;
 GHLSSCacheScaleLabels[idx] = nil;
-// v42：透明度滑桿條 + 釘選鈕 + 演示藏旗標一起清。
-GHLSSCacheOpacitySliderBars[idx] = nil;
-GHLSSCacheOpacitySliders[idx] = nil;
-GHLSSCacheOpacityLabels[idx] = nil;
+// v42：釘選鈕 + 演示藏旗標一起清（v47「透」拿掉）。
 GHLSSCachePinButtons[idx] = nil;
-GHLSSCacheOpacityButtons[idx] = nil;
 GHLSSCacheCloseButtons[idx] = nil;
 GHLSSCacheMinButtons[idx] = nil;
 GHLSSCacheHiddenByDemo[idx] = NO;
@@ -2973,25 +2949,26 @@ return NO;
 }
 
 // ── v46：排序頁的順序鍵 ──
-// 三屏工具欄排序（toolbarOrder）：控制條五顆鈕的左右順序，
-// 逗號分隔（close／minimize／opacity／pin／scale）；沒設或
-// 寫壞了就回預設順序。預設 = 現在的排法：左邊關閉／最小化，
-// 右邊透明／釘選／縮放。
-static const char *GHLSSDefaultToolbarOrder[5] = {
-"close", "minimize", "opacity", "pin", "scale"
+// 三屏工具欄排序（toolbarOrder）：控制條四顆鈕的左右順序，
+// 逗號分隔（close／minimize／pin／scale）；沒設或寫壞了就回
+// 預設順序。預設 = 現在的排法：左邊關閉／最小化，右邊釘選／縮放。
+// v47：「透」拿掉，舊順序表裡殘留的 "opacity" 讀進來直接過濾掉
+// （只認下面四個識別字，不會崩、不會出幽靈鈕）。
+static const char *GHLSSDefaultToolbarOrder[4] = {
+"close", "minimize", "pin", "scale"
 };
 static NSArray *GHLSSReadToolbarOrder(void) {
 NSArray *raw = GHLSSReadIDList("toolbarOrder");
 NSMutableArray *order = [NSMutableArray array];
 for (id item in raw) {
 if (![item isKindOfClass:[NSString class]]) continue;
-for (int i = 0; i < 5; i++) {
+for (int i = 0; i < 4; i++) {
 NSString *known = [NSString stringWithCString:GHLSSDefaultToolbarOrder[i] encoding:NSUTF8StringEncoding];
 if ([(NSString *)item isEqualToString:known] && ![order containsObject:item]) [order addObject:item];
 }
 }
-// 缺的按預設順序補回來（只寫了兩顆也行，剩下三顆照預設排）。
-for (int i = 0; i < 5; i++) {
+// 缺的按預設順序補回來（只寫了兩顆也行，剩下照預設排）。
+for (int i = 0; i < 4; i++) {
 NSString *known = [NSString stringWithCString:GHLSSDefaultToolbarOrder[i] encoding:NSUTF8StringEncoding];
 if (![order containsObject:known]) [order addObject:known];
 }
@@ -3017,16 +2994,49 @@ static UIButton *GHLSSToolbarButtonForID(NSString *tid) {
 if (!tid) return nil;
 if ([tid isEqualToString:[NSString stringWithCString:"close" encoding:NSUTF8StringEncoding]]) return GHLSSHostedCloseButton;
 if ([tid isEqualToString:[NSString stringWithCString:"minimize" encoding:NSUTF8StringEncoding]]) return GHLSSHostedMinButton;
-if ([tid isEqualToString:[NSString stringWithCString:"opacity" encoding:NSUTF8StringEncoding]]) return GHLSSHostedOpacityButton;
 if ([tid isEqualToString:[NSString stringWithCString:"pin" encoding:NSUTF8StringEncoding]]) return GHLSSHostedPinButton;
 if ([tid isEqualToString:[NSString stringWithCString:"scale" encoding:NSUTF8StringEncoding]]) return GHLSSHostedScaleButton;
 return nil;
 }
-// v46：按 toolbarOrder 排活動窗控制條的五顆鈕：順序表前兩顆放左邊
-// （x=10、44），後三顆放右邊（winW-104、winW-70、winW-36）；
-// 標題永遠居中（左右各兩顆／三顆，標題框不動）。窄側窗（<200pt）
+// v47：控制條毛玻璃圓鈕（皇上 19:40 挑方案五）——UIVisualEffectView
+// 淺色毛玻璃圓底（SystemMaterialLight）＋白 0.5 細邊＋白符號；
+// 32pt 圓。釘選態是金底（毛玻璃藏起來），一眼分得出。
+#define GHLSS_FROSTED_BTN_TAG 9001
+static UIButton *GHLSSMakeFrostedControlButton(void) {
+UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
+b.backgroundColor = [UIColor clearColor];
+b.layer.cornerRadius = 16.0;
+UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialLight];
+UIVisualEffectView *ev = [[UIVisualEffectView alloc] initWithEffect:blur];
+ev.frame = b.bounds;
+ev.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+ev.layer.cornerRadius = 16.0;
+ev.clipsToBounds = YES;
+ev.layer.borderWidth = 1.0;
+ev.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.5].CGColor;
+ev.userInteractionEnabled = NO;
+ev.tag = GHLSS_FROSTED_BTN_TAG;
+[b insertSubview:ev atIndex:0];
+[b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+b.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+return b;
+}
+static void GHLSSSetFrostedButtonPinned(UIButton *b, BOOL pinned) {
+if (!b) return;
+UIView *ev = [b viewWithTag:GHLSS_FROSTED_BTN_TAG];
+if (pinned) {
+if (ev) ev.hidden = YES;
+b.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
+} else {
+if (ev) ev.hidden = NO;
+b.backgroundColor = [UIColor clearColor];
+}
+}
+// v47：按 toolbarOrder 排活動窗控制條的四顆鈕：順序表前兩顆放左邊
+// （x=8、46），後兩顆放右邊（winW-78、winW-40）；32pt 圓、y=2。
+// 標題在兩邊鈕中間（x=86、寬 winW-170）。窄側窗（<200pt）
 // 只放得下關閉／最小化／縮放：左邊兩格按順序表裡關閉／最小化的
-// 先後，縮放固定右邊 winW-36；釘／透本來就沒有。tick 每 2 秒調
+// 先後，縮放固定右邊 winW-40；釘本來就沒有。tick 每 2 秒調
 // 一次（活動窗）：順序改了 2 秒內生效；拖調尺寸後鈕也自動回右緣
 // （舊問題順手修：以前 resize 只改標題欄框，鈕留在舊 x）。
 static void GHLSSRelayoutActiveTitleBar(void) {
@@ -3034,14 +3044,14 @@ if (!GHLSSHostedTitleBar) return;
 CGFloat winW = GHLSSHostedTitleBar.frame.size.width;
 if (winW <= 0) return;
 NSArray *order = GHLSSReadToolbarOrder();
-CGFloat leftX[2] = {10.0, 44.0};
-CGFloat rightX[3] = {winW - 104.0, winW - 70.0, winW - 36.0};
+CGFloat leftX[2] = {8.0, 46.0};
+CGFloat rightX[2] = {winW - 78.0, winW - 40.0};
 if (winW >= 200.0) {
-for (int i = 0; i < 5 && i < (int)[order count]; i++) {
+for (int i = 0; i < 4 && i < (int)[order count]; i++) {
 UIButton *b = GHLSSToolbarButtonForID([order objectAtIndex:i]);
 if (!b) continue;
 CGFloat x = (i < 2) ? leftX[i] : rightX[i - 2];
-b.frame = CGRectMake(x, 5, 26, 26);
+b.frame = CGRectMake(x, 2, 32, 32);
 }
 } else {
 int li = 0;
@@ -3049,14 +3059,14 @@ for (id item in order) {
 UIButton *b = GHLSSToolbarButtonForID(item);
 if (!b) continue;
 if (b == GHLSSHostedScaleButton) {
-b.frame = CGRectMake(winW - 36, 5, 26, 26);
+b.frame = CGRectMake(winW - 40, 2, 32, 32);
 } else if (li < 2) {
-b.frame = CGRectMake(leftX[li], 5, 26, 26);
+b.frame = CGRectMake(leftX[li], 2, 32, 32);
 li++;
 }
 }
 }
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(78, 0, winW - 190, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, winW - 170, GHLSS_HOSTED_CONTROL_H);
 }
 // v46：哆啦A夢鈕大小／左右邊改完 2 秒內生效（不用 respring）：
 // tick 裡比對設定值跟上次套用的值，變了才重排。拖動中不碰——
@@ -4637,34 +4647,8 @@ sizeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:13];
 [scaleBar addSubview:sizeBtn];
 }
 }
-// v42：透明度滑桿條（預設藏著）——點控制條的「透」鈕展開，
-// 在縮放條下面（y=108，36pt）；滑桿 0.5–1.0，調窗的 alpha，
-// 每窗單獨存（winOpacity_<bid>），松手才存。
-UIView *opacityBar = [[UIView alloc] initWithFrame:CGRectMake(0, GHLSS_HOSTED_CONTROL_H + 72, winW, 36)];
-opacityBar.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
-opacityBar.hidden = YES;
-[container addSubview:opacityBar];
-GHLSSHostedOpacitySliderBar = opacityBar;
-UISlider *opacitySlider = [[UISlider alloc] initWithFrame:CGRectMake(10, 3, winW - 70, 30)];
-opacitySlider.minimumValue = 0.5;
-opacitySlider.maximumValue = 1.0;
-opacitySlider.value = GHLSSReadWindowOpacityForBundleID(bundleID);
-opacitySlider.minimumTrackTintColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-[opacitySlider addTarget:self action:@selector(handleOpacitySlider:) forControlEvents:UIControlEventValueChanged];
-[opacitySlider addTarget:self action:@selector(handleOpacitySliderEnded:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside];
-[opacityBar addSubview:opacitySlider];
-GHLSSHostedOpacitySlider = opacitySlider;
-UILabel *opacityLabel = [[UILabel alloc] initWithFrame:CGRectMake(winW - 56, 3, 46, 30)];
-{
-char pbuf[32];
-snprintf(pbuf, sizeof(pbuf), "%d%%", (int)(GHLSSReadWindowOpacityForBundleID(bundleID) * 100.0));
-opacityLabel.text = [NSString stringWithCString:pbuf encoding:NSUTF8StringEncoding];
-}
-opacityLabel.textColor = [UIColor whiteColor];
-opacityLabel.font = [UIFont boldSystemFontOfSize:14];
-opacityLabel.textAlignment = NSTextAlignmentCenter;
-[opacityBar addSubview:opacityLabel];
-GHLSSHostedOpacityLabel = opacityLabel;
+// v47：「透」拿掉——透明度滑桿條整個刪掉（透明度只留在系統設定
+// 浮窗設置裡）；每窗讀值 winOpacity_<bid> 還留著（沒設走全域）。
 // v38：窗顶上的 24pt 透明细条（拖动窗 + 点它展开/收起控制条，
 // 唯一的常驻装饰——App 名（12pt，置中）+ 一颗 72x6 的白点小 pill，
 // alpha 0.7、贴条底）。
@@ -4745,86 +4729,53 @@ UITapGestureRecognizer *barTap = [[UITapGestureRecognizer alloc] initWithTarget:
 barTap.delegate = self;
 [barTap requireGestureRecognizerToFail:barDrag];
 [titleBar addGestureRecognizer:barTap];
-// 关闭钮（红圆，左）。
-UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-closeBtn.frame = CGRectMake(10, 5, 26, 26);
-closeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0];
-closeBtn.layer.cornerRadius = 13.0;
+// v47：關閉鈕（毛玻璃圓，左）。
+UIButton *closeBtn = GHLSSMakeFrostedControlButton();
+closeBtn.frame = CGRectMake(8, 2, 32, 32);
 [closeBtn setTitle:[NSString stringWithCString:"x" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[closeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-closeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [closeBtn addTarget:self action:@selector(handleHostedClose:) forControlEvents:UIControlEventTouchUpInside];
 [titleBar addSubview:closeBtn];
 GHLSSHostedCloseButton = closeBtn;
 // 最小化钮（黄圆，左二）：只藏窗、不销毁 scene（v40：贴边小卡——
 // 窗藏起来、右边缘留一张看得见的小卡，点卡恢复窗；见 minimizeHostedWindow）。
-UIButton *minBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-minBtn.frame = CGRectMake(44, 5, 26, 26);
-minBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.76 blue:0.03 alpha:1.0];
-minBtn.layer.cornerRadius = 13.0;
+UIButton *minBtn = GHLSSMakeFrostedControlButton();
+minBtn.frame = CGRectMake(46, 2, 32, 32);
 [minBtn setTitle:[NSString stringWithCString:"-" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[minBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-minBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [minBtn addTarget:self action:@selector(handleHostedMinimize:) forControlEvents:UIControlEventTouchUpInside];
 [titleBar addSubview:minBtn];
 GHLSSHostedMinButton = minBtn;
-// 标题：App 名，居中（v42：給「透」「釘」兩顆鈕讓位，標題只到 winW-112；
+// 标题：App 名，居中（v47：左右各兩顆 32pt 毛玻璃鈕，標題從 86 到 winW-84；
 // 窄側窗本來就放不下標題，跟以前一樣不顯示）。
-UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(78, 0, winW - 190, GHLSS_HOSTED_CONTROL_H)];
+UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(86, 0, winW - 170, GHLSS_HOSTED_CONTROL_H)];
 titleLabel.text = [NSString stringWithCString:name encoding:NSUTF8StringEncoding];
 titleLabel.textColor = [UIColor whiteColor];
 titleLabel.font = [UIFont boldSystemFontOfSize:16];
 titleLabel.textAlignment = NSTextAlignmentCenter;
 [titleBar addSubview:titleLabel];
 GHLSSHostedTitleLabel = titleLabel;
-// v38：缩放按钮（±，26x26 圆钮，控制条右边，和红 X、黄最小化一样
-// 大）——点一下展开/收起内容区顶上的缩放滑杆条。标题写在 winW-36，
-// 标题 label 只到 winW-78，不重叠。
-UIButton *scaleBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-scaleBtn.frame = CGRectMake(winW - 36, 5, 26, 26);
-scaleBtn.backgroundColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0];
-scaleBtn.layer.cornerRadius = 13.0;
-scaleBtn.layer.borderWidth = 1.0;
-scaleBtn.layer.borderColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0].CGColor;
+// v38：缩放按钮（±，32pt 毛玻璃圓鈕，控制條右邊）——點一下展開/收起
+// 內容區頂上的縮放滑桿條。
+UIButton *scaleBtn = GHLSSMakeFrostedControlButton();
+scaleBtn.frame = CGRectMake(winW - 40, 2, 32, 32);
 [scaleBtn setTitle:[NSString stringWithCString:"±" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[scaleBtn setTitleColor:[UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0] forState:UIControlStateNormal];
-scaleBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [scaleBtn addTarget:self action:@selector(handleScaleButton:) forControlEvents:UIControlEventTouchUpInside];
 [titleBar addSubview:scaleBtn];
 GHLSSHostedScaleButton = scaleBtn;
-// v42：釘選鈕（「釘」，winW-70）+ 透明度鈕（「透」，winW-104）；
-// 窄側窗（<200pt）不放這兩顆（放不下，控制條只留紅 X/黃最小化/±）。
+// v42：釘選鈕（「釘」，winW-78）；v47：「透」拿掉，不再建。
+// 窄側窗（<200pt）不放這顆（放不下，控制條只留關閉／最小化／±）。
 // 釘住的窗金底、層級提到最上層（見 GHLSSBringWindowToFront）。
 if (winW >= 200.0) {
-UIButton *pinBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-pinBtn.frame = CGRectMake(winW - 70, 5, 26, 26);
-pinBtn.backgroundColor = GHLSSIsWindowPinned(bundleID) ? [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0] : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0];
-pinBtn.layer.cornerRadius = 13.0;
-pinBtn.layer.borderWidth = 1.0;
-pinBtn.layer.borderColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0].CGColor;
+UIButton *pinBtn = GHLSSMakeFrostedControlButton();
+pinBtn.frame = CGRectMake(winW - 78, 2, 32, 32);
 [pinBtn setTitle:[NSString stringWithCString:"釘" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[pinBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-pinBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
 [pinBtn addTarget:self action:@selector(handlePinButton:) forControlEvents:UIControlEventTouchUpInside];
 [titleBar addSubview:pinBtn];
 GHLSSHostedPinButton = pinBtn;
-UIButton *opacityBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-opacityBtn.frame = CGRectMake(winW - 104, 5, 26, 26);
-opacityBtn.backgroundColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0];
-opacityBtn.layer.cornerRadius = 13.0;
-opacityBtn.layer.borderWidth = 1.0;
-opacityBtn.layer.borderColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0].CGColor;
-[opacityBtn setTitle:[NSString stringWithCString:"透" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[opacityBtn setTitleColor:[UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0] forState:UIControlStateNormal];
-opacityBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-[opacityBtn addTarget:self action:@selector(handleOpacityButton:) forControlEvents:UIControlEventTouchUpInside];
-[titleBar addSubview:opacityBtn];
-GHLSSHostedOpacityButton = opacityBtn;
+GHLSSSetFrostedButtonPinned(pinBtn, GHLSSIsWindowPinned(bundleID));
 } else {
 GHLSSHostedPinButton = nil;
-GHLSSHostedOpacityButton = nil;
 }
-// v46：控制條五顆鈕按 toolbarOrder 排（預設就是上面寫死的那個順序，
+// v47：控制條四顆鈕按 toolbarOrder 排（預設就是上面寫死的那個順序，
 // 視覺不變；順序改了新開的窗照新順序，活動窗 2 秒內跟著重排）。
 GHLSSRelayoutActiveTitleBar();
 // v40：右下角缩放手柄（36x36 触摸区——比说的 24 稍大，好抓；
@@ -5326,10 +5277,6 @@ GHLSSHostedTitleBar.hidden = !GHLSSHostedTitleBar.hidden;
 if (GHLSSHostedTitleBar.hidden && GHLSSHostedScaleSliderBar) {
 GHLSSHostedScaleSliderBar.hidden = YES;
 }
-// v42：控制條收起來時，透明度滑桿條也跟著收起來。
-if (GHLSSHostedTitleBar.hidden && GHLSSHostedOpacitySliderBar) {
-GHLSSHostedOpacitySliderBar.hidden = YES;
-}
 GHLSSLogLine("v47 control bar toggled");
 }
 
@@ -5358,10 +5305,9 @@ if (GHLSSHostedContainer) GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, ne
 if (GHLSSHostedContentView) GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(78, 0, newW - 190, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 36, 5, 26, 26);
-if (GHLSSHostedPinButton) GHLSSHostedPinButton.frame = CGRectMake(newW - 70, 5, 26, 26);
-if (GHLSSHostedOpacityButton) GHLSSHostedOpacityButton.frame = CGRectMake(newW - 104, 5, 26, 26);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 40, 2, 32, 32);
+if (GHLSSHostedPinButton) GHLSSHostedPinButton.frame = CGRectMake(newW - 78, 2, 32, 32);
 if (GHLSSHostedScaleSliderBar) {
 GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSS_HOSTED_CONTROL_H, newW, 72);
 for (UIView *sub in GHLSSHostedScaleSliderBar.subviews) {
@@ -5373,9 +5319,6 @@ sub.frame = CGRectMake(newW - 140 + sp * 44, 39, 40, 28);
 }
 if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, newW - 70, 30);
 if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
-if (GHLSSHostedOpacitySliderBar) GHLSSHostedOpacitySliderBar.frame = CGRectMake(0, GHLSS_HOSTED_CONTROL_H + 72, newW, 36);
-if (GHLSSHostedOpacitySlider) GHLSSHostedOpacitySlider.frame = CGRectMake(10, 3, newW - 70, 30);
-if (GHLSSHostedOpacityLabel) GHLSSHostedOpacityLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
 if (GHLSSHostedResizeHandle) GHLSSHostedResizeHandle.frame = CGRectMake(newW - 36, newH - 36, 36, 36);
 if (GHLSSHostedSideDivider) GHLSSHostedSideDivider.hidden = YES;
 GHLSSHostedIsSideDock = NO;
@@ -5400,9 +5343,7 @@ NSString *bidStr = [NSString stringWithCString:GHLSSHostedBundleID encoding:NSUT
 [ids removeObject:bidStr];
 if (!pinned) [ids insertObject:bidStr atIndex:0];
 GHLSSWriteIDList("pinnedWindowIDs", ids);
-if (GHLSSHostedPinButton) {
-GHLSSHostedPinButton.backgroundColor = !pinned ? [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0] : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0];
-}
+GHLSSSetFrostedButtonPinned(GHLSSHostedPinButton, !pinned);
 GHLSSBringWindowToFront(GHLSSHostedWindow);
 char buf[256];
 snprintf(buf, sizeof(buf), "v47 window %s %s", GHLSSHostedBundleID, !pinned ? "pinned" : "unpinned");
@@ -5426,37 +5367,6 @@ if ([sender isKindOfClass:[UIView class]]) {
 GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
 }
 [self performGestureAction:"pin"];
-}
-
-// v42：控制條「透」鈕——展開/收起透明度滑桿條。
-- (void)handleOpacityButton:(UIButton *)sender {
-if ([sender isKindOfClass:[UIView class]]) {
-GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
-}
-if (!GHLSSHostedOpacitySliderBar) return;
-GHLSSHostedOpacitySliderBar.hidden = !GHLSSHostedOpacitySliderBar.hidden;
-if (!GHLSSHostedOpacitySliderBar.hidden && GHLSSHostedOpacitySlider) {
-GHLSSHostedOpacitySlider.value = GHLSSReadWindowOpacityForBundleID(GHLSSHostedBundleID);
-}
-GHLSSLogLine("v47 opacity bar toggled");
-}
-
-// v42：透明度滑桿——拖動即改窗的 alpha；松手才存每窗值。
-- (void)handleOpacitySlider:(UISlider *)sender {
-if (!GHLSSHostedWindow) return;
-GHLSSHostedWindow.alpha = sender.value;
-if (GHLSSHostedOpacityLabel) {
-char pbuf[32];
-snprintf(pbuf, sizeof(pbuf), "%d%%", (int)(sender.value * 100.0));
-GHLSSHostedOpacityLabel.text = [NSString stringWithCString:pbuf encoding:NSUTF8StringEncoding];
-}
-}
-- (void)handleOpacitySliderEnded:(UISlider *)sender {
-if (GHLSSHostedBundleID[0] == '\0') return;
-char key[192];
-snprintf(key, sizeof(key), "winOpacity_%s", GHLSSHostedBundleID);
-GHLSSWritePrefsDouble(key, (double)sender.value);
-GHLSSLogLine("v47 window opacity saved");
 }
 
 // v42：尺寸預設鈕（小/中/大，tag 100/101/102）——窗立刻變那個尺寸
@@ -5996,7 +5906,7 @@ GHLSSCardAddRow(1, "safeDistance", "與劉海方向安全距離", "", 0, 0, 0, 1
 GHLSSCardAddRow(0, "centerOnOpen", "豎屏浮窗打開固定屏中心", "開了不記住位置、固定居中；跟「記住位置」互斥", 0, 0, 0, 0, 0, "");
 GHLSSCardAddRow(4, "windowSizePreset", "浮窗大小預設", "新窗的尺寸；控制條 ± 展開後也能點", 0, 0, 0, 0, 1, "small|medium|large");
 GHLSSCardAddRow(0, "taskbarEnabled", "底部任務欄", "開了 2 秒內建欄；開著的窗都在上面，點一下切窗", 0, 0, 0, 0, 0, "");
-GHLSSCardAddRow(1, "windowOpacityGlobal", "浮窗透明度", "新窗預設；每窗在控制條「透」鈕裡單獨調", 0, 0, 0.5, 1, 1, "");
+GHLSSCardAddRow(1, "windowOpacityGlobal", "浮窗透明度", "調全部浮窗的透明度；以前單獨調過的窗仍用舊值", 0, 0, 0.5, 1, 1, "");
 GHLSSCardAddRow(0, "shadowEnabled", "浮窗陰影", "", 0, 0, 0, 0, 1, "");
 GHLSSCardAddRow(0, "tapOutsideEnabled", "點擊浮窗外部事件", "", 0, 0, 0, 0, 1, "");
 GHLSSCardAddRow(0, "keyboardAvoidEnabled", "鍵盤彈出時浮窗自動上移", "探針：通知可能到不了 SpringBoard", 0, 0, 0, 0, 1, "");
@@ -6612,11 +6522,11 @@ if (newH > screenBounds.size.height - 120.0) newH = screenBounds.size.height - 1
 GHLSSHostedWindow.frame = CGRectMake(frame.origin.x, frame.origin.y, newW, newH);
 GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
 GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-GHLSSHostedTitleLabel.frame = CGRectMake(78, 0, newW - 156, GHLSS_HOSTED_CONTROL_H);
+GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 // v38：缩放按钮与滑杆条跟着窗宽走（按钮在控制条右边，滑杆条在控制条下面）。
-if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 36, 5, 26, 26);
+if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 40, 2, 32, 32);
 if (GHLSSHostedScaleSliderBar) GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSS_HOSTED_CONTROL_H, newW, 36);
 if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, newW - 70, 30);
 if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
@@ -6673,7 +6583,7 @@ GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
 GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(78, 0, newW - 156, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
 // 點按層與小 X 跟著小窗走（不然放大後露出的地方點了會直接碰到 App 內容）。
 if (GHLSSPeekTapOverlays[idx]) GHLSSPeekTapOverlays[idx].frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSPeekCloseButtons[idx]) GHLSSPeekCloseButtons[idx].frame = CGRectMake(newW - 22, 2, 20, 20);
@@ -7413,17 +7323,14 @@ if (GHLSSHostedContainer) GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, ne
 if (GHLSSHostedContentView) GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(78, 0, newW - 190, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 36, 5, 26, 26);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 40, 2, 32, 32);
 // v42：縮放條 72pt（含尺寸行）+ 透明度條跟著側窗寬度走；
 // 釘選鈕（窄窗本來就沒有，這裡只在有鈕時移位）。
 if (GHLSSHostedScaleSliderBar) GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSS_HOSTED_CONTROL_H, newW, 72);
 if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, newW - 70, 30);
 if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
-if (GHLSSHostedOpacitySliderBar) GHLSSHostedOpacitySliderBar.frame = CGRectMake(0, GHLSS_HOSTED_CONTROL_H + 72, newW, 36);
-if (GHLSSHostedOpacitySlider) GHLSSHostedOpacitySlider.frame = CGRectMake(10, 3, newW - 70, 30);
-if (GHLSSHostedOpacityLabel) GHLSSHostedOpacityLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
-if (GHLSSHostedPinButton) GHLSSHostedPinButton.frame = CGRectMake(newW - 70, 5, 26, 26);
+if (GHLSSHostedPinButton) GHLSSHostedPinButton.frame = CGRectMake(newW - 78, 2, 32, 32);
 if (GHLSSHostedSideDivider) {
 CGFloat divThickness = GHLSSHostedSideDividerThickness;
 CGFloat divX = dockLeft ? (newW - divThickness) : 0;

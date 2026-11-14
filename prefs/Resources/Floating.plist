@@ -98,7 +98,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>新窗的預設透明度（0.5–1.0）；每窗在控制條點「透」單獨調，松手記住。</string>
+			<string>調全部浮窗的透明度（0.5–1.0）；以前單獨調過的窗仍用舊值。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
