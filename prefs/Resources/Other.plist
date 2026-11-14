@@ -40,37 +40,11 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>除了哆啦A夢鈕，再加一顆小懸浮球：點一下開 ARC，拖到哪就記住哪。預設關（哆啦A夢鈕仍是默認觸發）；開了 2 秒內建好，不用 respring。</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>autoHideDoraemonInFullscreen</string>
-			<key>label</key>
-			<string>全屏时哆啦A夢鈕自动藏</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>偵測到前台 App 全屏（遊戲／影片）時鈕自動藏起來，退出全屏再回來。探針：靠狀態列藏沒藏判斷（全屏遊戲／影片會藏狀態列），可能誤判。</string>
-		</dict>
-		<dict>
-			<key>cell</key>
 			<string>PSLinkCell</string>
 			<key>detail</key>
 			<string>FloatingIcon</string>
 			<key>label</key>
-			<string>悬浮球与图标设置</string>
+			<string>悬浮图标设置</string>
 		</dict>
 	</array>
 	<key>title</key>

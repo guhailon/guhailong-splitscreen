@@ -61,24 +61,18 @@
 			<string>没选时跟小窗显示位置走。</string>
 		</dict>
 		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>floatBallEnabled</string>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSDoraemonIconListController</string>
 			<key>label</key>
-			<string>悬浮球</string>
+			<string>哆啦A夢鈕圖片</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>懸浮球固定是哆啦A夢圖：點一下開 ARC，長按開三屏。卡片頭像換了只變設定卡片上的頭像，球不變。哆啦A夢鈕現在永遠顯示。鈕大小改完 2 秒內生效，不用重啟。</string>
+			<string>哆啦A夢鈕的圖片可以自己換：相冊選圖、居中裁方形；長按或點恢復回默認哆啦A夢圖。鈕大小改完 2 秒內生效，不用重啟。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -96,6 +90,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>悬浮球与图标设置</string>
+	<string>悬浮图标设置</string>
 </dict>
 </plist>

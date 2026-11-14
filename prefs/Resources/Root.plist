@@ -6,19 +6,9 @@
 	<array>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSCardBgListController</string>
-			<key>label</key>
-			<string>卡片背景图</string>
-		</dict>
-		<dict>
-			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>日誌：/var/mobile/Library/Logs/GuHaiLongSplitScreen.log（Filza 可看）</string>
 			<key>label</key>
-			<string>顾海龙集团分屏 v1.0.52（实验版 v52）</string>
+			<string>顾海龙集团分屏 v1.0.53（实验版 v53）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -114,7 +104,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>遊戲布局：遊戲模式開、ARC 開、固定中心關、圓角 20、安全距離 20、陰影開、任務欄關、全屏藏哆啦A夢鈕開、浮窗大。工作布局：遊戲模式關、固定中心開、圓角 35、安全距離 50、任務欄開、浮窗中、側窗寬中、重啟恢復開。默認布局：全部回到預設值（遊戲模式關、ARC 開、固定中心關、圓角 35、安全距離 50、陰影開、任務欄關、全屏藏哆啦A夢鈕開、浮窗中、側窗寬中、重啟恢復開）。</string>
+			<string>遊戲布局：遊戲模式開、ARC 開、固定中心關、圓角 20、安全距離 20、陰影開、任務欄關、浮窗大。</string>
 			<key>label</key>
 			<string>布局预设</string>
 		</dict>
@@ -125,22 +115,6 @@
 			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>游戏布局</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssApplyLayoutWork</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>工作布局</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssApplyLayoutDefault</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>默认布局</string>
 		</dict>
 		<dict>
 			<key>cell</key>

@@ -24,7 +24,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>邊緣滑動、哆啦A夢鈕、懸浮球都能叫出 ARC；浮窗也能從三屏設置里開。</string>
+			<string>邊緣滑動、哆啦A夢鈕都能叫出 ARC；浮窗也能從三屏設置里開。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

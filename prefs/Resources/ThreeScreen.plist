@@ -242,7 +242,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>開著時，邊緣滑動（照調度設置的次數／邊）直接開三屏（用上次的組合，沒有就用最近的 App 當側窗），不再開 ARC；關著時邊緣滑動照舊開 ARC。兩個觸發不打架：這個開關只改邊緣滑動的目的地，ARC 還能從哆啦A夢鈕／懸浮球叫出來。</string>
+			<string>開著時，邊緣滑動（照調度設置的次數／邊）直接開三屏（用上次的組合，沒有就用最近的 App 當側窗），不再開 ARC；關著時邊緣滑動照舊開 ARC。兩個觸發不打架：這個開關只改邊緣滑動的目的地，ARC 還能從哆啦A夢鈕叫出來。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
