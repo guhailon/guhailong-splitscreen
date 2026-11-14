@@ -4,7 +4,7 @@
 
 ## v43 是什么（熱修復：搜索設置閃退＋查看日誌置頂）
 
-**搜索設置閃退（皇上 14:57 回報，點主頁「搜索设置」一進去就閃退）：**靜態查過——索引的 plist 名全部對得上真實檔案，搜索控制器在 macOS 包的 prefs 二進制裡，20 張 plist 都能解析，query 為 nil 也有判，沒找到單一確鑿的行。最可疑的是 v42 那套機制：程式裡現拼 PSLinkCell＋detail 類＋自訂 plistName 鍵，全設定頁只有這裡這樣寫；加上 viewDidLoad 裡先跑 super、後設 query 的時序。v43 把三個可疑點一次拿掉：結果行改 PSButtonCell＋action、自己手動 push（跟日誌頁的按鈕同一套寫法）；plist 名改走非保留字 key ghlssTargetPlist，目標頁先對 18 個白名單才載；query 在 [super viewDidLoad] 之前就設好。另外加檔日誌診斷（viewDidLoad／specifiers 進出、打字、點結果、目標頁載入都寫進分屏日誌），下次再閃退才有證據；specifiers 搭 try／catch，萬一組裝出錯只顯示錯誤頁腳、不閃退。外觀小變化：搜索結果行變藍色操作列樣式，不再有 > 箭頭；功能一樣，點一下跳頁。**查看日誌置頂（皇上 15:01）：**其他雜項功能頁裡，查看日誌移到最上面第一行；高級設置頁那份不動。其他全部 v42 功能保留。
+**搜索設置閃退（皇上 14:57 回報，點主頁「搜索设置」一進去就閃退）：**靜態查過——索引的 plist 名全部對得上真實檔案，搜索控制器在 macOS 包的 prefs 二進制裡，20 張 plist 都能解析，query 為 nil 也有判，沒找到單一確鑿的行。最可疑的是 v42 那套機制：程式裡現拼 PSLinkCell＋detail 類＋自訂 plistName 鍵，全設定頁只有這裡這樣寫；加上 viewDidLoad 裡先跑 super、後設 query 的時序。v43 把三個可疑點一次拿掉：結果行改 PSButtonCell＋action、自己手動 push（跟日誌頁的按鈕同一套寫法）；plist 名改走非保留字 key ghlssTargetPlist，目標頁先對 18 個白名單才載；query 在 [super viewDidLoad] 之前就設好。另外加檔日誌診斷（viewDidLoad／specifiers 進出、打字、點結果、目標頁載入都寫進分屏日誌），下次再閃退才有證據；specifiers 搭 try／catch，萬一組裝出錯只顯示錯誤頁腳、不閃退。外觀小變化：搜索結果行變藍色操作列樣式，不再有 > 箭頭；功能一樣，點一下跳頁。**查看日誌置頂（皇上 15:01）：**其他雜項功能頁裡，查看日誌移到最上面第一行；高級設置頁那份不動。**配置功能無反應（皇上 15:13 回報，15:16 確認是系統設定頁）：**五個操作行（備份／導出／導入／恢復／重置）點了沒反應——plist、方法、target 靜態查全都合規，但全包十幾處按鈕行都只用 `action` 字串，框架到底會不會派發靜態查不到，所以改成自己在 `didSelectRow` 裡讀 action 字串手動派發（8 個有按鈕行的控制器都加了）；提示框改走最上層 presenter＋主隊列、彈不出來寫日誌；導入／恢復／重置改走 CFPreferences 逐鍵寫入（直接換檔案不會動 cfprefsd 快取，開關看著不變）；動作入口和結果都寫檔日誌（前綴 `v43 prefs-config`／`v43 card-config`）。其他全部 v42 功能保留。
 
 測法：見 BUILD_LOG §117 的 v42.1 真機測試清單。
 

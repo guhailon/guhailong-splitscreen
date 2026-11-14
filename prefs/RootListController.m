@@ -23,6 +23,7 @@
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
 #import <PhotosUI/PhotosUI.h>
+#import <objc/message.h>
 
 // 运行时现做一个 NSString（不用写死字串）。
 static NSString *GHLSSRuntimeString(const char *cstr) {
@@ -421,10 +422,52 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
     return YES;
 }
 
+// v43：手動派發 PSButtonCell 點按——不再賭框架會不會從 action 字串派發。
+// 診斷：plist 的 action 字串、程式現拼的 action 字串、方法、target 全部合規，
+// 但皇上在 v42 真機測到五個操作行點了完全沒反應；框架內部到底讀
+// specifier->action 還是 properties 裡的 action 字串，靜態查不到，
+// 所以直接在 didSelectRow 裡讀 action 字串、轉 SEL、在 target（沒有就 self）上跑。
+// 回傳 YES 表示這一行已經處理了（呼叫方直接 return，不要再走 super，免得重複跑）。
+static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *tableView, NSIndexPath *indexPath) {
+    if (!controller || !indexPath) return NO;
+    PSSpecifier *spec = [controller specifierAtIndexPath:indexPath];
+    if (!spec) return NO;
+    if (spec.cellType != PSButtonCell) return NO;
+    NSString *actionName = [spec propertyForKey:GHLSSRuntimeString("action")];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (!actionName || [actionName length] == 0) {
+        GHLSSPrefsLogLine("v43 prefs-config tap: button without action");
+        return YES;
+    }
+    const char *actionC = [actionName UTF8String];
+    SEL action = NSSelectorFromString(actionName);
+    id target = spec.target;
+    if (!target) target = controller;
+    char buf[320];
+    snprintf(buf, sizeof(buf), "v43 prefs-config tap: action %s target %s", actionC ? actionC : "?", [NSStringFromClass([target class]) UTF8String]);
+    GHLSSPrefsLogLine(buf);
+    if (![target respondsToSelector:action]) {
+        GHLSSPrefsLogLine("v43 prefs-config tap: target does not respond");
+        return YES;
+    }
+    // v43：變數 SEL 不能用 performSelector（-Werror 下 -Warc-performSelector-leaks），
+    // 用 v41 就在用的 objc_msgSend 寫法。
+    ((void (*)(id, SEL, id))objc_msgSend)(target, action, spec);
+    snprintf(buf, sizeof(buf), "v43 prefs-config tap: dispatched %s", actionC ? actionC : "?");
+    GHLSSPrefsLogLine(buf);
+    return YES;
+}
+
 @interface GuHaiLongSplitScreenRootListController : PSListController
 @end
 
 @implementation GuHaiLongSplitScreenRootListController
+
+// v43：按鈕行自己派發（見上面 GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
@@ -486,22 +529,57 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
     NSString *okTitle = GHLSSRuntimeString("好");
     UIAlertAction *ok = [UIAlertAction actionWithTitle:okTitle style:UIAlertActionStyleDefault handler:nil];
     [alert addAction:ok];
-    [self presentViewController:alert animated:YES completion:nil];
+    // v43：提示框改走最上層 presenter、主隊列；彈不出來要寫日誌，不要靜默
+    // （presentViewController 失敗是靜默的，看著就像點了沒反應）。
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController *presenter = self;
+        while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+        if (!presenter.view.window) {
+            // v43：self 不在視窗裡時，改找前景 scene 的 key window
+            //（不用已棄用的 UIApplication.keyWindow / windows）。
+            UIWindow *keyWindow = nil;
+            for (UIScene *s in [[UIApplication sharedApplication] connectedScenes]) {
+                if (![s isKindOfClass:[UIWindowScene class]]) continue;
+                UIWindowScene *ws = (UIWindowScene *)s;
+                if (ws.activationState != UISceneActivationStateForegroundActive) continue;
+                for (UIWindow *w in ws.windows) {
+                    if (w.isKeyWindow) { keyWindow = w; break; }
+                }
+                if (keyWindow) break;
+            }
+            if (keyWindow && keyWindow.rootViewController) {
+                presenter = keyWindow.rootViewController;
+                while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+            }
+        }
+        if (presenter) {
+            [presenter presentViewController:alert animated:YES completion:nil];
+            GHLSSPrefsLogLine("v43 prefs-config alert shown");
+        } else {
+            GHLSSPrefsLogLine("v43 prefs-config alert FAILED: no presenter");
+        }
+    });
 }
 
 // 備份配置：設定檔複製一份到備份檔。
 - (void)ghlssBackupConfig:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-config backup entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSPrefsFilePath();
     NSString *dst = GHLSSBackupFilePath();
+    // v43：先同步一次，確保磁碟上的檔案是最新值，再複製。
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
     if (![fm fileExistsAtPath:src]) {
+        GHLSSPrefsLogLine("v43 prefs-config backup: no prefs file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有配置文件可备份") message:GHLSSRuntimeString("先改一个设置，配置文件才会生成。")];
         return;
     }
     NSError *err = nil;
     [fm removeItemAtPath:dst error:nil];
     BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
+    GHLSSPrefsLogLine(ok ? "v43 prefs-config backup: copied" : "v43 prefs-config backup: copy failed");
     if (ok) {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已备份配置") message:GHLSSRuntimeString("备份在 GuHaiLongSplitScreen-backup.plist，恢复时读这个文件。")];
     } else {
@@ -512,16 +590,22 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
 // 導出配置（非備份配置）：設定檔複製一份到導出檔，導入時讀它。
 - (void)ghlssExportConfig:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-config export entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSPrefsFilePath();
     NSString *dst = GHLSSExportFilePath();
+    // v43：先同步一次，確保磁碟上的檔案是最新值，再複製。
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
     if (![fm fileExistsAtPath:src]) {
+        GHLSSPrefsLogLine("v43 prefs-config export: no prefs file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有配置文件可导出") message:GHLSSRuntimeString("先改一个设置，配置文件才会生成。")];
         return;
     }
     [fm removeItemAtPath:dst error:nil];
     NSError *err = nil;
     BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
+    GHLSSPrefsLogLine(ok ? "v43 prefs-config export: copied" : "v43 prefs-config export: copy failed");
     if (ok) {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导出配置") message:GHLSSRuntimeString("导出在 GuHaiLongSplitScreen-export.plist，导入时读这个文件。")];
     } else {
@@ -530,73 +614,100 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
 }
 
 // 從文件中導入配置：讀導出檔，蓋掉現在的設定檔。
+// v43：不再直接換檔案——直接換檔不會動 cfprefsd 的快取，reload 後開關還是舊值，
+// 看著就像沒反應。改成讀出字典、逐鍵用 CFPreferencesSetAppValue 寫進去，快取才會更新。
 - (void)ghlssImportConfig:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-config import entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSExportFilePath();
-    NSString *dst = GHLSSPrefsFilePath();
     if (![fm fileExistsAtPath:src]) {
+        GHLSSPrefsLogLine("v43 prefs-config import: no export file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有找到导出的配置文件") message:GHLSSRuntimeString("先点「导出配置」，再导入。")];
         return;
     }
-    [fm removeItemAtPath:dst error:nil];
-    NSError *err = nil;
-    BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
-    if (ok) {
-        CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-        if (domain) {
-            CFPreferencesAppSynchronize(domain);
-            CFRelease(domain);
-        }
-        [self reloadSpecifiers];
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导入配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
-    } else {
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导入失败") message:GHLSSRuntimeString("复制配置文件时出错。")];
+    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:src];
+    if (!dict) {
+        GHLSSPrefsLogLine("v43 prefs-config import: export file unreadable");
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导入失败") message:GHLSSRuntimeString("导出的配置文件读不出来。")];
+        return;
     }
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) {
+        for (NSString *key in dict) {
+            CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)[dict objectForKey:key], domain);
+        }
+        CFPreferencesAppSynchronize(domain);
+        CFRelease(domain);
+    }
+    [self reloadSpecifiers];
+    GHLSSPrefsLogLine("v43 prefs-config import: applied via CFPreferences");
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导入配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
 }
 
 // 從備份文件恢復配置：讀備份檔，蓋掉現在的設定檔。
+// v43：同導入，改走 CFPreferences 逐鍵寫入（見上）。
 - (void)ghlssRestoreConfig:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-config restore entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSBackupFilePath();
-    NSString *dst = GHLSSPrefsFilePath();
     if (![fm fileExistsAtPath:src]) {
+        GHLSSPrefsLogLine("v43 prefs-config restore: no backup file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有找到备份文件") message:GHLSSRuntimeString("先点「备份配置」，再恢复。")];
         return;
     }
-    [fm removeItemAtPath:dst error:nil];
-    NSError *err = nil;
-    BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
-    if (ok) {
-        CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-        if (domain) {
-            CFPreferencesAppSynchronize(domain);
-            CFRelease(domain);
-        }
-        [self reloadSpecifiers];
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已从备份恢复配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
-    } else {
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("恢复失败") message:GHLSSRuntimeString("复制配置文件时出错。")];
+    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:src];
+    if (!dict) {
+        GHLSSPrefsLogLine("v43 prefs-config restore: backup file unreadable");
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("恢复失败") message:GHLSSRuntimeString("备份文件读不出来。")];
+        return;
     }
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) {
+        for (NSString *key in dict) {
+            CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)[dict objectForKey:key], domain);
+        }
+        CFPreferencesAppSynchronize(domain);
+        CFRelease(domain);
+    }
+    [self reloadSpecifiers];
+    GHLSSPrefsLogLine("v43 prefs-config restore: applied via CFPreferences");
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已从备份恢复配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
 }
 
 // 重置為默認配置：刪掉整個設定檔（備份檔不動），全部開關回預設值。
+// v43：舊寫法只刪檔案——cfprefsd 快取裡的值還在，reload 後開關還是舊值，
+// 看著就像沒反應。改成先用 CFPreferencesCopyKeyList 逐鍵清掉（快取才會空），
+// 再刪檔案。
 - (void)ghlssResetConfig:(PSSpecifier *)specifier {
     (void)specifier;
+    GHLSSPrefsLogLine("v43 prefs-config reset entry");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *dst = GHLSSPrefsFilePath();
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) {
+        CFArrayRef keys = CFPreferencesCopyKeyList(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keys) {
+            CFIndex count = CFArrayGetCount(keys);
+            for (CFIndex i = 0; i < count; i++) {
+                CFStringRef k = (CFStringRef)CFArrayGetValueAtIndex(keys, i);
+                CFPreferencesSetAppValue(k, NULL, domain);
+            }
+            CFRelease(keys);
+        }
+        CFPreferencesAppSynchronize(domain);
+        CFRelease(domain);
+    }
     NSError *err = nil;
     BOOL removed = YES;
     if ([fm fileExistsAtPath:dst]) {
         removed = [fm removeItemAtPath:dst error:&err];
     }
-    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-    if (domain) {
-        CFPreferencesAppSynchronize(domain);
-        CFRelease(domain);
-    }
     [self reloadSpecifiers];
+    char buf[128];
+    snprintf(buf, sizeof(buf), "v43 prefs-config reset: file removed %d", removed ? 1 : 0);
+    GHLSSPrefsLogLine(buf);
     if (removed) {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已重置为默认配置") message:GHLSSRuntimeString("全部设置已恢复默认（备份文件还在），请重新启动 SpringBoard 生效。")];
     } else {
@@ -784,6 +895,12 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
 
 @implementation GHLSSLogViewerListController
 
+// v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     UITextView *tv = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 420)];
@@ -853,6 +970,12 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
 @end
 
 @implementation GHLSSPairListController
+
+// v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
@@ -975,6 +1098,12 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
 
 @implementation GHLSSCardAvatarListController
 
+// v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     CGFloat w = [UIScreen mainScreen].bounds.size.width;
@@ -1078,6 +1207,12 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
 @end
 
 @implementation GHLSSCardBgListController
+
+// v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -1293,6 +1428,12 @@ static BOOL GHLSSPrefsIsKnownPlistName(const char *name) {
 
 @implementation GHLSSSettingsSearchController
 
+// v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
+
 - (void)viewDidLoad {
     GHLSSPrefsLogLine("v43 prefs-search viewDidLoad entry");
     self.query = GHLSSRuntimeString("");
@@ -1493,6 +1634,12 @@ static NSString *GHLSSGestureActionName(const char *value) {
 
 @implementation GHLSSProfilesListController
 
+// v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
+
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
@@ -1608,6 +1755,12 @@ static NSString *GHLSSGestureActionName(const char *value) {
 @end
 
 @implementation GHLSSPageResetController
+
+// v43：按鈕行自己派發（GHLSSDispatchButtonTap）；其他行走框架。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
 
 - (NSArray *)specifiers {
     if (!_specifiers) {

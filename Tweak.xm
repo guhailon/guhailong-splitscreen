@@ -5585,12 +5585,22 @@ GHLSSLogLine("v43 settings card dismissed");
 
 // v42：卡片裡的提示框（從卡片的 rootViewController 彈）。
 - (void)showSettingsCardAlert:(const char *)title message:(const char *)message {
+// v43：提示框改走最上層 presenter、主隊列；沒有 presenter 要寫日誌，不要靜默
+//（presentViewController 失敗是靜默的，看著就像點了沒反應）。
 UIViewController *vc = GHLSSSettingsCardWindow ? GHLSSSettingsCardWindow.rootViewController : nil;
-if (!vc) return;
+if (!vc) {
+GHLSSLogLine("v43 card-config alert FAILED: no card window");
+return;
+}
 UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithCString:title encoding:NSUTF8StringEncoding] message:[NSString stringWithCString:message encoding:NSUTF8StringEncoding] preferredStyle:UIAlertControllerStyleAlert];
 UIAlertAction *ok = [UIAlertAction actionWithTitle:[NSString stringWithCString:"好" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleDefault handler:nil];
 [alert addAction:ok];
-[vc presentViewController:alert animated:YES completion:nil];
+dispatch_async(dispatch_get_main_queue(), ^{
+UIViewController *presenter = vc;
+while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+[presenter presentViewController:alert animated:YES completion:nil];
+GHLSSLogLine("v43 card-config alert shown");
+});
 }
 
 // v42：卡片表格重建（每頁的行；背景圖/遮罩/頭像按存好的檔案刷新；
@@ -5871,6 +5881,9 @@ return cell;
 (void)tableView;
 if (indexPath.row < 0 || indexPath.row >= GHLSSSettingsCardRowCount) return;
 GHLSSCardRow *r = &GHLSSSettingsCardRows[indexPath.row];
+char logBuf[128];
+snprintf(logBuf, sizeof(logBuf), "v43 card-config tap: row %d type %d action %d", (int)indexPath.row, r->type, r->action);
+GHLSSLogLine(logBuf);
 [tableView deselectRowAtIndexPath:indexPath animated:YES];
 if (r->type == 2) {
 GHLSSSettingsCardPage = r->page;
@@ -5960,58 +5973,108 @@ NSString *prefsFile = [prefsDir stringByAppendingPathComponent:[NSString stringW
 NSString *backupFile = [prefsDir stringByAppendingPathComponent:[NSString stringWithCString:"GuHaiLongSplitScreen-backup.plist" encoding:NSUTF8StringEncoding]];
 NSString *exportFile = [prefsDir stringByAppendingPathComponent:[NSString stringWithCString:"GuHaiLongSplitScreen-export.plist" encoding:NSUTF8StringEncoding]];
 if (action == 0) {
+GHLSSLogLine("v43 card-config backup entry");
+CFStringRef syncDomain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+if (syncDomain) { CFPreferencesAppSynchronize(syncDomain); CFRelease(syncDomain); }
 if (![fm fileExistsAtPath:prefsFile]) {
+GHLSSLogLine("v43 card-config backup: no prefs file");
 [self showSettingsCardAlert:"沒有配置文件可備份" message:"先改一個設置，配置文件才會生成。"];
 return;
 }
 [fm removeItemAtPath:backupFile error:nil];
 NSError *err = nil;
 BOOL ok = [fm copyItemAtPath:prefsFile toPath:backupFile error:&err];
+GHLSSLogLine(ok ? "v43 card-config backup: copied" : "v43 card-config backup: copy failed");
 [self showSettingsCardAlert:(ok ? "已備份配置" : "備份失敗") message:(ok ? "備份在 GuHaiLongSplitScreen-backup.plist，恢復時讀這個文件。" : "複製配置文件時出錯。")];
 } else if (action == 1) {
+GHLSSLogLine("v43 card-config export entry");
+CFStringRef syncDomain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+if (syncDomain) { CFPreferencesAppSynchronize(syncDomain); CFRelease(syncDomain); }
 if (![fm fileExistsAtPath:prefsFile]) {
+GHLSSLogLine("v43 card-config export: no prefs file");
 [self showSettingsCardAlert:"沒有配置文件可導出" message:"先改一個設置，配置文件才會生成。"];
 return;
 }
 [fm removeItemAtPath:exportFile error:nil];
 NSError *err = nil;
 BOOL ok = [fm copyItemAtPath:prefsFile toPath:exportFile error:&err];
+GHLSSLogLine(ok ? "v43 card-config export: copied" : "v43 card-config export: copy failed");
 [self showSettingsCardAlert:(ok ? "已導出配置" : "導出失敗") message:(ok ? "導出在 GuHaiLongSplitScreen-export.plist，導入時讀這個文件。" : "複製配置文件時出錯。")];
 } else if (action == 2) {
+GHLSSLogLine("v43 card-config import entry");
 if (![fm fileExistsAtPath:exportFile]) {
+GHLSSLogLine("v43 card-config import: no export file");
 [self showSettingsCardAlert:"沒有找到導出的配置文件" message:"先點「導出配置」，再導入。"];
 return;
 }
-[fm removeItemAtPath:prefsFile error:nil];
-NSError *err = nil;
-BOOL ok = [fm copyItemAtPath:exportFile toPath:prefsFile error:&err];
-if (ok) {
-CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
-if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
-[self rebuildSettingsCard];
+NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:exportFile];
+if (!dict) {
+GHLSSLogLine("v43 card-config import: export file unreadable");
+[self showSettingsCardAlert:"導入失敗" message:"導出的配置文件讀不出來。"];
+return;
 }
-[self showSettingsCardAlert:(ok ? "已導入配置" : "導入失敗") message:(ok ? "配置已恢復，請重新啟動 SpringBoard 生效。" : "複製配置文件時出錯。")];
+// v43：同系統設定頁——不再直接換檔案（cfprefsd 快取不動，開關還是舊值，
+// 看著就像沒反應），改走 CFPreferences 逐鍵寫入。
+CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+if (domain) {
+for (NSString *key in dict) {
+CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)[dict objectForKey:key], domain);
+}
+CFPreferencesAppSynchronize(domain);
+CFRelease(domain);
+}
+[self rebuildSettingsCard];
+GHLSSLogLine("v43 card-config import: applied via CFPreferences");
+[self showSettingsCardAlert:"已導入配置" message:"配置已恢復，請重新啟動 SpringBoard 生效。"];
 } else if (action == 3) {
+GHLSSLogLine("v43 card-config restore entry");
 if (![fm fileExistsAtPath:backupFile]) {
+GHLSSLogLine("v43 card-config restore: no backup file");
 [self showSettingsCardAlert:"沒有找到備份文件" message:"先點「備份配置」，再恢復。"];
 return;
 }
-[fm removeItemAtPath:prefsFile error:nil];
-NSError *err = nil;
-BOOL ok = [fm copyItemAtPath:backupFile toPath:prefsFile error:&err];
-if (ok) {
-CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
-if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
-[self rebuildSettingsCard];
+NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:backupFile];
+if (!dict) {
+GHLSSLogLine("v43 card-config restore: backup file unreadable");
+[self showSettingsCardAlert:"恢復失敗" message:"備份文件讀不出來。"];
+return;
 }
-[self showSettingsCardAlert:(ok ? "已從備份恢復配置" : "恢復失敗") message:(ok ? "配置已恢復，請重新啟動 SpringBoard 生效。" : "複製配置文件時出錯。")];
+// v43：同導入，改走 CFPreferences 逐鍵寫入（見上）。
+CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+if (domain) {
+for (NSString *key in dict) {
+CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)[dict objectForKey:key], domain);
+}
+CFPreferencesAppSynchronize(domain);
+CFRelease(domain);
+}
+[self rebuildSettingsCard];
+GHLSSLogLine("v43 card-config restore: applied via CFPreferences");
+[self showSettingsCardAlert:"已從備份恢復配置" message:"配置已恢復，請重新啟動 SpringBoard 生效。"];
 } else if (action == 4) {
+GHLSSLogLine("v43 card-config reset entry");
+// v43：同系統設定頁——先逐鍵清掉（快取才會空），再刪檔案。
+CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+if (domain) {
+CFArrayRef keys = CFPreferencesCopyKeyList(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+if (keys) {
+CFIndex count = CFArrayGetCount(keys);
+for (CFIndex i = 0; i < count; i++) {
+CFStringRef k = (CFStringRef)CFArrayGetValueAtIndex(keys, i);
+CFPreferencesSetAppValue(k, NULL, domain);
+}
+CFRelease(keys);
+}
+CFPreferencesAppSynchronize(domain);
+CFRelease(domain);
+}
 NSError *err = nil;
 BOOL removed = YES;
 if ([fm fileExistsAtPath:prefsFile]) removed = [fm removeItemAtPath:prefsFile error:&err];
-CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
-if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
 [self rebuildSettingsCard];
+char logBuf[128];
+snprintf(logBuf, sizeof(logBuf), "v43 card-config reset: file removed %d", removed ? 1 : 0);
+GHLSSLogLine(logBuf);
 [self showSettingsCardAlert:(removed ? "已重置為默認配置" : "重置失敗") message:(removed ? "全部設置已恢復默認（備份文件還在），請重新啟動 SpringBoard 生效。" : "刪除配置文件時出錯。")];
 } else if (action == 10) {
 [self dismissSettingsCard];
