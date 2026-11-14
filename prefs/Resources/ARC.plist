@@ -28,6 +28,22 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
+			<string>在這裡選要出現在啟動器裡的 App，最多 12 個（固定 5 個＋自選 7 個）。</string>
+			<key>label</key>
+			<string>啟動器 App</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSAppPickerListController</string>
+			<key>label</key>
+			<string>加入 App</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
 			<string>關了 ARC 打不開（邊緣滑動、哆啦A夢鈕、懸浮球都叫不出來）；浮窗本身還能從三屏設置里開。</string>
 		</dict>
 		<dict>
@@ -152,7 +168,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>20</real>
+			<real>20.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -160,47 +176,11 @@
 			<key>label</key>
 			<string>arc 与屏幕边缘距离</string>
 			<key>max</key>
-			<real>60</real>
+			<real>60.0</real>
 			<key>min</key>
-			<real>0</real>
+			<real>0.0</real>
 			<key>showValue</key>
 			<true/>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>跟 ARC 里的游戏模式开关是同一个：浮窗钉在锁屏之下最高层级；完整游戏模式＋横屏支援在真分屏那版。</string>
-			<key>label</key>
-			<string>游戏模式</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>gameModeEnabled</string>
-			<key>label</key>
-			<string>游戏模式</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>demoModeEnabled</string>
-			<key>label</key>
-			<string>演示模式</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -223,8 +203,6 @@
 				<string>arcTouchSound</string>
 				<string>arcOpenMode</string>
 				<string>arcEdgeDistance</string>
-				<string>gameModeEnabled</string>
-				<string>demoModeEnabled</string>
 			</array>
 		</dict>
 	</array>

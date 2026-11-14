@@ -8,9 +8,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>v49 是實驗版（修 peek 小窗全黑（收起的窗 scene 不再推後台、解鎖也推回前景）＋主浮窗太大（拖頂放大門檻改緊、開窗恢復尺寸夾到預設、浮窗設置頁可重置存過的尺寸）；v48 是實驗版（拿掉 ARC「常用三開」按鈕和「常跟 XX 一起開」智能配對推薦列，三屏組合照常；v47 是實驗版（熱修：系統設定五個子頁（三屏／ARC／浮窗／其他／高級）點進去空白修掉，嵌套子頁同修；設置補完：三屏工具欄／App 排序真拖動、哆啦A夢鈕大小左右邊 2 秒內生效、死開關拿掉／頁腳老實寫；v45 浮窗切換改 FV 式、peek 可拖調尺寸；熱修復：搜索閃退＋配置無反應修掉；新增：浮窗設定卡片——ARC 里點「設置」開一張白卡＋金邊、龍頭＋v1.0.48，點外面或 X 收起、直接回原來的 App；卡片頭像／背景圖能換，相冊選圖；查看日誌在設定里直接看；三屏組合最多存 3 對；手勢自定義；懸浮球；低電量自動收窗；演示模式；浮窗大小預設、置頂鎖定、貼邊吸附、重啟恢復、全屏藏哆啦A夢鈕、鍵盤上移、底部任務欄、浮窗透明度；主頁搜索、常用開關、布局預設、配置方案、新手／專家模式、每頁重置、手勢總覽。開關默認關；多數開關改完立刻或 2 秒內生效，不用重啟用戶空間；窗的大小／圓角／陰影類改完下次開窗生效。日誌在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。</string>
+			<string>v50 是實驗版（設定頁大改：搜索頁重做（搜索條修好、索引從設定檔動態生成、點結果跳頁定位、結果帶開關狀態）、日誌查看器重做、全部設定頁加固（安全取表＋try/catch）、ARC「＋」移到系統設置加入 App；主頁重排＋去重複入口（高級設置頁拿掉）、新手模式說到做到、拿掉相機開關、主頁＋卡片檢查更新、新狀態頁、ARC 三屏組合快捷開、任務欄全部收起、懸浮球長按開三屏、電量恢復提醒、收窗震動、選擇器重新掃描、源圖標＋分屏介紹頁；v49 是實驗版（修 peek 小窗全黑（收起的窗 scene 不再推後台、解鎖也推回前景）＋主浮窗太大（拖頂放大門檻改緊、開窗恢復尺寸夾到預設、浮窗設置頁可重置存過的尺寸）；v48 是實驗版（拿掉 ARC「常用三開」按鈕和「常跟 XX 一起開」智能配對推薦列，三屏組合照常；v47 是實驗版（熱修：系統設定五個子頁（三屏／ARC／浮窗／其他／高級）點進去空白修掉，嵌套子頁同修；設置補完：三屏工具欄／App 排序真拖動、哆啦A夢鈕大小左右邊 2 秒內生效、死開關拿掉／頁腳老實寫；v45 浮窗切換改 FV 式、peek 可拖調尺寸；熱修復：搜索閃退＋配置無反應修掉；新增：浮窗設定卡片——ARC 里點「設置」開一張白卡＋金邊、龍頭＋v1.0.48，點外面或 X 收起、直接回原來的 App；卡片頭像／背景圖能換，相冊選圖；查看日誌在設定里直接看；三屏組合最多存 3 對；手勢自定義；懸浮球；低電量自動收窗；演示模式；浮窗大小預設、置頂鎖定、貼邊吸附、重啟恢復、全屏藏哆啦A夢鈕、鍵盤上移、底部任務欄、浮窗透明度；主頁搜索、常用開關、布局預設、配置方案、新手／專家模式、每頁重置、手勢總覽。開關默認關；多數開關改完立刻或 2 秒內生效，不用重啟用戶空間；窗的大小／圓角／陰影類改完下次開窗生效。日誌在 /var/mobile/Library/Logs/GuHaiLongSplitScreen.log，用 Filza 就能看。</string>
 			<key>label</key>
-			<string>顾海龙集团分屏 v1.0.49（实验版 v49）</string>
+			<string>顾海龙集团分屏 v1.0.50（实验版 v50）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -19,6 +19,70 @@
 			<string>GHLSSSettingsSearchController</string>
 			<key>label</key>
 			<string>搜索设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSStatusListController</string>
+			<key>label</key>
+			<string>狀態</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>三屏设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>ThreeScreen</string>
+			<key>label</key>
+			<string>三屏设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>ARC设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>ARC</string>
+			<key>label</key>
+			<string>arc设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>浮窗设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Floating</string>
+			<key>label</key>
+			<string>浮窗设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>其他杂项功能</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Other</string>
+			<key>label</key>
+			<string>其他杂项功能</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -83,36 +147,26 @@
 			<string>演示模式</string>
 		</dict>
 		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>演示模式開了藏哆啦A夢鈕／貼邊小卡／任務欄／通知橫幅，屏幕乾乾淨淨好截圖錄影；退出點屏幕角落的半透明小點。</string>
-		</dict>
-		<dict>
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
-			<string>PSSliderCell</string>
+			<string>PSSwitchCell</string>
 			<key>default</key>
-			<real>50</real>
+			<true/>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
-			<string>safeDistance</string>
+			<string>doraemonVisible</string>
 			<key>label</key>
-			<string>与刘海方向安全距离</string>
-			<key>max</key>
-			<real>100</real>
-			<key>min</key>
-			<real>0</real>
-			<key>showValue</key>
-			<true/>
+			<string>显示哆啦A夢鈕</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>遊戲布局：遊戲模式開、ARC 開、固定中心關、圓角 20、安全距離 20、陰影開、任務欄關、全屏藏哆啦A夢鈕開、演示模式關、浮窗大。工作布局：遊戲模式關、固定中心開、圓角 35、安全距離 50、任務欄開、浮窗中、側窗寬中、重啟恢復開。默認布局：全部回到預設值（遊戲模式關、ARC 開、固定中心關、圓角 35、安全距離 50、陰影開、任務欄關、全屏藏哆啦A夢鈕開、演示模式關、浮窗中、側窗寬中、重啟恢復開）。</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
 			<key>label</key>
 			<string>布局预设</string>
 		</dict>
@@ -121,6 +175,8 @@
 			<string>ghlssApplyLayoutGame</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
 			<key>label</key>
 			<string>游戏布局</string>
 		</dict>
@@ -129,6 +185,8 @@
 			<string>ghlssApplyLayoutWork</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
 			<key>label</key>
 			<string>工作布局</string>
 		</dict>
@@ -137,6 +195,8 @@
 			<string>ghlssApplyLayoutDefault</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
 			<key>label</key>
 			<string>默认布局</string>
 		</dict>
@@ -145,6 +205,8 @@
 			<string>PSLinkCell</string>
 			<key>detail</key>
 			<string>GHLSSProfilesListController</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
 			<key>label</key>
 			<string>配置方案</string>
 		</dict>
@@ -153,16 +215,80 @@
 			<string>PSLinkCell</string>
 			<key>detail</key>
 			<string>GHLSSGesturesListController</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
 			<key>label</key>
 			<string>手势总览</string>
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>Advanced</string>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>备份和导出都写到设置目录里的固定文件（备份：GuHaiLongSplitScreen-backup.plist；导出：GuHaiLongSplitScreen-export.plist）；导入读导出文件、恢复读备份文件；重置清掉全部设置（不删备份），改完 2 秒内／下次开窗生效，不用重启用户空间。</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
 			<key>label</key>
-			<string>高级设置</string>
+			<string>操作性功能</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssBackupConfig</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
+			<key>label</key>
+			<string>备份配置</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssExportConfig</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
+			<key>label</key>
+			<string>导出配置（非备份配置）</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssImportConfig</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
+			<key>label</key>
+			<string>从文件中导入配置</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssRestoreConfig</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
+			<key>label</key>
+			<string>从备份文件恢复配置</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssResetConfig</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
+			<key>label</key>
+			<string>重置为默认配置</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>ghlssCheckForUpdate</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>ghlssNoviceHide</key>
+			<true/>
+			<key>label</key>
+			<string>檢查更新</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -184,111 +310,7 @@
 			<key>key</key>
 			<string>noviceMode</string>
 			<key>label</key>
-			<string>新手模式（只显示常用开关）</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>三屏设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>ThreeScreen</string>
-			<key>label</key>
-			<string>三屏设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>ARC设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>ARC</string>
-			<key>label</key>
-			<string>arc设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>浮窗设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>Floating</string>
-			<key>label</key>
-			<string>浮窗设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>其他杂项功能</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>Other</string>
-			<key>label</key>
-			<string>其他杂项功能</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>备份和导出都写到设置目录里的固定文件（备份：GuHaiLongSplitScreen-backup.plist；导出：GuHaiLongSplitScreen-export.plist）；导入读导出文件、恢复读备份文件；重置清掉全部设置（不删备份），改完 2 秒内／下次开窗生效，不用重启用户空间。</string>
-			<key>label</key>
-			<string>操作性功能</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssBackupConfig</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>备份配置</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssExportConfig</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>导出配置（非备份配置）</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssImportConfig</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>从文件中导入配置</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssRestoreConfig</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>从备份文件恢复配置</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssResetConfig</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>重置为默认配置</string>
+			<string>新手模式（只顯示常用項目）</string>
 		</dict>
 	</array>
 	<key>title</key>

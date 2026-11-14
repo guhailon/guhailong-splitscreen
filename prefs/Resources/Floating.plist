@@ -80,7 +80,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>1</real>
+			<real>1.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -88,7 +88,7 @@
 			<key>label</key>
 			<string>浮窗透明度</string>
 			<key>max</key>
-			<real>1</real>
+			<real>1.0</real>
 			<key>min</key>
 			<real>0.5</real>
 			<key>showValue</key>
@@ -140,7 +140,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>20</real>
+			<real>20.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -148,9 +148,9 @@
 			<key>label</key>
 			<string>电量阈值（%）</string>
 			<key>max</key>
-			<real>30</real>
+			<real>30.0</real>
 			<key>min</key>
-			<real>10</real>
+			<real>10.0</real>
 			<key>showValue</key>
 			<true/>
 		</dict>
@@ -186,7 +186,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>35</real>
+			<real>35.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -194,9 +194,9 @@
 			<key>label</key>
 			<string>浮窗圆角</string>
 			<key>max</key>
-			<real>50</real>
+			<real>50.0</real>
 			<key>min</key>
-			<real>0</real>
+			<real>0.0</real>
 			<key>showValue</key>
 			<true/>
 		</dict>
@@ -212,7 +212,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>50</real>
+			<real>50.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -220,9 +220,9 @@
 			<key>label</key>
 			<string>与刘海方向安全距离</string>
 			<key>max</key>
-			<real>100</real>
+			<real>100.0</real>
 			<key>min</key>
-			<real>0</real>
+			<real>0.0</real>
 			<key>showValue</key>
 			<true/>
 		</dict>
@@ -247,6 +247,14 @@
 			<string>Scheduler</string>
 			<key>label</key>
 			<string>调度窗口设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GestureCustom</string>
+			<key>label</key>
+			<string>手勢自定義</string>
 		</dict>
 		<dict>
 			<key>cell</key>
