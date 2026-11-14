@@ -1,6 +1,69 @@
-// GuHaiLongSplitScreen v1.0.40 (v40) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.41 (v41) — 顾海龙集团原创分屏插件（实验版）
 //
 // 目标：iPhone 11 / iOS 16.5 / Dopamine (rootless)，iphoneos-arm64。
+//
+// ── v41：修哆啦A夢鈕拖動 + FV 式切換/設定重構/ARC/三屏（macOS 编） ──
+// 皇上 2026-11-14 12:28 報 v40 真機測 5 項、12:30 批准做 v41，12:29 糾正：
+// 不要白色相框做法，要王者榮耀那樣顯示（三屏：主 App 占大半屏幕 +
+// 窄豎屏側窗貼邊，兩邊都活著）。12:32 又發兩張 FV 實機截圖當顯示樣板：
+// 圖 1：主屏右邊緣上下疊著 3 張收起的浮窗（只露出一截內容，活的），
+// 哆啦A夢鈕貼在右邊緣、疊在最下面那張卡上；圖 2：一個大浮窗（微信聊
+// 天列表）浮在主屏之上，大圓角，App 內容從頂到底貼邊填滿整個窗——
+// 白的是 App 自己的內容，不是裝圖標的白框；哆啦A夢鈕貼在右邊緣中間；
+// 右上角還露出一張收起小卡的一角。所以 v41 的收起改成「peek」：窗不藏
+// 起來改放小卡，改成縮到邊緣、露出一截活內容（點那截叫回來）；白色啟
+// 動器面板拿掉，改 ARC 式（下面第 5 项）。
+// 第 1 项：哆啦A夢鈕拖不動（v40 bug，根因在代碼裡定死）：拖動手勢
+// handleDoraemonButtonDrag 寫了，但共用的手勢代理
+// gestureRecognizer:shouldReceiveTouch: 對「touch.view 是 UIButton」
+// 一律回 NO，而鈕上的 pan 與 long-press 兩個手勢都掛在這個代理上——
+// 手指碰到鈕，兩個手勢根本收不到觸摸，鈕動不了（長按關全部也一樣死）。
+// 這個代理本來是 v38 為細條/控制條點按寫的（點在紅 X、黃最小化、±
+// 上時手勢不認、按鈕自己處理）。修法：shouldReceiveTouch 先判——
+// 手勢掛在哆啦A夢鈕上（recognizer.view == GHLSSDoraemonButton）就回
+// YES；其他手勢碰到 UIButton 才回 NO。拖動只沿右邊緣上下（Y，夾在
+// 100 到 h-100），拖完記住 Y（prefs 鍵 doraemonButtonY，運行時現拼），
+// 下次啟動恢復到那個高度。長按 0.5 秒關全部也因此活過來（pan 與
+// long-press 同時識別本來就回 YES；long-press 內建 allowableMovement
+// 約 10pt，拖動了它就不認）。另加雙擊鈕輪流切窗（第 2 项）：點按改成
+// 單擊手勢（single-tap），雙擊手勢認出來時單擊不觸發（require
+// GestureRecognizerToFail），點按不再走 TouchUpInside——單擊開 ARC，
+// 雙擊輪切主窗。
+// 第 2 项：浮窗切換像 FV 影片 49：窗有前後順序——最前可見的是主浮窗，
+// 其次副浮窗、再副副浮窗，其餘收成貼邊 peek。順序存在靜態陣列
+// GHLSSFrontOrder（最近帶到最前的在前），帶到最前/恢復/建新窗時更新。
+// 點 peek 把那個窗升為主窗（恢復 + 推前景）；雙擊哆啦A夢鈕按順序輪切
+// 主窗；ARC 裡開著的 App 帶標記點，點一下升為主窗。日誌「v41 window
+// promoted to main」/「v41 window cycled main」。
+// 第 3 项：設定頁改成 FV 真實結構（皇上 2026-11-12 發的 FV 設定截圖）：
+// 主頁 = 啟用開關 + 四個子頁連結（浮窗設置 / 三屏設置 / ARC設置 /
+// 其他設置），子頁是標準 iOS 設定子頁（各一個 plist + 各一個
+// PSListController 子類，都在 prefs bundle 裡，不進 SpringBoard 的
+// dylib）。浮窗設置：陰影開關、圓角滑桿（預設 35）、安全距離滑桿
+// （沿用 safeDistance，預設 50）、點窗外開關 + 動作（沿用舊鍵）、
+// 豎屏開窗固定中心開關、鍵盤設置頁、通知橫幅開關、調度窗口設置連結
+// （第 4 项）。三屏設置：選 App（沿用 5 個 app*Enabled 鍵）、排序
+// （目前順序固定，拖動排序下一版）、關三屏同時關側邊小窗開關
+// （預設關，按 FV 截圖）、小窗左右位置（沿用 windowPosition）。
+// ARC設置：開 ARC、ARC 顯示位置跟小窗位置走。其他設置：備份/導出/
+// 導入/恢復/重置（備份與恢復是真的複製設定檔；導出/導入走固定檔案；
+// 重置清掉全部已知鍵；見 BUILD_LOG §113）。**白色相框拿掉**：v40 的
+// 白底圓角啟動器面板刪掉，改成 FV ARC 式（第 5 项）。三屏 = 王者榮耀
+// 式（影片 95）：主 App 占大半屏幕 + 窄豎屏側窗貼邊，兩邊都活著，
+// 中間一條可拖分隔線（調側窗寬度；主窗不自動縮——底下那個 App 本來就
+// 是全屏在跑，見 §113）。
+// 第 4 项：調度窗口設置（浮窗設置裡的子頁）：邊緣滑動開 ARC——滑幾次
+// （1 或 2，預設 2）、滑哪邊（左/右，預設跟小窗位置走）；浮窗拖動手勢
+// 開關（預設開）；側邊小窗手勢開關（管分隔線拖動，預設開）；哆啦A夢
+// 雙擊輪切開關（預設開）；長按多久關全部（滑桿 0.3–1.0 秒，預設 0.5）。
+// 第 5 项：ARC 圓形啟動器（影片 95 最後幾秒）：暗背景 + 一列圓形 App
+// 圖標直接浮在上面（沒有白框面板），下面一顆 X 關掉；點圖標開那個 App
+// 的浮窗（已開著的升為主窗）；開著的 App 圖標右上角有標記點（主窗金
+// 色、其他白色）。觸發：點哆啦A夢鈕（單擊）或邊緣滑動（按調度設定）。
+// 只有測過的 5 個 App。
+// 不做：拖動排序（設定頁順序固定，下一版）；鍵盤自動上移（開關先存著，
+// 頁腳寫明待真機驗證，見 §113）；橫屏三屏（本版先做直屏側窗，橫屏
+// 支持仍在真分屏那一步）；任務欄快照、關閉彈性動畫（點綴）。
 //
 // ── v40：多窗 5.3 + 贴边小卡 + 拖到右緣收起 + 點窗外事件 + 安全距離（macOS 编） ──
 // 皇上 2026-11-14 11:05 批准想法、11:32「接下来就是你的想法」。
@@ -531,6 +594,7 @@
 #import <unistd.h>
 #import <signal.h>
 #import <notify.h>
+#import <AudioToolbox/AudioServices.h>
 
 #define GHLSS_LOG_PATH "/var/mobile/Library/Logs/GuHaiLongSplitScreen.log"
 
@@ -545,35 +609,53 @@ fclose(f);
 }
 }
 
-// 5.1 启动器里的 5 个系统 App（bundle ID 与显示名，都是普通 C 字串）。
-static const char *GHLSSAppBundleIDs[5] = {
+// 5.1 启动器里的 App（bundle ID 与显示名，都是普通 C 字串）。
+// v41：上限提到 12 個——前 5 個是測過的固定 App（計算器、時鐘、備忘錄、
+// 設置、照片），後 7 個是自選槽位（customApp1–7，bundle ID 存在 prefs
+// 裡，啟動時從 prefs 讀進來；見 GHLSSLoadCustomApps）。啟動器/ARC 最多
+// 同時開 12 個窗（每 App 一個 scene 緩存，v35 規則不變）。微信就是
+// 「任何 App」裡的一個，不用單獨加——用戶在 ARC 的「＋」或設定頁選
+// 它，就進一個自選槽位。
+#define GHLSS_APP_COUNT 12
+#define GHLSS_CUSTOM_APP_COUNT 7
+static char GHLSSAppBundleIDs[GHLSS_APP_COUNT][128] = {
 "com.apple.calculator",
 "com.apple.mobiletimer",
 "com.apple.mobilenotes",
 "com.apple.Preferences",
 "com.apple.mobileslideshow"
 };
-static const char *GHLSSAppNames[5] = {
+static char GHLSSAppNames[GHLSS_APP_COUNT][128] = {
 "计算器",
 "时钟",
 "备忘录",
 "设置",
 "照片"
 };
-#define GHLSS_APP_COUNT 5
-
-// v40：设定页「選擇應用」的 5 个开关——一个 App 一个布尔键（默认全开；
-// 只有测过的这 5 个 App 可选，没测过的 App 不放进可启动清单，免得点了
-// 黑屏；以后测过了再加）。键存在同一个 prefs domain，用时现读
-//（CFPreferencesCopyAppValue + CFPreferencesAppSynchronize，零字面量
-// 规则不动）。启动器只显示打开的 App，按固定顺序（计算器、时钟、
-// 备忘录、设置、照片）排；拖动排序以后再说。
 static const char *GHLSSAppEnabledKeys[GHLSS_APP_COUNT] = {
 "appCalculatorEnabled",
 "appClockEnabled",
 "appNotesEnabled",
 "appSettingsEnabled",
-"appPhotosEnabled"
+"appPhotosEnabled",
+"customApp1Enabled",
+"customApp2Enabled",
+"customApp3Enabled",
+"customApp4Enabled",
+"customApp5Enabled",
+"customApp6Enabled",
+"customApp7Enabled"
+};
+// v41：自選槽位的 bundle ID 鍵（customAppNBundleID，存在同一個 prefs
+// domain；開關是上面對應的 customAppNEnabled）。
+static const char *GHLSSCustomBundleIDKeys[GHLSS_CUSTOM_APP_COUNT] = {
+"customApp1BundleID",
+"customApp2BundleID",
+"customApp3BundleID",
+"customApp4BundleID",
+"customApp5BundleID",
+"customApp6BundleID",
+"customApp7BundleID"
 };
 // v40：记位置/大小的键前缀——一个 App 一个前缀，键 = "geo" + 前缀 +
 // 字段（例："geoCalculatorX"、"geoCalculatorScale"）。字段：X、Y（窗中心）、
@@ -790,7 +872,6 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // 5.2 托管悬浮窗的主人。视图全部用苹果的类，不再加自定义视图子类。
 @interface GHLSSLauncher : NSObject <UIGestureRecognizerDelegate>
 - (void)handleEdgeSwipe:(UIScreenEdgePanGestureRecognizer *)recognizer;
-- (void)handleHandleButton:(id)sender;
 - (void)handleDoraemonButtonDrag:(UIPanGestureRecognizer *)recognizer;
 - (void)handleDoraemonButtonLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)handleAppButton:(UIButton *)sender;
@@ -814,15 +895,50 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)handleTopStripTap:(UITapGestureRecognizer *)recognizer;
 - (void)handleResizeDrag:(UIPanGestureRecognizer *)recognizer;
 - (void)resizeHostedSceneToContentSize:(CGSize)size;
-// v40：贴边小卡的点按（恢复窗）与小 X（彻底关掉）、阴影背景的点按。
-- (void)handleDockCardTap:(UIButton *)sender;
-- (void)handleDockCardClose:(UIButton *)sender;
+// v41：贴边 peek 的点按（恢复窗）与小 X（彻底关掉）、阴影背景的点按。
+- (void)handleDockPeekTap:(UIButton *)sender;
+- (void)handleDockPeekClose:(UIButton *)sender;
 - (void)handleDimOverlayTap:(UITapGestureRecognizer *)recognizer;
+// v41：哆啦A夢鈕單擊（開 ARC）/雙擊（輪切主窗）、升主窗、輪切主窗。
+- (void)handleDoraemonButtonSingleTap:(UITapGestureRecognizer *)recognizer;
+- (void)handleDoraemonButtonDoubleTap:(UITapGestureRecognizer *)recognizer;
+- (void)promoteWindowToMainIndex:(int)idx;
+- (void)cycleMainWindow;
+// v41：三屏分隔線拖動、ARC 的「＋」選 App、選 App 頁的開關與完成。
+- (void)handleSideDividerDrag:(UIPanGestureRecognizer *)recognizer;
+- (void)handleARCPickerButton:(id)sender;
+- (void)showAppPicker;
+- (void)dismissAppPicker;
+- (void)handleAppPickerToggle:(UISwitch *)sender;
+- (void)handleAppPickerDone:(id)sender;
+// v41：ARC 內容重建（搜索/三段/遊戲模式/常用三開）、搜索結果點按、
+// 圖標長按置頂、遊戲模式開關、常用三開、通知橫幅、全屏打開探針、
+// 截圖錄屏隱藏 ARC。
+- (void)rebuildARCContent;
+- (CGFloat)addARCSectionLabel:(const char *)title fromY:(CGFloat)y iconSize:(CGFloat)size;
+- (CGFloat)addARCIconsForBids:(NSArray *)bids fromY:(CGFloat)y iconSize:(CGFloat)size tagBase:(NSInteger)tagBase action:(SEL)action isSearchResult:(BOOL)isSearchResult;
+- (void)handleARCSearchDone:(UITextField *)textField;
+- (UIButton *)arcIconButtonForIndex:(int)idx atY:(CGFloat)y size:(CGFloat)size;
+- (UIButton *)arcIconButtonForBundleID:(const char *)bid name:(const char *)name tag:(NSInteger)tag action:(SEL)action atY:(CGFloat)y size:(CGFloat)size isSearchResult:(BOOL)isSearchResult;
+- (void)handleARCSearchChanged:(UITextField *)textField;
+- (void)handleARCSearchResultButton:(UIButton *)sender;
+- (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer;
+- (void)handleGameModeSwitch:(UISwitch *)sender;
+- (void)launchTrio;
+- (void)launchTrioStep;
+- (void)showNotificationBannerForName:(const char *)name;
+- (void)openAppFullscreen:(const char *)bundleID;
+- (void)handleScreenCaptureChanged:(NSNotification *)note;
 @end
 
 // 窗与状态要一直留着（静态变量拿着，不会被释放）。
 static UIWindow *GHLSSStripWindow = nil;
 static UIWindow *GHLSSLauncherWindow = nil;
+static UIScrollView *GHLSSLauncherScrollView = nil; // v41：ARC 的滾動內容區（搜索/三段/常用三開/遊戲模式都在裡面重建）。
+static UITextField *GHLSSLauncherSearchField = nil; // v41：ARC 頂上的搜索框。
+static char GHLSSAppPickerBids[256][128]; // v41：選 App 頁每一行的 bundleID（開關 tag = 行號）。
+static int GHLSSAppPickerCount = 0;
+static BOOL GHLSSDividerDragDisabled = NO; // v41：這次分隔線拖動被調度設定關掉了（Began 時讀一次）。
 static UIScreenEdgePanGestureRecognizer *GHLSSLauncherEdgePan = nil; // v40：感应带上的右/左边缘滑动手势（跟小窗位置设定走，见 GHLSSUpdateStripPosition）。
 static GHLSSLauncher *GHLSSLauncherShared = nil;
 static BOOL GHLSSLauncherVisible = NO;
@@ -850,6 +966,9 @@ static UIView *GHLSSHostedTitleBar = nil;
 static UILabel *GHLSSHostedTitleLabel = nil;
 static UIView *GHLSSHostedContentView = nil;
 static UIView *GHLSSHostedResizeHandle = nil;
+static UIView *GHLSSHostedSideDivider = nil; // v41：三屏側窗內緣的分隔線（16pt，拖動調側窗寬度；只在側窗時存在）。
+static BOOL GHLSSHostedIsSideDock = NO; // v41：活動窗是不是三屏側窗。
+static BOOL GHLSSForceThreeScreenOnce = NO; // v41：ARC 打開方式選「三屏」時，下一次開窗強制走側窗（一次性的，用完清掉）。
 static NSString *GHLSSHostedSceneID = nil;
 static char GHLSSHostedBundleID[128] = {0};
 static int GHLSSHostedPid = 0;
@@ -895,12 +1014,31 @@ static _UIScenePresenter *GHLSSCachePresenters[GHLSS_APP_COUNT];
 // 是 nil——复用守卫与销毁函数靠这个分叉）。
 static UIView *GHLSSCacheLayerHostViews[GHLSS_APP_COUNT];
 static UIView *GHLSSCacheTopStrips[GHLSS_APP_COUNT];
-// v40：每 App 的贴边小卡窗（最小化/拖到右緣收起时显示，点卡恢复窗；
-// 小卡在宿主窗之上、启动器之下；v35 规则——scene 永遠不銷毀，收起只藏窗）。
-static UIWindow *GHLSSCacheDockWindows[GHLSS_APP_COUNT];
+// v41：貼邊 peek 的點按層與小 X（收起時蓋在宿主窗上：點整截恢復窗，
+// 點 X 徹底關掉；恢復/關窗時藏起來，不另建小卡窗——peek 就是宿主窗
+// 本身縮到邊緣）。三屏側窗旗標 + 分隔線視圖（與其他平行數組同做法）。
+static UIButton *GHLSSPeekTapOverlays[GHLSS_APP_COUNT];
+static UIButton *GHLSSPeekCloseButtons[GHLSS_APP_COUNT];
+static BOOL GHLSSCacheIsSideDock[GHLSS_APP_COUNT];
+static UIView *GHLSSCacheSideDividers[GHLSS_APP_COUNT];
+// v41：ARC 的搜索字串（UITextField 的即時篩選；空字串 = 顯示三段）、
+// 搜索結果的 bundleID（tag 1000+ 的按鈕對應這裡的第幾筆）、常用三開
+// 的待開清單（一次最多 3 個，順序開，中間等上一個建完）。
+static NSString *GHLSSARCSearchText = nil;
+static char GHLSSARCSearchResults[64][128];
+static int GHLSSARCSearchResultCount = 0;
+static char GHLSSPendingTrio[3][128];
+static int GHLSSPendingTrioCount = 0;
+static int GHLSSPendingTrioNext = 0;
+static int GHLSSPendingTrioRetries = 0;
+// v41：選 App 頁的窗（ARC 裡「＋」開的已安裝 App 清單；層級 Alert - 1）。
+static UIWindow *GHLSSAppPickerWindow = nil;
+// v41：通知橫幅的窗（新窗建好時短暫顯示「已打開 <App>」，自動藏）。
+static UIWindow *GHLSSNotificationBannerWindow = nil;
 static UIWindow *GHLSSDimOverlayWindow; // v40：点窗外事件的阴影背景窗（Alert - 4.5，主屏之上、感应带/哆啦A夢鈕之下、宿主窗之下；开关开着、且有浮窗看得见时显示）
 static BOOL GHLSSDragDockLeft = NO; // v40：这次拖动贴边收起往哪边（Began 时读一次位置设定，拖动中不变——每动一下都读 prefs 太费）。
 static CGFloat GHLSSDragSafeDistance = 50.0; // v40：这次拖动的安全距离（Began 时读一次，同上）。
+static BOOL GHLSSDragDisabled = NO; // v41：這次拖動被調度設定關掉了（Began 時讀一次浮窗拖動手勢開關）。
 static BOOL GHLSSDoraemonLongPressed = NO; // v40：哆啦A夢鈕刚被长按过（长按关全部窗；点按处理里看到它就 suppress 启动器、清掉；拖动钮时也清掉——长按后拖出按钮外、TouchUpInside 不触发时的兜底）。
 static UIView *GHLSSCacheContainers[GHLSS_APP_COUNT];
 static UIView *GHLSSCacheTitleBars[GHLSS_APP_COUNT];
@@ -923,6 +1061,10 @@ static int GHLSSActiveAppIndex = -1;
 
 // v38：默认 scaleRatio（下面定义；GHLSSLoadCacheToActive 要用，先声明）。
 static CGFloat GHLSSDefaultScaleRatioForBundleID(const char *bundleID);
+// v41：先声明（下面定义；GHLSSBringWindowToFront 要用，先声明）。
+static BOOL GHLSSReadGameModeEnabled(void);
+// v41：先声明（下面定义；GHLSSIsEdgeSwipeLeft 等讀值 helper 要用，先声明）。
+static BOOL GHLSSIsWindowPositionLeft(void);
 
 // bundleID → 启动器下标（0–4），找不到返回 -1。
 static int GHLSSAppIndexForBundleID(const char *bundleID) {
@@ -947,6 +1089,8 @@ GHLSSCacheTitleBars[i] = GHLSSHostedTitleBar;
 GHLSSCacheTitleLabels[i] = GHLSSHostedTitleLabel;
 GHLSSCacheContentViews[i] = GHLSSHostedContentView;
 GHLSSCacheResizeHandles[i] = GHLSSHostedResizeHandle;
+GHLSSCacheSideDividers[i] = GHLSSHostedSideDivider;
+GHLSSCacheIsSideDock[i] = GHLSSHostedIsSideDock;
 GHLSSCacheSceneIDs[i] = GHLSSHostedSceneID;
 strncpy(GHLSSCacheBundleIDs[i], GHLSSHostedBundleID, sizeof(GHLSSCacheBundleIDs[i]) - 1);
 GHLSSCacheBundleIDs[i][sizeof(GHLSSCacheBundleIDs[i]) - 1] = '\0';
@@ -973,6 +1117,8 @@ GHLSSHostedTitleBar = GHLSSCacheTitleBars[idx];
 GHLSSHostedTitleLabel = GHLSSCacheTitleLabels[idx];
 GHLSSHostedContentView = GHLSSCacheContentViews[idx];
 GHLSSHostedResizeHandle = GHLSSCacheResizeHandles[idx];
+GHLSSHostedSideDivider = GHLSSCacheSideDividers[idx];
+GHLSSHostedIsSideDock = GHLSSCacheIsSideDock[idx];
 GHLSSHostedSceneID = GHLSSCacheSceneIDs[idx];
 strncpy(GHLSSHostedBundleID, GHLSSCacheBundleIDs[idx], sizeof(GHLSSHostedBundleID) - 1);
 GHLSSHostedBundleID[sizeof(GHLSSHostedBundleID) - 1] = '\0';
@@ -1000,6 +1146,8 @@ GHLSSHostedTitleBar = nil;
 GHLSSHostedTitleLabel = nil;
 GHLSSHostedContentView = nil;
 GHLSSHostedResizeHandle = nil;
+GHLSSHostedSideDivider = nil;
+GHLSSHostedIsSideDock = NO;
 GHLSSHostedSceneID = nil;
 GHLSSHostedBundleID[0] = '\0';
 GHLSSHostedPid = 0;
@@ -1022,9 +1170,9 @@ GHLSSActiveAppIndex = -1;
 // presenter 可 deactivate/invalidate；只清缓存引用（窗藏起来、
 // 指针全清），App 自己留着跑。复用守卫判旧时才调这里（进程换了
 // 或 view 没了，旧主 scene 已死，清引用是安全的）。
-// v40 前向声明：贴边小卡收掉（定义在后面工具函数区；销毁缓存项时也要
-// 收掉对应的小卡，不然死进程的旧卡会一直贴在右边缘）。
-static void GHLSSHideDockCardForIndex(int idx);
+// v41 前向声明：貼邊 peek 收掉（定义在后面工具函数区；销毁缓存项时也要
+// 收掉对应的 peek，不然死进程的舊窗會一直貼在邊緣）。
+static void GHLSSHideDockPeekForIndex(int idx);
 
 static void GHLSSDestroyCachedEntryAtIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
@@ -1032,12 +1180,12 @@ if (!GHLSSCacheScenes[idx] && !GHLSSCacheWindows[idx]) return;
 if (GHLSSCacheWindows[idx]) GHLSSCacheWindows[idx].hidden = YES;
 // v38：layer-host 的项（有 layerHostView、没有 presenter）只清引用。
 if (GHLSSCacheLayerHostViews[idx] && !GHLSSCachePresenters[idx]) {
-GHLSSLogLine("v40 layer host entry cleared (scene kept)");
+GHLSSLogLine("v41 layer host entry cleared (scene kept)");
 } else {
 @try {
 if (GHLSSCacheSceneIDs[idx]) {
 char dbuf[256];
-snprintf(dbuf, sizeof(dbuf), "v40 destroying scene %s", [GHLSSCacheSceneIDs[idx] UTF8String]);
+snprintf(dbuf, sizeof(dbuf), "v41 destroying scene %s", [GHLSSCacheSceneIDs[idx] UTF8String]);
 GHLSSLogLine(dbuf);
 [[FBSceneManager sharedInstance] destroyScene:GHLSSCacheSceneIDs[idx] withTransitionContext:nil];
 }
@@ -1047,7 +1195,7 @@ if (GHLSSCachePresenters[idx]) {
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 destroy failed");
+GHLSSLogLine("v41 destroy failed");
 }
 }
 GHLSSCacheWindows[idx] = nil;
@@ -1060,6 +1208,10 @@ GHLSSCacheTitleBars[idx] = nil;
 GHLSSCacheTitleLabels[idx] = nil;
 GHLSSCacheContentViews[idx] = nil;
 GHLSSCacheResizeHandles[idx] = nil;
+GHLSSCacheSideDividers[idx] = nil;
+GHLSSCacheIsSideDock[idx] = NO;
+GHLSSPeekTapOverlays[idx] = nil;
+GHLSSPeekCloseButtons[idx] = nil;
 GHLSSCacheSceneIDs[idx] = nil;
 GHLSSCacheBundleIDs[idx][0] = '\0';
 GHLSSCachePids[idx] = 0;
@@ -1070,12 +1222,12 @@ GHLSSCacheScaleButtons[idx] = nil;
 GHLSSCacheScaleSliderBars[idx] = nil;
 GHLSSCacheScaleSliders[idx] = nil;
 GHLSSCacheScaleLabels[idx] = nil;
-// v40：销毁缓存项时收掉对应的贴边小卡（死进程的旧卡不能留着）。
-GHLSSHideDockCardForIndex(idx);
+// v41：销毁缓存项时收掉对应的貼邊 peek（死进程的舊窗不能留着）。
+GHLSSHideDockPeekForIndex(idx);
 if (idx == GHLSSActiveAppIndex) {
 GHLSSClearActive();
 }
-GHLSSLogLine("v40 scene destroyed");
+GHLSSLogLine("v41 scene destroyed");
 }
 
 // v31：把 hosted scene 推回后台（foreground=NO + backgrounded=YES）。
@@ -1096,7 +1248,7 @@ settings.backgrounded = YES;
 GHLSSLogLine(logLine);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 scene background failed");
+GHLSSLogLine("v41 scene background failed");
 }
 }
 
@@ -1115,7 +1267,7 @@ GHLSSLogLine("v40 scene background failed");
 #define GHLSS_HOSTED_CALC_W 320.0
 #define GHLSS_HOSTED_CONTROL_H 36.0
 #define GHLSS_HOSTED_STRIP_H 24.0
-#define GHLSS_HOSTED_CORNER 35.0
+// v41：圓角改走設定（cornerRadius，預設 35；上面三處已改讀設定）。
 
 // v40：多窗层级（锁屏 2000 之下）：宿主窗基础 Alert - 2（1998）、
 // 带到最前 Alert - 1.75（1998.25）、贴边小卡 Alert - 1.5（1998.5）、
@@ -1125,11 +1277,18 @@ GHLSSLogLine("v40 scene background failed");
 #define GHLSS_HOSTED_FRONT_LEVEL (UIWindowLevelAlert - 1.75)
 #define GHLSS_DOCK_LEVEL (UIWindowLevelAlert - 1.5)
 #define GHLSS_DIM_OVERLAY_LEVEL (UIWindowLevelAlert - 4.5)
-// v40：贴边小卡的尺寸与排布（右边缘、上下居中、一张一张竖着排）。
-#define GHLSS_DOCK_CARD_W 68.0
-#define GHLSS_DOCK_CARD_H 76.0
-#define GHLSS_DOCK_CARD_GAP 8.0
-#define GHLSS_DOCK_CARD_MARGIN 2.0
+// v41：遊戲模式的層級——開著時浮窗釘在鎖屏之下允許的最高層級
+//（Alert - 0.5，底窗；主窗 Alert - 0.25），蓋過啟動器（1999）與其他
+// App；鎖屏（2000）仍在上面，密碼不受影響。
+#define GHLSS_GAME_BASE_LEVEL (UIWindowLevelAlert - 0.5)
+#define GHLSS_GAME_FRONT_LEVEL (UIWindowLevelAlert - 0.25)
+// v41：貼邊 peek 的尺寸（圖 1 的樣子：縮到邊緣、露出一截活內容）。
+// 寬 112、高 216，上下疊著排，間距 8。
+#define GHLSS_DOCK_PEEK_W 112.0
+#define GHLSS_DOCK_PEEK_H 216.0
+#define GHLSS_DOCK_PEEK_GAP 8.0
+// v41：貼邊 peek 的尺寸在上面（GHLSS_DOCK_PEEK_W/H/GAP）；v40 的
+// 68x76 小卡窗已刪（peek 就是宿主窗本身縮到邊緣，不另建卡窗）。
 // v40：新窗错位放的步进（每多一个看得见的窗错开 44pt，横竖交错、夹在屏幕里）。
 #define GHLSS_NEW_WINDOW_OFFSET 44.0
 // v40：拖到右邊緣贴边收起的门槛——放手时窗中心进了右缘 60pt 内才收。
@@ -1297,7 +1456,7 @@ GHLSSHostedContentView.layer.anchorPoint = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.position = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.sublayerTransform = CATransform3DMakeScale(displayScale, displayScale, 1.0);
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 layer host scaled %d%%", (int)(displayScale * 100.0));
+snprintf(buf, sizeof(buf), "v41 layer host scaled %d%%", (int)(displayScale * 100.0));
 GHLSSLogLine(buf);
 // pushFrame 对 layer-host 没有意义（scene frame 不能推），直接返回。
 return;
@@ -1319,7 +1478,7 @@ GHLSSHostedContentView.layer.anchorPoint = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.position = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.sublayerTransform = CATransform3DMakeScale(scale, scale, 1.0);
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 scene scaled %d%%", (int)(scale * 100.0));
+snprintf(buf, sizeof(buf), "v41 scene scaled %d%%", (int)(scale * 100.0));
 GHLSSLogLine(buf);
 if (!pushFrame) return;
 int token = ++GHLSSScaleDebounceToken;
@@ -1339,11 +1498,11 @@ settings.peripheryInsets = UIEdgeInsetsZero;
 settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v40 scene frame updated %dx%d scale %d%%", (int)curFrameSize.width, (int)curFrameSize.height, (int)(curScale * 100.0));
+snprintf(fbuf, sizeof(fbuf), "v41 scene frame updated %dx%d scale %d%%", (int)curFrameSize.width, (int)curFrameSize.height, (int)(curScale * 100.0));
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 scene frame update failed");
+GHLSSLogLine("v41 scene frame update failed");
 }
 });
 }
@@ -1432,6 +1591,192 @@ if (v > 100) v = 100;
 return (CGFloat)v;
 }
 
+// ── v41：新設定鍵的讀法（全部走上面三個現成 helper；鍵名都是普通
+// C 字串，運行時現做，零字面量規則不動） ──
+// 浮窗設置：陰影開關（預設開）、圓角滑桿（0–50，預設 35）、豎屏開窗
+// 固定中心（預設關——開了新窗一律居中開，不恢復記住的位置；關了才
+// 恢復上次位置，保住 v40 第 6 項）、通知橫幅（預設開）。
+static BOOL GHLSSReadShadowEnabled(void) {
+return GHLSSReadPrefsBool("shadowEnabled", YES);
+}
+static CGFloat GHLSSReadCornerRadius(void) {
+double v = GHLSSReadPrefsDouble("cornerRadius", 35.0);
+if (v < 0) v = 0;
+if (v > 50) v = 50;
+return (CGFloat)v;
+}
+static BOOL GHLSSReadCenterOnOpen(void) {
+return GHLSSReadPrefsBool("centerOnOpen", NO);
+}
+static BOOL GHLSSReadNotificationBanner(void) {
+return GHLSSReadPrefsBool("notificationBanner", YES);
+}
+// 調度窗口設置：邊緣滑幾次開 ARC（1 或 2，預設 2）、滑哪邊（沒設就跟
+// 小窗顯示位置走）、浮窗拖動手勢開關（預設開）、側邊小窗手勢開關
+// （管三屏分隔線拖動，預設開）、哆啦A夢雙擊輪切開關（預設開）、
+// 長按多久關全部（0.3–1.0 秒，預設 0.5）。
+static int GHLSSReadEdgeSwipeCount(void) {
+double v = GHLSSReadPrefsDouble("edgeSwipeCount", 2.0);
+return (v <= 1.0) ? 1 : 2;
+}
+static BOOL GHLSSIsEdgeSwipeLeft(void) {
+char *side = GHLSSReadPrefsCString("edgeSwipeSide");
+BOOL isLeft = NO;
+if (side) {
+isLeft = (strcmp(side, "left") == 0);
+free(side);
+} else {
+isLeft = GHLSSIsWindowPositionLeft();
+}
+return isLeft;
+}
+static BOOL GHLSSReadWindowDragEnabled(void) {
+return GHLSSReadPrefsBool("windowDragEnabled", YES);
+}
+static BOOL GHLSSReadSideWindowGestures(void) {
+return GHLSSReadPrefsBool("sideWindowGestures", YES);
+}
+static BOOL GHLSSReadDoraemonDoubleTapEnabled(void) {
+return GHLSSReadPrefsBool("doraemonDoubleTapEnabled", YES);
+}
+static double GHLSSReadLongPressDuration(void) {
+double v = GHLSSReadPrefsDouble("longPressDuration", 0.5);
+if (v < 0.3) v = 0.3;
+if (v > 1.0) v = 1.0;
+return v;
+}
+// v41：哆啦A夢鈕上次拖到的中心高度（沒設 = -1，%ctor 用居中）。
+static double GHLSSReadDoraemonButtonY(void) {
+return GHLSSReadPrefsDouble("doraemonButtonY", -1.0);
+}
+// 三屏設置：三屏模式開關（預設關）、關三屏同時關側邊小窗（預設關，
+// 按 FV 截圖）；ARC 設置：開 ARC（預設開）。
+static BOOL GHLSSReadThreeScreenEnabled(void) {
+return GHLSSReadPrefsBool("threeScreenEnabled", NO);
+}
+static BOOL GHLSSReadCloseThreeScreenAlsoClosesSide(void) {
+return GHLSSReadPrefsBool("closeThreeScreenAlsoClosesSide", NO);
+}
+static BOOL GHLSSReadARCEnabled(void) {
+return GHLSSReadPrefsBool("arcEnabled", YES);
+}
+// v41：ARC 打開方式（arcOpenMode，字串：fullscreen / floating /
+// threescreen，預設 floating；橫屏下強制 floating）、ARC 圖標大小
+// （arcIconSize 40–72，預設 56）、ARC 與邊緣距離（arcEdgeDistance
+// 0–60，預設 20）、ARC 列在左/右（arcColumnSide，沒設就跟小窗位置）、
+// 顯示已開綠點（arcShowOpenDots，預設開）、顯示 App 名（arcShowNames，
+// 預設開）、截圖錄屏隱藏 ARC（arcHideOnScreenshot，預設開）、震動反饋
+// （arcHaptics，預設開）、觸控音效（arcTouchSound，預設開）。
+static int GHLSSReadARCMenuOpenMode(void) {
+char *mode = GHLSSReadPrefsCString("arcOpenMode");
+int m = 1;
+if (mode) {
+if (strcmp(mode, "fullscreen") == 0) m = 0;
+else if (strcmp(mode, "threescreen") == 0) m = 2;
+free(mode);
+}
+return m;
+}
+static CGFloat GHLSSReadARCIconSize(void) {
+double v = GHLSSReadPrefsDouble("arcIconSize", 56.0);
+if (v < 40) v = 40;
+if (v > 72) v = 72;
+return (CGFloat)v;
+}
+static CGFloat GHLSSReadARCEdgeDistance(void) {
+double v = GHLSSReadPrefsDouble("arcEdgeDistance", 20.0);
+if (v < 0) v = 0;
+if (v > 60) v = 60;
+return (CGFloat)v;
+}
+static BOOL GHLSSIsARCColumnLeft(void) {
+char *side = GHLSSReadPrefsCString("arcColumnSide");
+BOOL isLeft = NO;
+if (side) {
+isLeft = (strcmp(side, "left") == 0);
+free(side);
+} else {
+isLeft = GHLSSIsWindowPositionLeft();
+}
+return isLeft;
+}
+static BOOL GHLSSReadARCShowOpenDots(void) {
+return GHLSSReadPrefsBool("arcShowOpenDots", YES);
+}
+static BOOL GHLSSReadARCShowNames(void) {
+return GHLSSReadPrefsBool("arcShowNames", YES);
+}
+static BOOL GHLSSReadARCHideOnScreenshot(void) {
+return GHLSSReadPrefsBool("arcHideOnScreenshot", YES);
+}
+static BOOL GHLSSReadARCHaptics(void) {
+return GHLSSReadPrefsBool("arcHaptics", YES);
+}
+static BOOL GHLSSReadARCTouchSound(void) {
+return GHLSSReadPrefsBool("arcTouchSound", YES);
+}
+// v41：陰影細項（透明度 0–1 預設 0.5、半徑 0–30 預設 12）、通知橫幅
+// 顯示時長（1–3 秒，預設 1.5）、搜索開關與上限（arcSearchEnabled 預設
+// 開、searchResultLimit 5–20 預設 12、searchShowsNotInLauncher 預設開）、
+// 哆啦A夢鈕大小（44–72 預設 56）、左右邊（doraemonSide，沒設就跟小窗
+// 位置）、顯示開關（doraemonVisible 預設開）。鍵盤/相機/桌面圖標三個
+// 開關只存偏好（見 BUILD_LOG §113：鍵盤在浮窗內的表現、相機授權、
+// 主屏圖標都不是這個開關能直接改的，誠實記為待真機驗證/未實作）。
+static CGFloat GHLSSReadShadowOpacity(void) {
+double v = GHLSSReadPrefsDouble("shadowOpacity", 0.5);
+if (v < 0) v = 0;
+if (v > 1) v = 1;
+return (CGFloat)v;
+}
+static CGFloat GHLSSReadShadowRadius(void) {
+double v = GHLSSReadPrefsDouble("shadowRadius", 12.0);
+if (v < 0) v = 0;
+if (v > 30) v = 30;
+return (CGFloat)v;
+}
+static double GHLSSReadBannerDuration(void) {
+double v = GHLSSReadPrefsDouble("bannerDuration", 1.5);
+if (v < 1.0) v = 1.0;
+if (v > 3.0) v = 3.0;
+return v;
+}
+static BOOL GHLSSReadARCSearchEnabled(void) {
+return GHLSSReadPrefsBool("arcSearchEnabled", YES);
+}
+static int GHLSSReadSearchResultLimit(void) {
+double v = GHLSSReadPrefsDouble("searchResultLimit", 12.0);
+if (v < 5) v = 5;
+if (v > 20) v = 20;
+return (int)v;
+}
+static BOOL GHLSSReadSearchShowsNotInLauncher(void) {
+return GHLSSReadPrefsBool("searchShowsNotInLauncher", YES);
+}
+static CGFloat GHLSSReadDoraemonIconSize(void) {
+double v = GHLSSReadPrefsDouble("doraemonIconSize", 56.0);
+if (v < 44) v = 44;
+if (v > 72) v = 72;
+return (CGFloat)v;
+}
+static BOOL GHLSSIsDoraemonSideLeft(void) {
+char *side = GHLSSReadPrefsCString("doraemonSide");
+BOOL isLeft = NO;
+if (side) {
+isLeft = (strcmp(side, "left") == 0);
+free(side);
+} else {
+isLeft = GHLSSIsWindowPositionLeft();
+}
+return isLeft;
+}
+static BOOL GHLSSReadDoraemonVisible(void) {
+return GHLSSReadPrefsBool("doraemonVisible", YES);
+}
+// v41：keyboardAvoidEnabled / cameraPermissionEnabled /
+// desktopIconEnabled 三個鍵只存偏好（設定頁讀寫），主插件裡沒有
+// 地方用它們——這裡不寫讀值 helper，免得 -Wunused-function
+// 報錯；鍵照樣在 plist 裡，設定頁照常讀寫。
+
 // v40：写一个 prefs 数字（CFPreferencesSetAppValue + 同步，立刻落盘；
 // 零字面量规则：key 与 domain 都用 CFStringCreateWithCString 现做）。
 static void GHLSSWritePrefsDouble(const char *key, double value) {
@@ -1452,12 +1797,19 @@ if (keyRef) CFRelease(keyRef);
 
 // v40：记位置/大小的键——"geo" + App 前缀 + 字段（例："geoCalculatorX"、
 // "geoCalculatorScale"）。字段：X、Y（窗中心）、W、H（窗尺寸）、Scale（缩放）。
+// v41：前 5 個固定 App 用上面那張前綴表；自選槽位（idx>=5）用
+// "geoCustom<槽號>" 當前綴（例："geoCustom5X"），不依賴 bundle ID，
+// 換了 App 也認得回來。
 static void GHLSSGeoKeyForIndex(int idx, const char *field, char *buf, size_t bufSize) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT || !field || !buf || bufSize == 0) {
 if (buf && bufSize > 0) buf[0] = '\0';
 return;
 }
+if (idx < 5) {
 snprintf(buf, bufSize, "geo%s%s", GHLSSGeoAppKeys[idx], field);
+} else {
+snprintf(buf, bufSize, "geoCustom%d%s", idx - 5, field);
+}
 }
 
 // v40：把第 idx 个 App 的窗口位置/大小/缩放存进 prefs（拖动结束、
@@ -1466,6 +1818,12 @@ snprintf(buf, bufSize, "geo%s%s", GHLSSGeoAppKeys[idx], field);
 // scaleRatio 可能还没同步滑杆的最新值）。
 static void GHLSSSaveGeometryForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+// v41：豎屏固定中心開著時不記位置（FV 的意思：開了這個開關，轉屏或
+// 拖全屏後都不記錄位置、固定為屏幕中心；跟 v40「記住位置大小」是反的）。
+if (GHLSSReadCenterOnOpen()) {
+GHLSSLogLine("v41 geometry not saved, center on open");
+return;
+}
 UIWindow *w = GHLSSCacheWindows[idx];
 if (!w) return;
 char key[64];
@@ -1485,7 +1843,7 @@ GHLSSWritePrefsDouble(key, (double)s.height);
 GHLSSGeoKeyForIndex(idx, "Scale", key, sizeof(key));
 GHLSSWritePrefsDouble(key, (double)scale);
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 geometry saved %s %dx%d scale %d%%", GHLSSCacheBundleIDs[idx], (int)s.width, (int)s.height, (int)(scale * 100.0));
+snprintf(buf, sizeof(buf), "v41 geometry saved %s %dx%d scale %d%%", GHLSSCacheBundleIDs[idx], (int)s.width, (int)s.height, (int)(scale * 100.0));
 GHLSSLogLine(buf);
 }
 
@@ -1530,6 +1888,262 @@ if (idx < 0 || idx >= GHLSS_APP_COUNT) return NO;
 return GHLSSReadPrefsBool(GHLSSAppEnabledKeys[idx], YES);
 }
 
+// ── v41：寫 prefs（BOOL / 字串） ──
+// 字串傳 NULL 或空字串 = 清掉那個鍵（CFPreferencesSetAppValue 傳 NULL
+// 就是刪除）。立刻落盤。
+static void GHLSSWritePrefsBool(const char *key, BOOL value) {
+if (!key) return;
+CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+CFStringRef keyRef = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+if (domain && keyRef) {
+CFPreferencesSetAppValue(keyRef, value ? kCFBooleanTrue : kCFBooleanFalse, domain);
+CFPreferencesAppSynchronize(domain);
+}
+if (domain) CFRelease(domain);
+if (keyRef) CFRelease(keyRef);
+}
+static void GHLSSWritePrefsCString(const char *key, const char *value) {
+if (!key) return;
+CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+CFStringRef keyRef = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+if (domain && keyRef) {
+if (value && value[0] != '\0') {
+CFStringRef valRef = CFStringCreateWithCString(NULL, value, kCFStringEncodingUTF8);
+if (valRef) {
+CFPreferencesSetAppValue(keyRef, valRef, domain);
+CFRelease(valRef);
+}
+} else {
+CFPreferencesSetAppValue(keyRef, NULL, domain);
+}
+CFPreferencesAppSynchronize(domain);
+}
+if (domain) CFRelease(domain);
+if (keyRef) CFRelease(keyRef);
+}
+
+// ── v41：已安裝 App 清單（ARC 的「＋」與設定頁選擇器共用） ──
+// 緩存檔：/var/mobile/Library/Preferences/GuHaiLongSplitScreen-apps.plist，
+// 內容是 NSArray<NSDictionary{bundleID, name}>。列舉在後台做（見下面
+// GHLSSRefreshInstalledAppListInBackground），讀緩存只讀檔、很快，
+// 主線程讀沒問題。緩存不存在/空時，選擇器只列 5 個固定 App。
+// 完全不用 LSApplicationWorkspace（禁區——同步調用會堵主線程 ≥5 秒），
+// 只用 NSFileManager + plist 讀檔。
+static NSString *GHLSSAppListCachePath(void) {
+return [NSString stringWithCString:"/var/mobile/Library/Preferences/GuHaiLongSplitScreen-apps.plist" encoding:NSUTF8StringEncoding];
+}
+static NSArray *GHLSSCachedInstalledAppList(void) {
+NSString *path = GHLSSAppListCachePath();
+if (!path) return nil;
+NSArray *list = [NSArray arrayWithContentsOfFile:path];
+if (![list isKindOfClass:[NSArray class]]) return nil;
+return list;
+}
+// 從緩存檔查一個 bundle ID 的顯示名（回傳 malloc 的 C 字串，調用處 free；
+// 查不到回 NULL）。
+static char *GHLSSCachedAppNameForBundleID(const char *bundleID) {
+if (!bundleID || bundleID[0] == '\0') return NULL;
+NSArray *list = GHLSSCachedInstalledAppList();
+if (!list) return NULL;
+NSString *bidKey = [NSString stringWithCString:"bundleID" encoding:NSUTF8StringEncoding];
+NSString *nameKey = [NSString stringWithCString:"name" encoding:NSUTF8StringEncoding];
+NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
+for (id item in list) {
+if (![item isKindOfClass:[NSDictionary class]]) continue;
+NSString *itemBid = [(NSDictionary *)item objectForKey:bidKey];
+if (itemBid && [itemBid isEqualToString:bidStr]) {
+NSString *name = [(NSDictionary *)item objectForKey:nameKey];
+if (name && [name length] > 0) {
+const char *utf8 = [name UTF8String];
+if (!utf8) return NULL;
+char *out = (char *)malloc(strlen(utf8) + 1);
+if (!out) return NULL;
+strcpy(out, utf8);
+return out;
+}
+return NULL;
+}
+}
+return NULL;
+}
+// 把自選槽位（5–11）從 prefs 讀進 GHLSSAppBundleIDs/GHLSSAppNames。
+// 槽位有 bundle ID 就填進去，名字從緩存檔查（查不到就用 bundle ID 最後一段）；
+// 槽位空就清掉。啟動時調一次，ARC 打開與選完 App 後也調（立刻生效）。
+static void GHLSSLoadCustomApps(void) {
+for (int s = 0; s < GHLSS_CUSTOM_APP_COUNT; s++) {
+int idx = 5 + s;
+char *bid = GHLSSReadPrefsCString(GHLSSCustomBundleIDKeys[s]);
+if (bid && bid[0] != '\0') {
+strncpy(GHLSSAppBundleIDs[idx], bid, sizeof(GHLSSAppBundleIDs[idx]) - 1);
+GHLSSAppBundleIDs[idx][sizeof(GHLSSAppBundleIDs[idx]) - 1] = '\0';
+char *name = GHLSSCachedAppNameForBundleID(bid);
+if (name && name[0] != '\0') {
+strncpy(GHLSSAppNames[idx], name, sizeof(GHLSSAppNames[idx]) - 1);
+GHLSSAppNames[idx][sizeof(GHLSSAppNames[idx]) - 1] = '\0';
+free(name);
+} else {
+const char *lastDot = strrchr(bid, '.');
+const char *shortName = lastDot ? lastDot + 1 : bid;
+strncpy(GHLSSAppNames[idx], shortName, sizeof(GHLSSAppNames[idx]) - 1);
+GHLSSAppNames[idx][sizeof(GHLSSAppNames[idx]) - 1] = '\0';
+}
+free(bid);
+} else {
+GHLSSAppBundleIDs[idx][0] = '\0';
+GHLSSAppNames[idx][0] = '\0';
+if (bid) free(bid);
+}
+}
+}
+// 這個 bundle ID 現在在不在啟動器裡（固定槽看 app*Enabled，自選槽看
+// customAppNEnabled；空槽不算）。
+static BOOL GHLSSIsAppInLauncher(const char *bundleID) {
+if (!bundleID || bundleID[0] == '\0') return NO;
+int idx = GHLSSAppIndexForBundleID(bundleID);
+if (idx < 0) return NO;
+return GHLSSIsAppEnabled(idx);
+}
+// 把一個 App 加進/移出啟動器（ARC 的「＋」與設定頁選擇器共用同一份鍵，
+// 兩邊改了都同步）。固定 App 只改它的開關；自選 App：開時找第一個空槽位
+// 寫 bundle ID + 開關開，關時清掉那個槽位；沒空槽位就回 NO（上限 12 個）。
+static BOOL GHLSSSetAppInLauncher(const char *bundleID, BOOL inLauncher) {
+if (!bundleID || bundleID[0] == '\0') return NO;
+int idx = GHLSSAppIndexForBundleID(bundleID);
+char buf[256];
+if (idx >= 0 && idx < 5) {
+GHLSSWritePrefsBool(GHLSSAppEnabledKeys[idx], inLauncher);
+snprintf(buf, sizeof(buf), "v41 app selector %s %s", bundleID, inLauncher ? "on" : "off");
+GHLSSLogLine(buf);
+return YES;
+}
+if (idx >= 5) {
+if (inLauncher) {
+GHLSSWritePrefsBool(GHLSSAppEnabledKeys[idx], YES);
+} else {
+GHLSSWritePrefsCString(GHLSSCustomBundleIDKeys[idx - 5], NULL);
+GHLSSWritePrefsBool(GHLSSAppEnabledKeys[idx], NO);
+GHLSSLoadCustomApps();
+}
+snprintf(buf, sizeof(buf), "v41 app selector %s %s", bundleID, inLauncher ? "on" : "off");
+GHLSSLogLine(buf);
+return YES;
+}
+if (!inLauncher) return YES;
+for (int s = 0; s < GHLSS_CUSTOM_APP_COUNT; s++) {
+char *existing = GHLSSReadPrefsCString(GHLSSCustomBundleIDKeys[s]);
+BOOL empty = (!existing || existing[0] == '\0');
+if (existing) free(existing);
+if (empty) {
+GHLSSWritePrefsCString(GHLSSCustomBundleIDKeys[s], bundleID);
+GHLSSWritePrefsBool(GHLSSAppEnabledKeys[5 + s], YES);
+GHLSSLoadCustomApps();
+snprintf(buf, sizeof(buf), "v41 app selector %s on slot %d", bundleID, s + 1);
+GHLSSLogLine(buf);
+return YES;
+}
+}
+GHLSSLogLine("v41 app selector full");
+return NO;
+}
+// v41：取一個 bundleID 的顯示名（啟動器槽位優先，其次緩存清單，
+// 都沒有就用 bundle ID 最後一段）。輸出寫進 out（呼叫處備好 buffer）。
+static void GHLSSAppNameForBundleID(const char *bundleID, char *out, size_t outSize) {
+if (!bundleID || !out || outSize == 0) return;
+out[0] = '\0';
+int idx = GHLSSAppIndexForBundleID(bundleID);
+if (idx >= 0 && GHLSSAppNames[idx][0] != '\0') {
+strncpy(out, GHLSSAppNames[idx], outSize - 1);
+out[outSize - 1] = '\0';
+return;
+}
+char *cached = GHLSSCachedAppNameForBundleID(bundleID);
+if (cached) {
+strncpy(out, cached, outSize - 1);
+out[outSize - 1] = '\0';
+free(cached);
+return;
+}
+const char *lastDot = strrchr(bundleID, '.');
+const char *shortName = lastDot ? lastDot + 1 : bundleID;
+strncpy(out, shortName, outSize - 1);
+out[outSize - 1] = '\0';
+}
+// 後台列舉已安裝 App（絕不在主線程做——讀幾十個 Info.plist + 掃兩個目錄
+// 要時間，主線程做會卡住 SpringBoard）。讀 /Applications（系統 App）與
+// /var/mobile/Containers/Bundle/Application（商店 App，UUID 目錄裡才是
+// .app）下面每個 .app 的 Info.plist，取 CFBundleIdentifier +
+// CFBundleDisplayName（沒有就用 CFBundleName，再沒有就用目錄名），去重、
+// 按名字排好，寫進緩存檔。跑在 global queue 上；寫完記一行日誌。
+// 若目錄讀不到（權限），緩存就是空的，選擇器只列 5 個固定 App，不崩。
+static void GHLSSRefreshInstalledAppListInBackground(void) {
+dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+@try {
+NSMutableArray *apps = [NSMutableArray array];
+NSMutableSet *seenBids = [NSMutableSet set];
+NSFileManager *fm = [NSFileManager defaultManager];
+NSString *appsDir = [NSString stringWithCString:"/Applications" encoding:NSUTF8StringEncoding];
+NSString *containersDir = [NSString stringWithCString:"/var/mobile/Containers/Bundle/Application" encoding:NSUTF8StringEncoding];
+NSString *appSuffix = [NSString stringWithCString:".app" encoding:NSUTF8StringEncoding];
+NSString *infoName = [NSString stringWithCString:"Info.plist" encoding:NSUTF8StringEncoding];
+NSString *bidKey = [NSString stringWithCString:"CFBundleIdentifier" encoding:NSUTF8StringEncoding];
+NSString *displayKey = [NSString stringWithCString:"CFBundleDisplayName" encoding:NSUTF8StringEncoding];
+NSString *nameKey2 = [NSString stringWithCString:"CFBundleName" encoding:NSUTF8StringEncoding];
+NSString *cacheBidKey = [NSString stringWithCString:"bundleID" encoding:NSUTF8StringEncoding];
+NSString *cacheNameKey = [NSString stringWithCString:"name" encoding:NSUTF8StringEncoding];
+NSArray *dirs = [NSArray arrayWithObjects:appsDir, containersDir, nil];
+for (NSString *dir in dirs) {
+NSArray *entries = [fm contentsOfDirectoryAtPath:dir error:nil];
+if (!entries) continue;
+for (NSString *entry in entries) {
+NSString *entryPath = [dir stringByAppendingPathComponent:entry];
+BOOL isDir = NO;
+if (![fm fileExistsAtPath:entryPath isDirectory:&isDir] || !isDir) continue;
+NSString *appPath = nil;
+if ([entry hasSuffix:appSuffix]) {
+appPath = entryPath;
+} else {
+NSArray *inner = [fm contentsOfDirectoryAtPath:entryPath error:nil];
+for (NSString *innerEntry in inner) {
+if ([innerEntry hasSuffix:appSuffix]) {
+appPath = [entryPath stringByAppendingPathComponent:innerEntry];
+break;
+}
+}
+}
+if (!appPath) continue;
+NSString *infoPath = [appPath stringByAppendingPathComponent:infoName];
+NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:infoPath];
+if (!info) continue;
+NSString *bid = [info objectForKey:bidKey];
+if (!bid || [bid length] == 0) continue;
+if ([seenBids containsObject:bid]) continue;
+NSString *name = [info objectForKey:displayKey];
+if (!name || [name length] == 0) name = [info objectForKey:nameKey2];
+if (!name || [name length] == 0) name = [appPath lastPathComponent];
+[seenBids addObject:bid];
+NSDictionary *item = [NSDictionary dictionaryWithObjectsAndKeys:bid, cacheBidKey, name, cacheNameKey, nil];
+[apps addObject:item];
+}
+}
+[apps sortUsingComparator:^NSComparisonResult(id a, id b) {
+NSString *na = [(NSDictionary *)a objectForKey:cacheNameKey];
+NSString *nb = [(NSDictionary *)b objectForKey:cacheNameKey];
+if (!na) return NSOrderedAscending;
+if (!nb) return NSOrderedDescending;
+return [na localizedCaseInsensitiveCompare:nb];
+}];
+NSString *cachePath = GHLSSAppListCachePath();
+if (cachePath) [apps writeToFile:cachePath atomically:YES];
+char buf[128];
+snprintf(buf, sizeof(buf), "v41 installed apps cached %lu", (unsigned long)[apps count]);
+GHLSSLogLine(buf);
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v41 installed apps scan failed");
+}
+});
+}
+
 // v40：小窗显示位置是不是左侧（prefs 里的 windowPosition，
 // "left" 或 "right"，默认 "right"；不是 "left" 就当右側）。
 static BOOL GHLSSIsWindowPositionLeft(void) {
@@ -1539,23 +2153,24 @@ if (pos) free(pos);
 return isLeft;
 }
 
-// v40：贴边小卡的 x（右：屏宽 - 卡宽 - 边距；左：边距）。建卡与重排
-// 都用它，跟位置设定走。
-static CGFloat GHLSSDockCardX(void) {
+// v41：貼邊 peek 的 x（右：屏寬 - peek 寬 - 邊距；左：邊距）。重排
+// 與收起都用它，跟位置設定走。
+static CGFloat GHLSSDockPeekX(void) {
 CGRect screenBounds = [UIScreen mainScreen].bounds;
-if (GHLSSIsWindowPositionLeft()) return GHLSS_DOCK_CARD_MARGIN;
-return screenBounds.size.width - GHLSS_DOCK_CARD_W - GHLSS_DOCK_CARD_MARGIN;
+if (GHLSSIsWindowPositionLeft()) return 2.0;
+return screenBounds.size.width - GHLSS_DOCK_PEEK_W - 2.0;
 }
 
 // v40：感应带跟小窗位置设定走（左/右）。%ctor 建带时调一次（初始位置）；
 // showLauncher 也调（设定改了，下次开启动器时带子就跟到对的边；
 // 哆啦A夢鈕一直在右邊，永遠能開啟動器）。带子 24pt 宽、全高；
 // 边缘滑动手势的 edges 也一起改（右緣滑 / 左緣滑）。
+// v41：感應帶跟調度設定走（edgeSwipeSide；沒設就跟小窗位置設定）。
 static void GHLSSUpdateStripPosition(void) {
 if (!GHLSSStripWindow) return;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGFloat stripWidth = 24.0;
-if (GHLSSIsWindowPositionLeft()) {
+if (GHLSSIsEdgeSwipeLeft()) {
 GHLSSStripWindow.frame = CGRectMake(0, 0, stripWidth, screenBounds.size.height);
 if (GHLSSLauncherEdgePan) GHLSSLauncherEdgePan.edges = UIRectEdgeLeft;
 } else {
@@ -1640,7 +2255,7 @@ settings.backgrounded = YES;
 GHLSSLogLine(logLine);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 scene background failed");
+GHLSSLogLine("v41 scene background failed");
 }
 }
 
@@ -1660,8 +2275,29 @@ settings.backgrounded = NO;
 GHLSSLogLine(logLine);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 foreground push failed");
+GHLSSLogLine("v41 foreground push failed");
 }
+}
+
+// v41：浮窗前後順序（主/副/副副）：最近帶到最前的在前。帶到最前/恢復/
+// 建新窗時更新；雙擊哆啦A夢輪切、ARC 升主窗都按這張表走。
+static int GHLSSFrontOrder[GHLSS_APP_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+static int GHLSSAppIndexForWindow(UIWindow *window) {
+if (!window) return -1;
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (GHLSSCacheWindows[i] == window) return i;
+}
+return -1;
+}
+static void GHLSSMarkWindowFront(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+int pos = -1;
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (GHLSSFrontOrder[i] == idx) { pos = i; break; }
+}
+if (pos < 0) return;
+for (int i = pos; i > 0; i--) GHLSSFrontOrder[i] = GHLSSFrontOrder[i - 1];
+GHLSSFrontOrder[0] = idx;
 }
 
 // v40：把指定窗带到最前——别的宿主窗回基础层级（Alert - 2），这个窗
@@ -1669,112 +2305,92 @@ GHLSSLogLine("v40 foreground push failed");
 // 仍在它之上；贴边小卡（Alert - 1.5）也在它之上（卡要一直看得见）。
 static void GHLSSBringWindowToFront(UIWindow *window) {
 if (!window) return;
+// v41：遊戲模式開著時，帶到最前的窗升到遊戲層級（Alert - 0.25），
+// 別的窗回遊戲底層級（Alert - 0.5）；關著時走原來的 1998.25 / 1998。
+BOOL gameMode = GHLSSReadGameModeEnabled();
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (GHLSSCacheWindows[i] && GHLSSCacheWindows[i] != window) {
-GHLSSCacheWindows[i].windowLevel = GHLSS_HOSTED_BASE_LEVEL;
+GHLSSCacheWindows[i].windowLevel = gameMode ? GHLSS_GAME_BASE_LEVEL : GHLSS_HOSTED_BASE_LEVEL;
 }
 }
-window.windowLevel = GHLSS_HOSTED_FRONT_LEVEL;
+window.windowLevel = gameMode ? GHLSS_GAME_FRONT_LEVEL : GHLSS_HOSTED_FRONT_LEVEL;
 GHLSSSetActiveToWindow(window);
-GHLSSLogLine("v40 window brought to front");
+GHLSSMarkWindowFront(GHLSSAppIndexForWindow(window));
+GHLSSLogLine("v41 window brought to front");
 }
 
-// v40：贴边小卡重新排布——右边缘、上下居中、一张一张竖着排。
-// 有卡增减时调（最小化、恢复、关窗、从卡关闭）。
-static void GHLSSLayoutDockCards(void) {
+// v41：貼邊 peek 重新排布——收著的窗縮到邊緣、上下疊著排（圖 1 的樣子：
+// 右邊緣上下疊著收起的浮窗，只露出一截活內容）。peek 就是宿主窗本身
+//（112x216），不是另外的小卡窗。有 peek 增減時調（最小化、恢復、
+// 關窗、從 peek 關掉）。順序按前後順序表（主窗在最上面）。
+static void GHLSSLayoutDockPeeks(void) {
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 int docked[GHLSS_APP_COUNT];
 int n = 0;
-for (int i = 0; i < GHLSS_APP_COUNT; i++) {
-if (GHLSSCacheDockWindows[i] && !GHLSSCacheDockWindows[i].hidden) {
+for (int k = 0; k < GHLSS_APP_COUNT; k++) {
+int i = GHLSSFrontOrder[k];
+if (GHLSSCacheWindows[i] && GHLSSCacheMinimized[i]) {
 docked[n++] = i;
 }
 }
 if (n == 0) return;
-CGFloat totalH = n * GHLSS_DOCK_CARD_H + (n - 1) * GHLSS_DOCK_CARD_GAP;
+CGFloat totalH = n * GHLSS_DOCK_PEEK_H + (n - 1) * GHLSS_DOCK_PEEK_GAP;
 CGFloat startY = (screenBounds.size.height - totalH) / 2.0;
-CGFloat x = GHLSSDockCardX(); // v40：跟小窗位置设定走（右緣 / 左緣）。
+CGFloat x = GHLSSDockPeekX(); // v41：跟小窗位置設定走（右緣 / 左緣）。
 for (int k = 0; k < n; k++) {
-CGFloat y = startY + k * (GHLSS_DOCK_CARD_H + GHLSS_DOCK_CARD_GAP);
-GHLSSCacheDockWindows[docked[k]].frame = CGRectMake(x, y, GHLSS_DOCK_CARD_W, GHLSS_DOCK_CARD_H);
+CGFloat y = startY + k * (GHLSS_DOCK_PEEK_H + GHLSS_DOCK_PEEK_GAP);
+GHLSSCacheWindows[docked[k]].frame = CGRectMake(x, y, GHLSS_DOCK_PEEK_W, GHLSS_DOCK_PEEK_H);
 }
 }
 
-// v40：给第 idx 个 App 建（或显示）一张贴边小卡——图标 + App 名，
-// 点卡恢复窗；卡右上角一颗小 X，点 X 彻底关掉（不再回来）。
-// 卡是单独的小窗（右边缘、层级 Alert - 1.5，在宿主窗之上、启动器之下）。
-static void GHLSSShowDockCardForIndex(int idx) {
+// v41：把第 idx 個窗收成貼邊 peek——窗本身縮到邊緣（112x216，露出一截
+// 活內容，上下疊著排；圖 1 的樣子），不是另外建小卡窗。窗上蓋一層透明
+// 點按層（點整截恢復窗）+ 右上角一顆小 X（徹底關掉）。scene 活著
+// （只縮窗 + 推後台，不銷毀；v35 規則）。收起前的位置/大小由
+// minimizeHostedWindow 在縮窗之前存過（GHLSSSaveGeometryForIndex）。
+static void GHLSSShowDockPeekForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
-if (!GHLSSCacheWindows[idx]) return;
-UIWindow *dockWindow = GHLSSCacheDockWindows[idx];
-if (!dockWindow) {
-dockWindow = [[UIWindow alloc] initWithFrame:CGRectMake(GHLSSDockCardX(), 0, GHLSS_DOCK_CARD_W, GHLSS_DOCK_CARD_H)];
-dockWindow.windowLevel = GHLSS_DOCK_LEVEL;
-dockWindow.backgroundColor = [UIColor clearColor];
-UIWindowScene *dockScene = GHLSSActiveWindowScene();
-if (dockScene) dockWindow.windowScene = dockScene;
-UIViewController *dockVC = [[UIViewController alloc] init];
-UIView *cardView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, GHLSS_DOCK_CARD_W, GHLSS_DOCK_CARD_H)];
-cardView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
-cardView.layer.cornerRadius = 12.0;
-cardView.layer.borderWidth = 1.0;
-cardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.3].CGColor;
-cardView.layer.masksToBounds = YES;
-dockVC.view = cardView;
-// 整张卡是一个按钮（点卡恢复窗）。
-UIButton *cardButton = [UIButton buttonWithType:UIButtonTypeCustom];
-cardButton.frame = CGRectMake(0, 0, GHLSS_DOCK_CARD_W, GHLSS_DOCK_CARD_H);
-cardButton.tag = idx;
-[cardButton addTarget:GHLSSLauncherShared action:@selector(handleDockCardTap:) forControlEvents:UIControlEventTouchUpInside];
-[cardView addSubview:cardButton];
-// 图标（44x44，置顶居中）。
-UIImage *icon = GHLSSAppIcon(GHLSSCacheBundleIDs[idx]);
-UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake((GHLSS_DOCK_CARD_W - 44.0) / 2.0, 6, 44, 44)];
-if (icon) {
-iconView.image = icon;
-} else {
-iconView.backgroundColor = [UIColor grayColor];
-}
-iconView.layer.cornerRadius = 10.0;
-iconView.layer.masksToBounds = YES;
-[cardButton addSubview:iconView];
-// App 名（卡底部，10pt 白字居中）。
-UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(2, 54, GHLSS_DOCK_CARD_W - 4, 16)];
-nameLabel.text = [NSString stringWithCString:GHLSSAppNames[idx] encoding:NSUTF8StringEncoding];
-nameLabel.textColor = [UIColor whiteColor];
-nameLabel.font = [UIFont systemFontOfSize:10];
-nameLabel.textAlignment = NSTextAlignmentCenter;
-[cardButton addSubview:nameLabel];
-// 卡右上角的小 X（彻底关掉，点 X 不触发恢复——X 在卡按钮之上，
-// 后加的子视图在上层，先拿到点按）。
+UIWindow *w = GHLSSCacheWindows[idx];
+if (!w || !GHLSSCacheContainers[idx]) return;
+GHLSSCacheMinimized[idx] = YES;
+w.windowLevel = GHLSS_DOCK_LEVEL;
+UIView *container = GHLSSCacheContainers[idx];
+if (!GHLSSPeekTapOverlays[idx]) {
+UIButton *tapOverlay = [UIButton buttonWithType:UIButtonTypeCustom];
+tapOverlay.tag = idx;
+[tapOverlay addTarget:GHLSSLauncherShared action:@selector(handleDockPeekTap:) forControlEvents:UIControlEventTouchUpInside];
+[container addSubview:tapOverlay];
+GHLSSPeekTapOverlays[idx] = tapOverlay;
 UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-closeBtn.frame = CGRectMake(GHLSS_DOCK_CARD_W - 22, 2, 20, 20);
 closeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0];
 closeBtn.layer.cornerRadius = 10.0;
 [closeBtn setTitle:[NSString stringWithCString:"x" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
 [closeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
 closeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
 closeBtn.tag = idx;
-[closeBtn addTarget:GHLSSLauncherShared action:@selector(handleDockCardClose:) forControlEvents:UIControlEventTouchUpInside];
-[cardView addSubview:closeBtn];
-dockWindow.rootViewController = dockVC;
-GHLSSCacheDockWindows[idx] = dockWindow;
+[closeBtn addTarget:GHLSSLauncherShared action:@selector(handleDockPeekClose:) forControlEvents:UIControlEventTouchUpInside];
+[container addSubview:closeBtn];
+GHLSSPeekCloseButtons[idx] = closeBtn;
 }
-dockWindow.hidden = NO;
-GHLSSLayoutDockCards();
+GHLSSPeekTapOverlays[idx].frame = CGRectMake(0, 0, GHLSS_DOCK_PEEK_W, GHLSS_DOCK_PEEK_H);
+GHLSSPeekTapOverlays[idx].hidden = NO;
+GHLSSPeekCloseButtons[idx].frame = CGRectMake(GHLSS_DOCK_PEEK_W - 22, 2, 20, 20);
+GHLSSPeekCloseButtons[idx].hidden = NO;
+GHLSSLayoutDockPeeks();
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 window docked %s", GHLSSCacheBundleIDs[idx]);
+snprintf(buf, sizeof(buf), "v41 window docked to peek %s", GHLSSCacheBundleIDs[idx]);
 GHLSSLogLine(buf);
 }
 
-// v40：收掉第 idx 个 App 的贴边小卡（恢复/关窗时调），再重排剩下的卡。
-static void GHLSSHideDockCardForIndex(int idx) {
+// v41：收掉第 idx 個 App 的貼邊 peek（恢復/關窗時調）：點按層與小 X
+// 藏起來（不刪，下次收起再用），再重排剩下的 peek。窗的尺寸由恢復處
+// 從存過的位置/大小還原（見 restoreHostedWindow）。
+static void GHLSSHideDockPeekForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
-if (GHLSSCacheDockWindows[idx]) {
-GHLSSCacheDockWindows[idx].hidden = YES;
-GHLSSCacheDockWindows[idx] = nil;
-}
-GHLSSLayoutDockCards();
+GHLSSCacheMinimized[idx] = NO;
+if (GHLSSPeekTapOverlays[idx]) GHLSSPeekTapOverlays[idx].hidden = YES;
+if (GHLSSPeekCloseButtons[idx]) GHLSSPeekCloseButtons[idx].hidden = YES;
+GHLSSLayoutDockPeeks();
 }
 
 // v40：阴影背景（点窗外事件）的显示/隐藏——开关开着、且至少有一个
@@ -1813,9 +2429,81 @@ UITapGestureRecognizer *overlayTap = [[UITapGestureRecognizer alloc] initWithTar
 [overlayView addGestureRecognizer:overlayTap];
 overlayVC.view = overlayView;
 GHLSSDimOverlayWindow.rootViewController = overlayVC;
-GHLSSLogLine("v40 dim overlay created");
+GHLSSLogLine("v41 dim overlay created");
 }
 GHLSSDimOverlayWindow.hidden = NO;
+}
+
+// ── v41：置頂 / 最近 / 遊戲模式 ──
+// 置頂與最近都存在 prefs 裡一個逗號分隔的字串鍵（pinnedAppIDs、
+// recentAppIDs），讀寫走上面現成的字串 helper；順序就是字串裡的順序。
+static NSArray *GHLSSReadIDList(const char *key) {
+char *raw = GHLSSReadPrefsCString(key);
+if (!raw) return [NSArray array];
+NSString *rawStr = [NSString stringWithCString:raw encoding:NSUTF8StringEncoding];
+free(raw);
+if (!rawStr || [rawStr length] == 0) return [NSArray array];
+NSString *sep = [NSString stringWithCString:"," encoding:NSUTF8StringEncoding];
+return [rawStr componentsSeparatedByString:sep];
+}
+static void GHLSSWriteIDList(const char *key, NSArray *ids) {
+NSString *sep = [NSString stringWithCString:"," encoding:NSUTF8StringEncoding];
+NSString *joined = [ids componentsJoinedByString:sep];
+const char *utf8 = joined ? [joined UTF8String] : "";
+GHLSSWritePrefsCString(key, utf8 ? utf8 : "");
+}
+static BOOL GHLSSListContainsBid(NSArray *ids, const char *bundleID) {
+if (!bundleID) return NO;
+NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
+for (id item in ids) {
+if ([item isKindOfClass:[NSString class]] && [(NSString *)item isEqualToString:bidStr]) return YES;
+}
+return NO;
+}
+static BOOL GHLSSIsAppPinned(const char *bundleID) {
+return GHLSSListContainsBid(GHLSSReadIDList("pinnedAppIDs"), bundleID);
+}
+static void GHLSSSetAppPinned(const char *bundleID, BOOL pinned) {
+if (!bundleID || bundleID[0] == '\0') return;
+NSMutableArray *ids = [NSMutableArray arrayWithArray:GHLSSReadIDList("pinnedAppIDs")];
+NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
+[ids removeObject:bidStr];
+if (pinned) [ids insertObject:bidStr atIndex:0];
+GHLSSWriteIDList("pinnedAppIDs", ids);
+char buf[256];
+snprintf(buf, sizeof(buf), "v41 app %s %s", bundleID, pinned ? "pinned" : "unpinned");
+GHLSSLogLine(buf);
+}
+// 最近開過的浮窗 App（上限 5 個，最近的在前；開窗時調）。
+static void GHLSSPushRecentApp(const char *bundleID) {
+if (!bundleID || bundleID[0] == '\0') return;
+NSMutableArray *ids = [NSMutableArray arrayWithArray:GHLSSReadIDList("recentAppIDs")];
+NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
+[ids removeObject:bidStr];
+[ids insertObject:bidStr atIndex:0];
+while ([ids count] > 5) [ids removeLastObject];
+GHLSSWriteIDList("recentAppIDs", ids);
+}
+// 遊戲模式開關（prefs 鍵 gameModeEnabled，ARC 裡的開關與設定頁同一份鍵）。
+static BOOL GHLSSReadGameModeEnabled(void) {
+return GHLSSReadPrefsBool("gameModeEnabled", NO);
+}
+// 遊戲模式開關切換時重算全部可見窗的層級（開：釘在鎖屏之下最高層級；
+// 關：回基礎/最前層級）。帶到最前時 GHLSSBringWindowToFront 已經按
+// 遊戲模式算過，這裡只負責開關當下那一下。
+static void GHLSSApplyGameModeLevels(void) {
+BOOL gameMode = GHLSSReadGameModeEnabled();
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (!GHLSSCacheWindows[i] || GHLSSCacheWindows[i].hidden || GHLSSCacheMinimized[i]) continue;
+if (gameMode) {
+GHLSSCacheWindows[i].windowLevel = (i == GHLSSActiveAppIndex) ? GHLSS_GAME_FRONT_LEVEL : GHLSS_GAME_BASE_LEVEL;
+} else {
+GHLSSCacheWindows[i].windowLevel = (i == GHLSSActiveAppIndex) ? GHLSS_HOSTED_FRONT_LEVEL : GHLSS_HOSTED_BASE_LEVEL;
+}
+}
+char buf[64];
+snprintf(buf, sizeof(buf), "v41 game mode %s", gameMode ? "on" : "off");
+GHLSSLogLine(buf);
 }
 
 @implementation GHLSSLauncher
@@ -1831,50 +2519,145 @@ return YES;
 //（标题处，UILabel 默认不接手势）才认，收起控制条。点在细条的
 // 小 pill 上（普通 UIView）也认，展开/收起控制条。边缘滑动手势
 // 的触摸在感应带上（不是按钮），不受影响。
+// v41 修：哆啦A夢鈕自己的手勢（拖動 pan、長按、單擊、雙擊）掛在鈕上，
+// 觸摸的 view 就是鈕本身（UIButton）——按上面那條一律回 NO，鈕的手勢
+// 永遠收不到觸摸（v40 拖不動、長按關全部也死的根因）。所以先判：
+// 手勢掛在哆啦A夢鈕上就回 YES；其他手勢碰到 UIButton 才回 NO。
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+if (gestureRecognizer.view == GHLSSDoraemonButton) return YES;
 if ([touch.view isKindOfClass:[UIButton class]]) return NO;
 return YES;
 }
 
-// 右边缘滑动：2 秒内滑两次才开启动器（防误触）；第一次只记日志。
+// v41：右邊緣滑動開 ARC（調度窗口設置：滑幾次、滑哪邊）。滑 1 次開
+// （edgeSwipeCount=1）或 2 秒內滑兩次才開（=2，預設，防誤觸）；
+// 第一次只記日誌。滑哪邊跟調度設定走（沒設就跟小窗顯示位置）。
 - (void)handleEdgeSwipe:(UIScreenEdgePanGestureRecognizer *)recognizer {
 if (recognizer.state != UIGestureRecognizerStateEnded) return;
+// v41：ARC 總開關關了，邊緣滑動不再叫出 ARC（只剩浮窗和三屏路）。
+if (!GHLSSReadARCEnabled()) {
+GHLSSLogLine("v41 edge swipe ignored, arc disabled");
+return;
+}
+if (GHLSSReadEdgeSwipeCount() <= 1) {
+GHLSSLogLine("v41 edge swipe 1x, opening ARC");
+[self showLauncher];
+return;
+}
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v40 edge swipe 2nd, opening launcher");
+GHLSSLogLine("v41 edge swipe 2nd, opening ARC");
 [self showLauncher];
 } else {
 GHLSSLastSwipeTime = now;
-GHLSSLogLine("v40 edge swipe 1st, armed");
+GHLSSLogLine("v41 edge swipe 1st, armed");
 }
 }
 
-// 哆啦A夢鈕：点一次就开启动器（备用触发，不用滑两次）。
-- (void)handleHandleButton:(id)sender {
-// v40：刚被长按过（关全部窗）——这次点按不开启动器（长按松手不触发
-// 启动器）；旗标清掉，下次点按恢复正常。
+// v41：哆啦A夢鈕單擊——開 ARC（代替原來的 TouchUpInside：單擊手勢要
+// 等雙擊失敗才認，雙擊時不誤開 ARC）。剛被長按過（關全部窗）——這次
+// 單擊不開 ARC（長按鬆手不觸發）；旗標清掉，下次單擊恢復正常。
+- (void)handleDoraemonButtonSingleTap:(UITapGestureRecognizer *)recognizer {
+(void)recognizer;
 if (GHLSSDoraemonLongPressed) {
 GHLSSDoraemonLongPressed = NO;
-GHLSSLogLine("v40 handle button tap suppressed after long press");
+GHLSSLogLine("v41 handle button tap suppressed after long press");
 return;
 }
-GHLSSLogLine("v40 handle button tapped, opening launcher");
+// v41：ARC 總開關關了，哆啦A夢點按不再叫出 ARC（只剩浮窗和三屏路）。
+if (!GHLSSReadARCEnabled()) {
+GHLSSLogLine("v41 doraemon tap ignored, arc disabled");
+return;
+}
+GHLSSLogLine("v41 handle button tapped, opening ARC");
 [self showLauncher];
 }
+// v41：哆啦A夢鈕雙擊——輪切主窗（按順序表找下一個看得見的窗升為主窗）。
+- (void)handleDoraemonButtonDoubleTap:(UITapGestureRecognizer *)recognizer {
+(void)recognizer;
+GHLSSLogLine("v41 doraemon double tapped");
+[self cycleMainWindow];
+}
+// v41：把第 idx 個窗升為主窗（ARC 點已開的 App / 點 peek / 雙擊輪切）。
+// 收著的從 peek 恢復（帶到最前、推前景）；看得見的帶到最前 + 推前景；
+// 進程死了就走正常開窗流程（復用守衛銷毀重建）。
+- (void)promoteWindowToMainIndex:(int)idx {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheWindows[idx]) return;
+if (GHLSSCacheMinimized[idx]) {
+if (GHLSSCachedEntryIsAlive(idx)) {
+GHLSSLoadCacheToActive(idx);
+[self restoreHostedWindow];
+} else {
+GHLSSLogLine("v41 promote entry stale, relaunching");
+const char *bid = GHLSSCacheBundleIDs[idx];
+if (bid && bid[0] != '\0') {
+[self launchHostedApp:bid name:GHLSSAppNames[idx]];
+}
+}
+return;
+}
+GHLSSLoadCacheToActive(idx);
+GHLSSBringWindowToFront(GHLSSHostedWindow);
+@try {
+if (GHLSSHostedScene) {
+[GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+settings.foreground = YES;
+if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
+settings.backgrounded = NO;
+}
+}];
+}
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v41 foreground push on promote failed");
+}
+char buf[256];
+snprintf(buf, sizeof(buf), "v41 window promoted to main %s", GHLSSCacheBundleIDs[idx]);
+GHLSSLogLine(buf);
+}
+// v41：雙擊哆啦A夢輪切主窗——按順序表找下一個看得見的窗升為主窗。
+// 雙擊開關關了就不切；少於 2 個可見窗也沒得切。
+- (void)cycleMainWindow {
+if (!GHLSSReadDoraemonDoubleTapEnabled()) {
+GHLSSLogLine("v41 window cycle disabled");
+return;
+}
+int visible[GHLSS_APP_COUNT];
+int n = 0;
+for (int k = 0; k < GHLSS_APP_COUNT; k++) {
+int idx = GHLSSFrontOrder[k];
+if (GHLSSCacheWindows[idx] && !GHLSSCacheWindows[idx].hidden && !GHLSSCacheMinimized[idx]) visible[n++] = idx;
+}
+if (n <= 1) {
+GHLSSLogLine("v41 window cycle nothing to cycle");
+return;
+}
+int current = GHLSSActiveAppIndex;
+int pos = -1;
+for (int i = 0; i < n; i++) {
+if (visible[i] == current) { pos = i; break; }
+}
+int next = visible[(pos + 1) % n];
+[self promoteWindowToMainIndex:next];
+char buf[256];
+snprintf(buf, sizeof(buf), "v41 window cycled main %s", GHLSSCacheBundleIDs[next]);
+GHLSSLogLine(buf);
+}
 
-// v40：长按哆啦A夢鈕（约 0.5 秒）——一键关掉全部已开的浮窗 +
-// 已收起的小卡（第 7 项）。每个窗走现有的关闭路径（hide +
+// v40：长按哆啦A夢鈕——一键关掉全部已开的浮窗 +
+// 已收起的 peek（第 7 项）。每个窗走现有的关闭路径（hide +
 // background scene，不在 session 内 destroy scene，遵守 v35 规则；
-// 小卡清除）。关一个不影响别的——这里是全部关掉（用户主动长按）。
+// peek 清除）。关一个不影响别的——这里是全部关掉（用户主动长按）。
 // 只在 Began 时做一次（长按中途状态变 Changed 不重复关）。
 // 旗标不在 Ended/Cancelled 里清——触摸抬起时手势先变 Ended、按钮的
-// TouchUpInside 后到，先清会让启动器误开；旗标由 handleHandleButton
+// 单击手势后到，先清会让 ARC 误开；旗标由 handleDoraemonButtonSingleTap
 //（点按）与 handleDoraemonButtonDrag（拖动）清。
 - (void)handleDoraemonButtonLongPress:(UILongPressGestureRecognizer *)recognizer {
 if (recognizer.state != UIGestureRecognizerStateBegan) return;
 GHLSSDoraemonLongPressed = YES;
-GHLSSLogLine("v40 close all windows");
+GHLSSLogLine("v41 close all windows");
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (GHLSSCacheWindows[i]) {
 GHLSSLoadCacheToActive(i);
@@ -1901,52 +2684,45 @@ GHLSSDoraemonLongPressed = NO;
 CGPoint point = [recognizer translationInView:GHLSSDoraemonButtonWindow];
 [recognizer setTranslation:CGPointZero inView:GHLSSDoraemonButtonWindow];
 CGRect screenBounds = [UIScreen mainScreen].bounds;
-CGFloat fixedX = screenBounds.size.width - 56.0;
+CGFloat doraemonW = GHLSSDoraemonButtonWindow.frame.size.width;
+CGFloat fixedX = GHLSSIsDoraemonSideLeft() ? 0 : (screenBounds.size.width - doraemonW);
 CGFloat minY = 100.0;
 CGFloat maxY = screenBounds.size.height - 100.0;
 CGPoint center = GHLSSDoraemonButtonWindow.center;
 CGFloat newY = center.y + point.y;
 if (newY < minY) newY = minY;
 if (newY > maxY) newY = maxY;
-// x 固定在右邊緣（鈕的窗寬 56，中心 x = 屏寬 - 28）。
-GHLSSDoraemonButtonWindow.center = CGPointMake(fixedX + 28.0, newY);
+// x 固定在設定那邊的邊緣（鈕的窗寬 doraemonW，中心 x = 邊緣 + 寬/2）。
+GHLSSDoraemonButtonWindow.center = CGPointMake(fixedX + doraemonW / 2.0, newY);
 if (recognizer.state == UIGestureRecognizerStateEnded) {
+// v41：拖完記住 Y（prefs 鍵 doraemonButtonY），下次啟動恢復到這個高度。
+GHLSSWritePrefsDouble("doraemonButtonY", (double)newY);
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 doraemon button moved to y=%f", (double)newY);
+snprintf(buf, sizeof(buf), "v41 doraemon button moved to y=%f", (double)newY);
 GHLSSLogLine(buf);
 }
 }
 
-// v40：点贴边小卡——把这个 App 的窗叫回来（恢复：带到最前、推前景）。
-// 卡上 tag 是 App 下标；进程死了就走正常开窗流程（复用守卫销毁重建）。
-- (void)handleDockCardTap:(UIButton *)sender {
+// v41：點貼邊 peek——把這個 App 的窗叫回來升為主窗（恢復：帶到最前、
+// 推前景）。peek 上 tag 是 App 下標；進程死了就走正常開窗流程
+//（promoteWindowToMainIndex 裡面分叉處理）。
+- (void)handleDockPeekTap:(UIButton *)sender {
 NSInteger idx = sender.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 if (!GHLSSCacheWindows[idx]) return;
-GHLSSLogLine("v40 docked card tapped");
-if (GHLSSCacheMinimized[idx]) {
-if (GHLSSCachedEntryIsAlive(idx)) {
-GHLSSLoadCacheToActive(idx);
-[self restoreHostedWindow];
-return;
-}
-GHLSSLogLine("v40 docked entry stale, relaunching");
-const char *bid = GHLSSCacheBundleIDs[idx];
-if (bid && bid[0] != '\0') {
-[self launchHostedApp:bid name:GHLSSAppNames[idx]];
-}
-}
+GHLSSLogLine("v41 docked peek tapped");
+[self promoteWindowToMainIndex:(int)idx];
 }
 
-// v40：点贴边小卡右上角的小 X——彻底关掉这个窗（不再回来）。
-// 窗藏起来、卡收掉、scene 留着不銷毀（v35 规则）；别的窗不受影响。
-// 下次从启动器重开这个 App，直接复用缓存里的 scene。
-- (void)handleDockCardClose:(UIButton *)sender {
+// v41：點貼邊 peek 右上角的小 X——徹底關掉這個窗（不再回來）。
+// 窗藏起來、peek 收掉、scene 留著不銷毀（v35 規則）；別的窗不受影響。
+// 下次從啟動器重開這個 App，直接復用緩存裡的 scene。
+- (void)handleDockPeekClose:(UIButton *)sender {
 NSInteger idx = sender.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 if (!GHLSSCacheWindows[idx]) return;
-GHLSSLogLine("v40 docked card closed");
-GHLSSLoadCacheToActive(idx);
+GHLSSLogLine("v41 docked peek closed");
+GHLSSLoadCacheToActive((int)idx);
 [self closeHostedWindow];
 }
 
@@ -1974,10 +2750,10 @@ char *action = GHLSSReadPrefsCString("tapOutsideAction");
 int isSide = !(action && strcmp(action, "close") == 0);
 if (action) free(action);
 if (isSide) {
-GHLSSLogLine("v40 tap outside docked");
+GHLSSLogLine("v41 tap outside docked");
 [self minimizeHostedWindow];
 } else {
-GHLSSLogLine("v40 tap outside closed");
+GHLSSLogLine("v41 tap outside closed");
 [self closeHostedWindow];
 }
 }
@@ -1993,8 +2769,22 @@ if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 const char *bid = GHLSSAppBundleIDs[idx];
 const char *name = GHLSSAppNames[idx];
 char buf[256];
-snprintf(buf, sizeof(buf), "v40 app tapped %s", bid);
+snprintf(buf, sizeof(buf), "v41 app tapped %s", bid);
 GHLSSLogLine(buf);
+// v41：點選回饋（ARC 設置：震動/音效開關，預設都開）+ 最近使用記錄
+//（點過就算，置頂/最近/常用三開都用這份記錄）。
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
+if (GHLSSReadARCTouchSound()) {
+AudioServicesPlaySystemSound(1104);
+}
+GHLSSPushRecentApp(bid);
 // v40：多窗（5.3）——「window busy」删掉，点启动器里的 App 不再被挡：
 // ① 点的 App 已开着（窗看得见）→ 带到最前（层级升到 Alert - 1.75，
 // 活动量切到它）；② 点的 App 收着（最小化/贴边小卡）→ 从小卡恢复
@@ -2006,7 +2796,7 @@ GHLSSLogLine(buf);
 UIWindow *cachedWindow = GHLSSCacheWindows[idx];
 if (cachedWindow && !GHLSSCacheMinimized[idx] && !cachedWindow.hidden) {
 // 已开着：带到最前。
-GHLSSLogLine("v40 window already open, bringing to front");
+GHLSSLogLine("v41 window already open, bringing to front");
 [self dismissLauncher];
 GHLSSBringWindowToFront(cachedWindow);
 GHLSSUpdateDimOverlay();
@@ -2016,22 +2806,90 @@ if (cachedWindow && GHLSSCacheMinimized[idx]) {
 // 收着：从小卡恢复（先确认进程还活着；死了就走正常开窗流程，
 // 复用守卫会销毁旧项重建）。
 if (GHLSSCachedEntryIsAlive(idx)) {
-GHLSSLogLine("v40 window minimized, restoring from dock");
+GHLSSLogLine("v41 window minimized, restoring from dock");
 GHLSSLoadCacheToActive(idx);
 [self restoreHostedWindow];
 [self dismissLauncher];
 return;
 }
-GHLSSLogLine("v40 docked entry stale, relaunching");
+GHLSSLogLine("v41 docked entry stale, relaunching");
 }
 if (GHLSSHostedLaunching) {
-GHLSSLogLine("v40 launch in progress, ignoring tap");
+GHLSSLogLine("v41 launch in progress, ignoring tap");
 return;
+}
+// v41：ARC 打開方式（預設浮窗）：全屏打開走 SB 啟動探針（失敗退回浮窗）、
+// 三屏走側窗（一次性的旗標，launchHostedApp 裡舊側窗先收成 peek）、
+// 橫屏下強制浮窗（FV 的注意文字：橫屏狀態下 arc 上應用操作都是以浮窗
+// 模式顯示）。
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+BOOL isLandscape = screenBounds.size.width > screenBounds.size.height;
+int openMode = GHLSSReadARCMenuOpenMode();
+if (isLandscape && openMode != 1) {
+GHLSSLogLine("v41 landscape forces floating");
+openMode = 1;
 }
 // 先收启动器（v23 卡死的教训：收窗是便宜操作，先做；
 // 启动是慢操作，后做——但要在主线程做，v24 放后台队列崩了）。
 [self dismissLauncher];
+if (openMode == 0) {
+[self openAppFullscreen:bid];
+return;
+}
+if (openMode == 2) {
+GHLSSForceThreeScreenOnce = YES;
+}
 [self launchHostedApp:bid name:name];
+}
+
+// v41：ARC 打開方式「全屏打開」的探針——用 SpringBoard 自己的
+// SBApplicationController 把 App 叫到前台全屏（tweak 在 SpringBoard
+// 進程裡，調它自己的類是常規做法；LSApplicationWorkspace 從
+// SpringBoard 調會堵主線程 ≥5 秒，已禁用，不走那條路）。類名/方法都
+// 用運行時現做的字串找，找不到或調失敗就退回浮窗（不崩、不卡）。
+// 橫屏下不走這裡（handleAppButton 已強制浮窗）。真機行為見 BUILD_LOG
+// §113（探針，需皇上真機驗證）。
+- (void)openAppFullscreen:(const char *)bundleID {
+if (!bundleID || bundleID[0] == '\0') return;
+BOOL opened = NO;
+@try {
+NSString *controllerName = [NSString stringWithCString:"SBApplicationController" encoding:NSUTF8StringEncoding];
+Class controllerClass = NSClassFromString(controllerName);
+if (controllerClass && [controllerClass respondsToSelector:@selector(sharedInstance)]) {
+id controller = [controllerClass sharedInstance];
+NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
+SEL appSel = NSSelectorFromString([NSString stringWithCString:"applicationWithBundleIdentifier:" encoding:NSUTF8StringEncoding]);
+if (controller && [controller respondsToSelector:appSel]) {
+id app = ((id (*)(id, SEL, id))objc_msgSend)(controller, appSel, bidStr);
+if (app) {
+SEL launchSel = NSSelectorFromString([NSString stringWithCString:"launchWithCompletion:" encoding:NSUTF8StringEncoding]);
+if ([app respondsToSelector:launchSel]) {
+((void (*)(id, SEL, id))objc_msgSend)(app, launchSel, nil);
+opened = YES;
+} else {
+SEL activateSel = NSSelectorFromString([NSString stringWithCString:"activateWithCompletion:" encoding:NSUTF8StringEncoding]);
+if ([app respondsToSelector:activateSel]) {
+((void (*)(id, SEL, id))objc_msgSend)(app, activateSel, nil);
+opened = YES;
+}
+}
+}
+}
+}
+} @catch (NSException *e) {
+(void)e;
+opened = NO;
+}
+if (opened) {
+char buf[256];
+snprintf(buf, sizeof(buf), "v41 fullscreen open %s", bundleID);
+GHLSSLogLine(buf);
+} else {
+GHLSSLogLine("v41 fullscreen open unavailable, falling back to floating");
+int fidx = GHLSSAppIndexForBundleID(bundleID);
+const char *fname = (fidx >= 0) ? GHLSSAppNames[fidx] : bundleID;
+[self launchHostedApp:bundleID name:fname];
+}
 }
 
 // v25：启动必须在主线程做——v24 把它放后台队列，BSTransaction 的 begin
@@ -2047,17 +2905,30 @@ char *nameCopy = strdup(name);
 if (!bidCopy || !nameCopy) {
 if (bidCopy) free(bidCopy);
 if (nameCopy) free(nameCopy);
-GHLSSLogLine("v40 launch failed no memory");
+GHLSSLogLine("v41 launch failed no memory");
+GHLSSForceThreeScreenOnce = NO;
 return;
 }
 GHLSSHostedLaunching = YES;
 char buf[256];
-snprintf(buf, sizeof(buf), "v40 launch start %s", bundleID);
+snprintf(buf, sizeof(buf), "v41 launch start %s", bundleID);
 GHLSSLogLine(buf);
+// v41：最近使用記錄（開窗就算用過一次）+ 三屏替換：三屏模式下一次
+// 只能有一個側窗，舊側窗先收成 peek（scene 留著）。
+GHLSSPushRecentApp(bundleID);
+if (GHLSSReadThreeScreenEnabled() || GHLSSForceThreeScreenOnce) {
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (GHLSSCacheIsSideDock[i] && GHLSSCacheWindows[i] && !GHLSSCacheWindows[i].hidden && !GHLSSCacheMinimized[i]) {
+GHLSSLoadCacheToActive(i);
+[self minimizeHostedWindow];
+}
+}
+}
 @try {
 NSString *bidStr = [NSString stringWithCString:bidCopy encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v40 launch failed bad bundle id");
+GHLSSLogLine("v41 launch failed bad bundle id");
+GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
@@ -2065,13 +2936,14 @@ return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
 if (!identity) {
-GHLSSLogLine("v40 launch failed no identity");
+GHLSSLogLine("v41 launch failed no identity");
+GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v40 identity ok");
+GHLSSLogLine("v41 identity ok");
 // 先看 App 是不是已经在跑（单场景 App 已有全屏版时，再建
 // 第二个 scene 可能只剩白窗——测前要先把目标 App 彻底关掉）。
 RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:identity];
@@ -2079,7 +2951,7 @@ RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:
 int pid = handle ? [handle pid] : 0;
 if (pid > 0) {
 char pbuf[128];
-snprintf(pbuf, sizeof(pbuf), "v40 app already running pid=%d", pid);
+snprintf(pbuf, sizeof(pbuf), "v41 app already running pid=%d", pid);
 GHLSSLogLine(pbuf);
 // 已经在跑：不走事务，直接去建 scene（和参考实现同一做法）。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -2089,18 +2961,19 @@ free(nameCopy);
 });
 return;
 }
-GHLSSLogLine("v40 handle pid=0");
+GHLSSLogLine("v41 handle pid=0");
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 if (!manager) {
-GHLSSLogLine("v40 manager failed nil");
+GHLSSLogLine("v41 manager failed nil");
+GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v40 manager ok");
+GHLSSLogLine("v41 manager ok");
 FBApplicationProcessLaunchTransaction *transaction = [[FBApplicationProcessLaunchTransaction alloc] initWithProcessIdentity:identity executionContextProvider:^id(void) {
-GHLSSLogLine("v40 launch provider called");
+GHLSSLogLine("v41 launch provider called");
 FBMutableProcessExecutionContext *context = [FBMutableProcessExecutionContext new];
 context.identity = identity;
 context.environment = [NSDictionary dictionary];
@@ -2108,13 +2981,14 @@ context.launchIntent = 4;
 return [manager launchProcessWithContext:context];
 }];
 if (!transaction) {
-GHLSSLogLine("v40 transaction failed nil");
+GHLSSLogLine("v41 transaction failed nil");
+GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v40 transaction created");
+GHLSSLogLine("v41 transaction created");
 [transaction setCompletionBlock:^{
 // 事务完成可能跑在任意队列——场景创建回主线程做。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -2124,11 +2998,12 @@ free(nameCopy);
 });
 }];
 [transaction begin];
-GHLSSLogLine("v40 begin called");
-GHLSSLogLine("v40 launch transaction begun");
+GHLSSLogLine("v41 begin called");
+GHLSSLogLine("v41 launch transaction begun");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 launch failed exception");
+GHLSSLogLine("v41 launch failed exception");
+GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
@@ -2141,11 +3016,12 @@ free(nameCopy);
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name {
 @try {
 char buf[256];
-snprintf(buf, sizeof(buf), "v40 scene start %s", bundleID);
+snprintf(buf, sizeof(buf), "v41 scene start %s", bundleID);
 GHLSSLogLine(buf);
 NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v40 scene failed no bid");
+GHLSSLogLine("v41 scene failed no bid");
+GHLSSForceThreeScreenOnce = NO;
 return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
@@ -2153,10 +3029,11 @@ RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:
 RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:nil];
 int pid = handle ? [handle pid] : 0;
 if (pid <= 0) {
-GHLSSLogLine("v40 scene failed no process");
+GHLSSLogLine("v41 scene failed no process");
+GHLSSForceThreeScreenOnce = NO;
 return;
 }
-snprintf(buf, sizeof(buf), "v40 process launched pid=%d", pid);
+snprintf(buf, sizeof(buf), "v41 process launched pid=%d", pid);
 GHLSSLogLine(buf);
 // v35 复用守卫：缓存里已有这个 App 的 scene（关窗或切走时没销毁）
 // 且进程还是同一个 pid、presenter 与它的 view 还活着——直接复用，
@@ -2173,12 +3050,18 @@ if (cacheIdx >= 0 && GHLSSCacheScenes[cacheIdx]) {
 if (pid == GHLSSCachePids[cacheIdx] && ((GHLSSCachePresenters[cacheIdx] && GHLSSCachePresenters[cacheIdx].presentationView) || GHLSSCacheLayerHostViews[cacheIdx])) {
 if (GHLSSCacheSceneIDs[cacheIdx]) {
 char rbuf[256];
-snprintf(rbuf, sizeof(rbuf), "v40 reusing cached scene %s", [GHLSSCacheSceneIDs[cacheIdx] UTF8String]);
+snprintf(rbuf, sizeof(rbuf), "v41 reusing cached scene %s", [GHLSSCacheSceneIDs[cacheIdx] UTF8String]);
 GHLSSLogLine(rbuf);
 } else {
-GHLSSLogLine("v40 reusing cached scene");
+GHLSSLogLine("v41 reusing cached scene");
 }
 GHLSSLoadCacheToActive(cacheIdx);
+// v41：三屏一次性的旗標在這裡清掉（復用舊 scene 不重建窗，
+// 側窗轉換下一版再做；這次先以普通浮窗打開，不讓旗標漏到下一次開窗）。
+if (GHLSSForceThreeScreenOnce) {
+GHLSSForceThreeScreenOnce = NO;
+GHLSSLogLine("v41 three screen request on cached window, opened as floating");
+}
 if (GHLSSHostedMinimized) {
 [self restoreHostedWindow];
 } else if (GHLSSHostedWindow) {
@@ -2193,15 +3076,15 @@ if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
 settings.backgrounded = NO;
 }
 }];
-GHLSSLogLine("v40 foreground pushed on reuse");
+GHLSSLogLine("v41 foreground pushed on reuse");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 foreground push on reuse failed");
+GHLSSLogLine("v41 foreground push on reuse failed");
 }
 }
 return;
 }
-GHLSSLogLine("v40 stored scene stale, destroying");
+GHLSSLogLine("v41 stored scene stale, destroying");
 GHLSSDestroyCachedEntryAtIndex(cacheIdx);
 }
 // v35：sceneID 仍是固定格式 `sceneID:<bundleID>-default`（v28 的
@@ -2223,7 +3106,7 @@ FBScene *existingScene = GHLSSExistingMainSceneForBundleID(bundleID);
 BOOL hostedExisting = NO;
 if (existingScene) {
 char ebuf[256];
-snprintf(ebuf, sizeof(ebuf), "v40 hosting existing scene %s", bundleID);
+snprintf(ebuf, sizeof(ebuf), "v41 hosting existing scene %s", bundleID);
 GHLSSLogLine(ebuf);
 @try {
 Class layerHostClass = objc_getClass("_UISceneLayerHostContainerView");
@@ -2246,29 +3129,29 @@ if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
 settings.backgrounded = NO;
 }
 }];
-GHLSSLogLine("v40 foreground pushed on existing scene");
+GHLSSLogLine("v41 foreground pushed on existing scene");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 foreground push on existing scene failed");
+GHLSSLogLine("v41 foreground push on existing scene failed");
 }
-GHLSSLogLine("v40 layer host ready");
+GHLSSLogLine("v41 layer host ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:existingScene presenter:nil layerHostView:layerHostView sceneID:sceneID pid:pid];
 hostedExisting = YES;
 } else {
-GHLSSLogLine("v40 layer host view nil, creating new");
+GHLSSLogLine("v41 layer host view nil, creating new");
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 layer host failed, creating new");
+GHLSSLogLine("v41 layer host failed, creating new");
 }
 }
 if (hostedExisting) return;
-GHLSSLogLine("v40 no existing scene, creating new");
+GHLSSLogLine("v41 no existing scene, creating new");
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 [manager registerProcessForAuditToken:[handle auditToken]];
-GHLSSLogLine("v40 creating new scene");
+GHLSSLogLine("v41 creating new scene");
 char idbuf[256];
-snprintf(idbuf, sizeof(idbuf), "v40 sceneID %s", [sceneID UTF8String]);
+snprintf(idbuf, sizeof(idbuf), "v41 sceneID %s", [sceneID UTF8String]);
 GHLSSLogLine(idbuf);
 FBSMutableSceneDefinition *definition = [FBSMutableSceneDefinition definition];
 definition.identity = [FBSSceneIdentity identityForIdentifier:sceneID];
@@ -2277,7 +3160,7 @@ definition.specification = [UIApplicationSceneSpecification specification];
 FBSMutableSceneParameters *parameters = [FBSMutableSceneParameters parametersForSpecification:definition.specification];
 UIMutableApplicationSceneSettings *settings = [UIMutableApplicationSceneSettings new];
 settings.canShowAlerts = YES;
-settings.cornerRadiusConfiguration = [[BSCornerRadiusConfiguration alloc] initWithTopLeft:GHLSS_HOSTED_CORNER bottomLeft:GHLSS_HOSTED_CORNER bottomRight:GHLSS_HOSTED_CORNER topRight:GHLSS_HOSTED_CORNER];
+settings.cornerRadiusConfiguration = [[BSCornerRadiusConfiguration alloc] initWithTopLeft:GHLSSReadCornerRadius() bottomLeft:GHLSSReadCornerRadius() bottomRight:GHLSSReadCornerRadius() topRight:GHLSSReadCornerRadius()];
 settings.displayConfiguration = [[UIScreen mainScreen] displayConfiguration];
 settings.foreground = YES;
 settings.deviceOrientation = UIDeviceOrientationPortrait;
@@ -2301,18 +3184,18 @@ clientSettings.statusBarStyle = 0;
 parameters.clientSettings = clientSettings;
 FBScene *scene = [[FBSceneManager sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
 if (!scene) {
-GHLSSLogLine("v40 scene failed nil scene");
+GHLSSLogLine("v41 scene failed nil scene");
 return;
 }
-GHLSSLogLine("v40 scene created");
+GHLSSLogLine("v41 scene created");
 id presenterManager = [scene uiPresentationManager];
 if (!presenterManager) {
-GHLSSLogLine("v40 presenter failed no manager");
+GHLSSLogLine("v41 presenter failed no manager");
 return;
 }
 _UIScenePresenter *presenter = [presenterManager createPresenterWithIdentifier:sceneID];
 if (!presenter) {
-GHLSSLogLine("v40 presenter failed nil");
+GHLSSLogLine("v41 presenter failed nil");
 return;
 }
 [presenter modifyPresentationContext:^(UIMutableScenePresentationContext *context) {
@@ -2320,7 +3203,7 @@ context.appearanceStyle = 2;
 }];
 [presenter activate];
 if (!presenter.presentationView) {
-GHLSSLogLine("v40 presenter failed no view");
+GHLSSLogLine("v41 presenter failed no view");
 return;
 }
 // v28：记 presenterView 的尺寸与有没有 layer——计算器在 v26 还是黑的
@@ -2329,11 +3212,11 @@ return;
 @try {
 char pbuf[128];
 UIView *pv = presenter.presentationView;
-snprintf(pbuf, sizeof(pbuf), "v40 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
+snprintf(pbuf, sizeof(pbuf), "v41 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
 GHLSSLogLine(pbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 presentationView failed");
+GHLSSLogLine("v41 presentationView failed");
 }
 // v28：scene 建好了、presenter 也 activate 了，但 v25 的窗是黑的——
 // 计算器进程没往 scene 里画。KonbanXV 的做法是建完 scene 就把
@@ -2344,28 +3227,28 @@ GHLSSLogLine("v40 presentationView failed");
 // 单独包 @try/@catch，出错只记日志、继续建窗。
 @try {
 char cbuf[128];
-snprintf(cbuf, sizeof(cbuf), "v40 scene contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(cbuf, sizeof(cbuf), "v41 scene contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(cbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 scene contentState failed");
+GHLSSLogLine("v41 scene contentState failed");
 }
 @try {
 [scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
 settings.foreground = YES;
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v40 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(fbuf, sizeof(fbuf), "v41 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 foreground push failed");
+GHLSSLogLine("v41 foreground push failed");
 }
-GHLSSLogLine("v40 presenter ready");
+GHLSSLogLine("v41 presenter ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:scene presenter:presenter layerHostView:nil sceneID:sceneID pid:pid];
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 scene failed exception");
+GHLSSLogLine("v41 scene failed exception");
 } @finally {
 GHLSSHostedLaunching = NO;
 }
@@ -2386,6 +3269,8 @@ CGFloat winW = hostedContentSize.width;
 CGFloat winH = hostedContentSize.height;
 // v38：新窗的 scaleRatio 用这个 App 的默认值（计算器 0.77，别的 1.0）。
 GHLSSHostedScaleRatio = GHLSSDefaultScaleRatioForBundleID(bundleID);
+GHLSSHostedIsSideDock = NO;
+GHLSSHostedSideDivider = nil;
 CGRect winFrame = CGRectMake((screenBounds.size.width - winW) / 2.0, (screenBounds.size.height - winH) / 2.0, winW, winH);
 // v40：恢复上次的位置/大小/缩放（有存过的才恢复；没有就走默认+错位）。
 // 存的是窗中心 + 窗尺寸 + scale；恢复后夹在屏幕内（左右留 8pt、
@@ -2398,7 +3283,9 @@ CGFloat restoredW = 0, restoredH = 0;
 {
 int geoIdx = GHLSSAppIndexForBundleID(bundleID);
 CGFloat geoCX, geoCY, geoW, geoH, geoScale;
-if (geoIdx >= 0 && GHLSSRestoreGeometryForIndex(geoIdx, &geoCX, &geoCY, &geoW, &geoH, &geoScale)) {
+// v41：豎屏固定中心開著時不恢復存過的位置（開了這個開關，開窗固定
+// 為屏幕中心；跟 v40「記住位置大小」是反的）。
+if (geoIdx >= 0 && !GHLSSReadCenterOnOpen() && GHLSSRestoreGeometryForIndex(geoIdx, &geoCX, &geoCY, &geoW, &geoH, &geoScale)) {
 CGFloat safeDistance = GHLSSReadSafeDistance();
 CGFloat minCX = geoW / 2.0 + 8.0;
 CGFloat maxCX = screenBounds.size.width - geoW / 2.0 - 8.0;
@@ -2416,7 +3303,7 @@ winFrame = CGRectMake(geoCX - geoW / 2.0, geoCY - geoH / 2.0, geoW, geoH);
 geometryRestored = YES;
 restoredW = geoW;
 restoredH = geoH;
-GHLSSLogLine("v40 geometry restored");
+GHLSSLogLine("v41 geometry restored");
 }
 }
 if (!geometryRestored) {
@@ -2440,10 +3327,36 @@ if (ny < minY) ny = minY;
 winFrame = CGRectMake(nx, ny, winW, winH);
 }
 }
+// v41：三屏側窗（開關開著、或 ARC 打開方式選「三屏」這一次）：
+// 窄豎屏貼邊（寬 30% 屏寬，全高減安全距離），App 在窄 scene 裡按
+// 豎屏重排版（scene frame = 側窗尺寸，scale 1.0）；已在跑的 App
+// 托管現有主 scene，窄 scene 推不過去（見 BUILD_LOG §113），內容
+// 按寬縮放、頂對齊，下方留黑。主窗不自動縮（底下那個 App 本來就是
+// 全屏在跑）。建窗末尾的 resize 推送到側窗尺寸（restoredW/H 改寫），
+// 所以側窗的 scene frame 是對的。
+BOOL sideDock = GHLSSReadThreeScreenEnabled() || GHLSSForceThreeScreenOnce;
+GHLSSForceThreeScreenOnce = NO;
+if (sideDock) {
+CGFloat safeDistance = GHLSSReadSafeDistance();
+CGFloat sideW = screenBounds.size.width * 0.30;
+CGFloat sideH = screenBounds.size.height - safeDistance * 2.0;
+BOOL dockLeft = GHLSSIsWindowPositionLeft();
+CGFloat sideX = dockLeft ? 0 : (screenBounds.size.width - sideW);
+winW = sideW;
+winH = sideH;
+hostedContentSize = CGSizeMake(sideW, sideH);
+GHLSSHostedScaleRatio = 1.0;
+winFrame = CGRectMake(sideX, safeDistance, sideW, sideH);
+GHLSSHostedIsSideDock = YES;
+geometryRestored = YES;
+restoredW = sideW;
+restoredH = sideH;
+GHLSSLogLine("v41 three screen side dock");
+}
 if (strcmp(bundleID, "com.apple.calculator") == 0) {
 char wbuf[160];
 CGFloat calcScale = hostedContentSize.width / GHLSSSceneFrameSizeForBundleID(bundleID).width;
-snprintf(wbuf, sizeof(wbuf), "v40 calculator window %dx%d scale %d%%", (int)winW, (int)winH, (int)(calcScale * 100.0));
+snprintf(wbuf, sizeof(wbuf), "v41 calculator window %dx%d scale %d%%", (int)winW, (int)winH, (int)(calcScale * 100.0));
 GHLSSLogLine(wbuf);
 }
 GHLSSHostedWindow = [[UIWindow alloc] initWithFrame:winFrame];
@@ -2456,20 +3369,21 @@ UIWindowScene *hostedScene = GHLSSActiveWindowScene();
 if (hostedScene) {
 GHLSSHostedWindow.windowScene = hostedScene;
 } else {
-GHLSSLogLine("v40 hosted scene nil");
+GHLSSLogLine("v41 hosted scene nil");
 }
 // 窗的阴影与圆角（画在窗的 layer 上；内容容器自己裁圆角）。
-GHLSSHostedWindow.layer.cornerRadius = GHLSS_HOSTED_CORNER;
+// v41：圆角、阴影开关/透明度/半径都走设定（浮窗设置 → 浮窗阴影设置）。
+GHLSSHostedWindow.layer.cornerRadius = GHLSSReadCornerRadius();
 GHLSSHostedWindow.layer.shadowColor = [UIColor blackColor].CGColor;
-GHLSSHostedWindow.layer.shadowOpacity = 0.5;
-GHLSSHostedWindow.layer.shadowRadius = 12.0;
+GHLSSHostedWindow.layer.shadowOpacity = GHLSSReadShadowEnabled() ? GHLSSReadShadowOpacity() : 0.0;
+GHLSSHostedWindow.layer.shadowRadius = GHLSSReadShadowRadius();
 GHLSSHostedWindow.layer.shadowOffset = CGSizeMake(0, 6);
 UIViewController *vc = [[UIViewController alloc] init];
 // 内容容器：圆角 35、裁掉超出部分、细边框。v36：底色由白改黑——万一
 // 哪有缝，露黑不露白（v35 计算器两侧的白边就是内容区的白色底）。
 UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, winW, winH)];
 container.backgroundColor = [UIColor blackColor];
-container.layer.cornerRadius = GHLSS_HOSTED_CORNER;
+container.layer.cornerRadius = GHLSSReadCornerRadius();
 container.layer.masksToBounds = YES;
 container.layer.borderWidth = 1.0;
 container.layer.borderColor = [UIColor colorWithWhite:0.8 alpha:1.0].CGColor;
@@ -2508,7 +3422,7 @@ presenterView.layer.position = CGPointMake(0, 0);
 contentView.layer.sublayerTransform = CATransform3DMakeScale(GHLSSHostedScaleRatio, GHLSSHostedScaleRatio, 1.0);
 {
 char sbuf[128];
-snprintf(sbuf, sizeof(sbuf), "v40 scene scaled %d%%", (int)(GHLSSHostedScaleRatio * 100.0));
+snprintf(sbuf, sizeof(sbuf), "v41 scene scaled %d%%", (int)(GHLSSHostedScaleRatio * 100.0));
 GHLSSLogLine(sbuf);
 }
 } else if (layerHostView) {
@@ -2522,11 +3436,11 @@ CGFloat displayScale = GHLSSLayerHostDisplayScaleForContentSizeAndBundleID(hoste
 contentView.layer.sublayerTransform = CATransform3DMakeScale(displayScale, displayScale, 1.0);
 {
 char sbuf[128];
-snprintf(sbuf, sizeof(sbuf), "v40 layer host scaled %d%%", (int)(displayScale * 100.0));
+snprintf(sbuf, sizeof(sbuf), "v41 layer host scaled %d%%", (int)(displayScale * 100.0));
 GHLSSLogLine(sbuf);
 }
 } else {
-GHLSSLogLine("v40 window failed no view to embed");
+GHLSSLogLine("v41 window failed no view to embed");
 return;
 }
 // v38：记实际嵌进去的 view 的 frame——注意：frame 现在是图层的
@@ -2540,11 +3454,11 @@ return;
 UIView *embeddedView = (presenter && presenter.presentationView) ? presenter.presentationView : layerHostView;
 CGRect pvFrame = embeddedView.frame;
 char fbuf[160];
-snprintf(fbuf, sizeof(fbuf), "v40 hosted view frame %d,%d %dx%d", (int)pvFrame.origin.x, (int)pvFrame.origin.y, (int)pvFrame.size.width, (int)pvFrame.size.height);
+snprintf(fbuf, sizeof(fbuf), "v41 hosted view frame %d,%d %dx%d", (int)pvFrame.origin.x, (int)pvFrame.origin.y, (int)pvFrame.size.width, (int)pvFrame.size.height);
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 hosted view frame failed");
+GHLSSLogLine("v41 hosted view frame failed");
 }
 // v38：缩放滑杆条（默认藏着）——点控制条的 ± 钮展开，盖在内容区顶
 // 上 36pt（控制条下面，y=36；半透明黑底，不改窗尺寸、不推内容区）。
@@ -2703,6 +3617,24 @@ resizeGesture.maximumNumberOfTouches = 1;
 [resizeHandle addGestureRecognizer:resizeGesture];
 [container addSubview:resizeHandle];
 GHLSSHostedResizeHandle = resizeHandle;
+// v41：三屏分隔線（側窗內緣 16pt，拖動調側窗寬度；側邊小窗手勢
+// 開關關了就不建）。分隔線是 container 的子視圖（在內容區之上），
+// 位置跟側窗左右邊走（右側窗：內緣在左；左側窗：內緣在右）。
+if (GHLSSHostedIsSideDock && GHLSSReadSideWindowGestures()) {
+BOOL dockLeft = GHLSSIsWindowPositionLeft();
+CGFloat divX = dockLeft ? (winW - 16.0) : 0;
+UIView *divider = [[UIView alloc] initWithFrame:CGRectMake(divX, 0, 16, winH)];
+divider.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.25];
+UIView *divPill = [[UIView alloc] initWithFrame:CGRectMake(6, winH / 2.0 - 20, 4, 40)];
+divPill.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+divPill.layer.cornerRadius = 2.0;
+[divider addSubview:divPill];
+UIPanGestureRecognizer *divDrag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleSideDividerDrag:)];
+divDrag.delegate = self;
+[divider addGestureRecognizer:divDrag];
+[container addSubview:divider];
+GHLSSHostedSideDivider = divider;
+}
 GHLSSHostedWindow.rootViewController = vc;
 GHLSSHostedWindow.hidden = NO;
 GHLSSHostedScene = scene;
@@ -2720,11 +3652,14 @@ if (newCacheIdx >= 0) {
 GHLSSActiveAppIndex = newCacheIdx;
 GHLSSSaveActiveToCache();
 }
-GHLSSLogLine("v40 window shown");
+GHLSSLogLine("v41 window shown");
 // v40：新窗带到最前（别的窗回基础层级，这个窗升到最前层级、活动量
 // 切到它），再更新阴影背景（开关开着、且有浮窗看得见时显示）。
 GHLSSBringWindowToFront(GHLSSHostedWindow);
 GHLSSUpdateDimOverlay();
+// v41：新窗建好時短暫顯示通知橫幅（浮窗設置 → 通知橫幅設置；
+// 開關關了不顯示，時長走設定，預設 1.5 秒）。
+[self showNotificationBannerForName:name];
 // v40：恢复了上次的位置/大小——建窗时内容已按恢复的尺寸嵌，再调一次
 // resizeHostedSceneToContentSize，把 scene frame 也推到恢复的尺寸
 //（跟拖角落调尺寸松手时同一条路；只在恢复时调一次）。
@@ -2744,7 +3679,7 @@ UIWindow *retryWindow = GHLSSHostedWindow;
 int retryIdx = newCacheIdx;
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v40 foreground retry check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v41 foreground retry check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!retryScene || !retryWindow || (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx])) return;
 if (retryIdx >= 0 && GHLSSCacheScenes[retryIdx] != retryScene) return;
@@ -2754,17 +3689,17 @@ if ([retryScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v40 foreground retry contentState=%lu", (unsigned long)[retryScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v41 foreground retry contentState=%lu", (unsigned long)[retryScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 foreground retry failed");
+GHLSSLogLine("v41 foreground retry failed");
 }
 });
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v40 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v41 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!retryScene || !retryWindow || (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx])) return;
 if (retryIdx >= 0 && GHLSSCacheScenes[retryIdx] != retryScene) return;
@@ -2774,17 +3709,17 @@ if ([retryScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v40 foreground retry2 contentState=%lu", (unsigned long)[retryScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v41 foreground retry2 contentState=%lu", (unsigned long)[retryScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 foreground retry2 failed");
+GHLSSLogLine("v41 foreground retry2 failed");
 }
 });
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 window failed exception");
+GHLSSLogLine("v41 window failed exception");
 }
 }
 
@@ -2803,16 +3738,31 @@ GHLSSLogLine("v40 window failed exception");
 - (void)closeHostedWindow {
 if (!GHLSSHostedWindow) return;
 int idx = GHLSSActiveAppIndex;
+BOOL wasSideDock = GHLSSHostedIsSideDock;
 GHLSSHostedWindow.hidden = YES;
 GHLSSHostedMinimized = YES;
-GHLSSLogLine("v40 window closed (scene kept)");
-GHLSSBackgroundHostedScene("v40 scene backgrounded on close");
+GHLSSLogLine("v41 window closed (scene kept)");
+GHLSSBackgroundHostedScene("v41 scene backgrounded on close");
 if (idx >= 0 && idx < GHLSS_APP_COUNT) {
-GHLSSHideDockCardForIndex(idx);
+GHLSSHideDockPeekForIndex(idx);
 GHLSSSaveActiveToCache();
 // v40：关窗时存一次位置/大小/缩放（第 6 项）——下次开同一 App
 // 恢复到这次的位置和大小。
 GHLSSSaveGeometryForIndex(idx);
+}
+if (GHLSSHostedSideDivider) GHLSSHostedSideDivider.hidden = YES;
+GHLSSHostedIsSideDock = NO;
+// v41：關三屏同時關側邊小窗（預設關）：關的是側窗、開關開著時，
+// 同場的其他可見浮窗也一起關掉（三屏會話結束）；關著時只關這個窗。
+if (wasSideDock && GHLSSReadCloseThreeScreenAlsoClosesSide()) {
+GHLSSLogLine("v41 three screen close also closes side windows");
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (i == idx) continue;
+if (GHLSSCacheWindows[i] && !GHLSSCacheWindows[i].hidden && !GHLSSCacheMinimized[i]) {
+GHLSSLoadCacheToActive(i);
+[self closeHostedWindow];
+}
+}
 }
 GHLSSUpdateDimOverlay();
 }
@@ -2827,22 +3777,21 @@ GHLSSUpdateDimOverlay();
 - (void)minimizeHostedWindow {
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 int idx = GHLSSActiveAppIndex;
-GHLSSHostedWindow.hidden = YES;
 GHLSSHostedMinimized = YES;
-GHLSSLogLine("v40 window minimized");
+GHLSSLogLine("v41 window minimized");
 // v31：藏窗后把 scene 推回后台（foreground=NO + backgrounded=YES）。
 // 锁屏时系统不会替我们的 scene 推后台，scene 一直占着前景，很可能
 // 干扰锁屏密码的触摸；最小化时先后台化，锁屏时再后台化一次也无妨。
-GHLSSBackgroundHostedScene("v40 scene backgrounded on minimize");
-// v40：最小化改成看得见的停靠——右边缘留一张 68x76 的小卡（App 图标
-// + App 名），点卡恢复窗（皇上反复报「黄色最小化没有显示」，就是以前
-// 最小化只藏窗、什么都没留）。scene 活着（只藏窗 + 推后台，不销毁）。
+GHLSSBackgroundHostedScene("v41 scene backgrounded on minimize");
+// v41：最小化改成貼邊 peek（圖 1 的樣子）：窗本身縮到邊緣（112x216，
+// 露出一截活內容，上下疊著排），點那截恢復窗；scene 活著（只縮窗 +
+// 推後台，不銷毀）。收起前的位置/大小先存（縮窗之後再存會存成
+// peek 的尺寸），側窗旗標清掉（收起後再叫回來是普通浮窗）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT) {
-GHLSSShowDockCardForIndex(idx);
-GHLSSSaveActiveToCache();
-// v40：收起时存一次位置/大小/缩放（第 6 项）——下次开同一 App
-// 恢复到这次的位置和大小。
 GHLSSSaveGeometryForIndex(idx);
+GHLSSSaveActiveToCache();
+GHLSSHostedIsSideDock = NO;
+GHLSSShowDockPeekForIndex(idx);
 }
 GHLSSUpdateDimOverlay();
 }
@@ -2850,14 +3799,38 @@ GHLSSUpdateDimOverlay();
 - (void)restoreHostedWindow {
 if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
 int idx = GHLSSActiveAppIndex;
+// v41：從 peek 恢復——先把窗的尺寸從存過的位置/大小還原（收起時縮
+// 成了 112x216；存的是窗中心 + 尺寸 + scale），再把容器/內容區的
+// 尺寸也還原（系統可能在縮窗時改了容器尺寸），點按層與小 X 藏起來，
+// 分隔線藏起來（恢復後是普通浮窗，不是側窗）。
+if (idx >= 0 && idx < GHLSS_APP_COUNT) {
+GHLSSHideDockPeekForIndex(idx);
+CGFloat geoCX, geoCY, geoW, geoH, geoScale;
+if (GHLSSRestoreGeometryForIndex(idx, &geoCX, &geoCY, &geoW, &geoH, &geoScale)) {
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat minCX = geoW / 2.0 + 8.0;
+CGFloat maxCX = screenBounds.size.width - geoW / 2.0 - 8.0;
+CGFloat minCY = GHLSSReadSafeDistance() + geoH / 2.0;
+CGFloat maxCY = screenBounds.size.height - geoH / 2.0 - 8.0;
+if (geoCX < minCX) geoCX = minCX;
+if (geoCX > maxCX) geoCX = maxCX;
+if (geoCY < minCY) geoCY = minCY;
+if (geoCY > maxCY) geoCY = maxCY;
+GHLSSHostedWindow.frame = CGRectMake(geoCX - geoW / 2.0, geoCY - geoH / 2.0, geoW, geoH);
+if (GHLSSHostedContainer) GHLSSHostedContainer.frame = CGRectMake(0, 0, geoW, geoH);
+if (GHLSSHostedContentView) GHLSSHostedContentView.frame = CGRectMake(0, 0, geoW, geoH);
+if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, geoW, GHLSS_HOSTED_STRIP_H);
+if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, geoW, GHLSS_HOSTED_CONTROL_H);
+GHLSSHostedScaleRatio = geoScale;
+GHLSSApplyScaleToHostedWindow(NO);
+}
+if (GHLSSHostedSideDivider) GHLSSHostedSideDivider.hidden = YES;
+GHLSSHostedIsSideDock = NO;
+}
 GHLSSHostedWindow.hidden = NO;
 GHLSSHostedMinimized = NO;
-// v40：从小卡恢复——卡收掉，窗带到最前（别的窗回基础层级）。
-if (idx >= 0 && idx < GHLSS_APP_COUNT) {
-GHLSSHideDockCardForIndex(idx);
-}
 GHLSSBringWindowToFront(GHLSSHostedWindow);
-GHLSSLogLine("v40 window restored from dock");
+GHLSSLogLine("v41 window restored from peek");
 // v30：最小化后锁屏再解锁、恢复窗时内容是黑的——锁屏把 scene 的
 // foreground 状态弄丢了，只取消 hidden 不够；恢复时也要把
 // foreground=YES 再推一遍（建窗时同一个已证明能用的做法），
@@ -2873,12 +3846,12 @@ settings.backgrounded = NO;
 }
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v40 foreground pushed on restore contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+snprintf(fbuf, sizeof(fbuf), "v41 foreground pushed on restore contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
 GHLSSLogLine(fbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 foreground push on restore failed");
+GHLSSLogLine("v41 foreground push on restore failed");
 }
 // v40：恢复完把状态存回缓存、更新阴影背景（窗又看得见了）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT) {
@@ -2888,7 +3861,7 @@ GHLSSUpdateDimOverlay();
 }
 
 - (void)handleHostedClose:(id)sender {
-GHLSSLogLine("v40 hosted close tapped");
+GHLSSLogLine("v41 hosted close tapped");
 // v40：多窗——控制条按钮是哪个窗的，就关哪个窗（先切活动量到
 // 按钮所在的窗，再关；不切的话关的是活动窗，可能是别的窗）。
 if ([sender isKindOfClass:[UIView class]]) {
@@ -2898,7 +3871,7 @@ GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
 }
 
 - (void)handleHostedMinimize:(id)sender {
-GHLSSLogLine("v40 hosted minimize tapped");
+GHLSSLogLine("v41 hosted minimize tapped");
 if ([sender isKindOfClass:[UIView class]]) {
 GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
 }
@@ -2918,7 +3891,7 @@ GHLSSHostedScaleSliderBar.hidden = !GHLSSHostedScaleSliderBar.hidden;
 if (!GHLSSHostedScaleSliderBar.hidden && GHLSSHostedScaleSlider) {
 GHLSSHostedScaleSlider.value = GHLSSHostedScaleRatio;
 }
-GHLSSLogLine("v40 scale bar toggled");
+GHLSSLogLine("v41 scale bar toggled");
 }
 
 // v38：拖缩放滑杆——0.5–2.0，步进 0.01（UISlider 没有步进，handler
@@ -2945,7 +3918,7 @@ if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) {
 GHLSSCacheScaleRatios[GHLSSActiveAppIndex] = v;
 }
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 scale changed to %d%%", (int)(v * 100.0));
+snprintf(buf, sizeof(buf), "v41 scale changed to %d%%", (int)(v * 100.0));
 GHLSSLogLine(buf);
 GHLSSApplyScaleToHostedWindow(YES);
 }
@@ -2976,13 +3949,25 @@ UIWindow *dragWindow = GHLSSWindowForView(recognizer.view);
 if (!dragWindow) dragWindow = GHLSSHostedWindow;
 if (!dragWindow) return;
 GHLSSSetActiveToWindow(dragWindow);
+// v41：收起的 peek 窗不拖（點整截是恢復，拖動沒有意義；peek 上的
+// 點按層本來就擋住了細條，這裡是兜底）。
+int dragIdx = GHLSSAppIndexForWindow(dragWindow);
+if (dragIdx >= 0 && dragIdx < GHLSS_APP_COUNT && GHLSSCacheMinimized[dragIdx]) return;
 // v40：拖动一开始读一次设定（贴边收起往哪边、安全距离），拖动中
 // 不变——每动一下都读 prefs 太费（CFPreferencesAppSynchronize）。
 if (recognizer.state == UIGestureRecognizerStateBegan) {
+// v41：浮窗拖動手勢開關（調度窗口設置，預設開）——關了這次拖動
+// 不動（Began 讀一次，之後的事件看旗標，不每動一下讀 prefs）。
+GHLSSDragDisabled = !GHLSSReadWindowDragEnabled();
+if (GHLSSDragDisabled) {
+GHLSSLogLine("v41 window drag disabled");
+return;
+}
 GHLSSDragDockLeft = GHLSSIsWindowPositionLeft();
 GHLSSDragSafeDistance = GHLSSReadSafeDistance();
-GHLSSLogLine("v40 window dragged");
+GHLSSLogLine("v41 window dragged");
 }
+if (GHLSSDragDisabled) return;
 BOOL dockLeft = GHLSSDragDockLeft;
 CGFloat safeDistance = GHLSSDragSafeDistance;
 CGPoint point = [recognizer translationInView:dragWindow];
@@ -3012,7 +3997,7 @@ if (recognizer.state == UIGestureRecognizerStateEnded) {
 // 像影片一樣）。右側：中心进右缘 60pt 内；左側：中心进左缘 60pt 内。
 BOOL shouldDock = dockLeft ? (newX <= GHLSS_DOCK_DRAG_THRESHOLD) : (screenBounds.size.width - newX <= GHLSS_DOCK_DRAG_THRESHOLD);
 if (shouldDock) {
-GHLSSLogLine("v40 window docked by drag");
+GHLSSLogLine("v41 window docked by drag");
 [self minimizeHostedWindow];
 return;
 }
@@ -3053,7 +4038,7 @@ GHLSSHostedTitleBar.hidden = !GHLSSHostedTitleBar.hidden;
 if (GHLSSHostedTitleBar.hidden && GHLSSHostedScaleSliderBar) {
 GHLSSHostedScaleSliderBar.hidden = YES;
 }
-GHLSSLogLine("v40 control bar toggled");
+GHLSSLogLine("v41 control bar toggled");
 }
 
 // 拖右下角手柄改窗大小：拖动时只改窗与视图（live）；
@@ -3094,7 +4079,7 @@ if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, new
 if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
 if (recognizer.state == UIGestureRecognizerStateEnded) {
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v40 window resized to %dx%d", (int)newW, (int)newH);
+snprintf(rbuf, sizeof(rbuf), "v41 window resized to %dx%d", (int)newW, (int)newH);
 GHLSSLogLine(rbuf);
 [self resizeHostedSceneToContentSize:CGSizeMake(newW, newH)];
 // v40：调尺寸结束存一次位置/大小/缩放（第 6 项）——下次开同一 App
@@ -3114,28 +4099,32 @@ if (!GHLSSHostedScene) return;
 // presenterView 的 bounds + sublayerTransform，0.05 秒防抖后推
 // 新 frame（= 新内容尺寸 ÷ scale）+ 重设安全区 insets（第 3 项）。
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 scene resized %d,%d", (int)size.width, (int)size.height);
+snprintf(buf, sizeof(buf), "v41 scene resized %d,%d", (int)size.width, (int)size.height);
 GHLSSLogLine(buf);
 GHLSSApplyScaleToHostedWindow(YES);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v40 scene resize failed");
+GHLSSLogLine("v41 scene resize failed");
 }
 }
 
 - (void)handleCloseButton:(id)sender {
-GHLSSLogLine("v40 close button tapped");
+GHLSSLogLine("v41 close button tapped");
 [self dismissLauncher];
 }
 
 - (void)handleBackgroundTap:(UITapGestureRecognizer *)recognizer {
-GHLSSLogLine("v40 background tapped, dismissing launcher");
+GHLSSLogLine("v41 background tapped, dismissing launcher");
 [self dismissLauncher];
 }
 
 - (void)showLauncher {
+if (!GHLSSReadARCEnabled()) {
+GHLSSLogLine("v41 launcher ignored, arc disabled");
+return;
+}
 if (GHLSSLauncherVisible) {
-GHLSSLogLine("v40 launcher already open");
+GHLSSLogLine("v41 launcher already open");
 return;
 }
 // v40：每次打开都重建（设定页的 App 开关、左右位置可能改了，重建
@@ -3154,115 +4143,765 @@ GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert - 3.0;
 }
 GHLSSLauncherWindow.hidden = NO;
 GHLSSLauncherVisible = YES;
-GHLSSLogLine("v40 launcher opened");
+GHLSSLogLine("v41 launcher opened");
+// v41：叫出 ARC 時給一下震動（ARC 設置的震動反饋開關，預設開）。
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
 }
 
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherWindow.hidden = YES;
 GHLSSLauncherVisible = NO;
-GHLSSLogLine("v40 launcher dismissed");
+GHLSSLogLine("v41 launcher dismissed");
 }
 
 // 建启动器窗（第一次打开时才建）：全屏透明窗 + 右侧 220pt 暗色面板。
 // 面板与背景点按区是平级的两个子视图：点面板不会触发收起，
 // 点面板以外（透明区）才收起。
+// v41：ARC 圓形啟動器（取代 v40 的白底面板——皇上 12:29：不要白色相框，
+// 要像 video 95 結尾那樣：圖標直接浮在變暗的當前 App 上）。全屏暗背景
+//（黑 0.55，點背景收起）+ 頂上搜索框 + 右側一列圓形 App 圖標
+//（分段：置頂／最近／全部 App）+ 常用三開 + 遊戲模式開關 + 「＋」
+// 選 App + 下面 X 關掉。開著的 App 帶綠點（主窗金色），點一下升為主窗。
+// 內容由 rebuildARCContent 重建（打開、搜索、置頂、選完 App 後都調）。
 - (void)buildLauncherWindow {
 CGRect screenBounds = [UIScreen mainScreen].bounds;
-CGFloat panelWidth = 220.0;
 GHLSSLauncherWindow = [[UIWindow alloc] initWithFrame:screenBounds];
 // v29：基准层级 Alert - 3（锁屏之下；有悬浮窗时见 showLauncher，会升到 Alert - 1）。
 GHLSSLauncherWindow.windowLevel = UIWindowLevelAlert - 3.0;
 GHLSSLauncherWindow.backgroundColor = [UIColor clearColor];
-// 启动器的窗也显式挂 scene（v22 的教训：没挂 scene 的窗可能不显示）。
 UIWindowScene *launcherScene = GHLSSActiveWindowScene();
 if (launcherScene) {
 GHLSSLauncherWindow.windowScene = launcherScene;
-GHLSSLogLine("v40 launcher scene found");
+GHLSSLogLine("v41 launcher scene found");
 } else {
-GHLSSLogLine("v40 launcher scene nil");
+GHLSSLogLine("v41 launcher scene nil");
 }
 UIViewController *launcherVC = [[UIViewController alloc] init];
 UIView *rootView = [[UIView alloc] initWithFrame:screenBounds];
 rootView.backgroundColor = [UIColor clearColor];
 launcherVC.view = rootView;
-// 背景点按区（全屏透明）：点它收起启动器。
+// 暗背景（點它收起啟動器）。
 UIView *bgView = [[UIView alloc] initWithFrame:screenBounds];
-bgView.backgroundColor = [UIColor clearColor];
+bgView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.55];
 UITapGestureRecognizer *bgTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleBackgroundTap:)];
 [bgView addGestureRecognizer:bgTap];
 [rootView addSubview:bgView];
-// v40：面板改白底圆角（皇上 11:51：黑色面板像「黑色相框」，要改成
-// 像 floatingView 影片/設定頁那樣白底黑字）。220pt 宽、全高，白底
-// 0.97、圆角 16（只圆朝屏幕中心那侧的两个角）、细灰边、淡阴影；
-// 位置跟小窗显示位置设定走（右側：贴右边缘；左側：贴左边缘）。
-// 标题「分屏」与 App 名改黑字，关闭钮改蓝色。
-BOOL panelLeft = GHLSSIsWindowPositionLeft();
-CGFloat panelX = panelLeft ? 0 : (screenBounds.size.width - panelWidth);
-CGRect panelFrame = CGRectMake(panelX, 0, panelWidth, screenBounds.size.height);
-UIView *panel = [[UIView alloc] initWithFrame:panelFrame];
-panel.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.97];
-panel.layer.cornerRadius = 16.0;
-if (panelLeft) {
-panel.layer.maskedCorners = kCALayerMaxXMinYCorner | kCALayerMaxXMaxYCorner;
-} else {
-panel.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMinXMaxYCorner;
+// 搜索框（頂上；打字即篩已安裝 App，篩緩存清單，不重新列舉）。
+// 點搜索框會彈出系統鍵盤（SpringBoard 上也能彈），按完成收起。
+CGFloat scrollY = 24.0;
+GHLSSLauncherSearchField = nil;
+if (GHLSSReadARCSearchEnabled()) {
+UITextField *searchField = [[UITextField alloc] initWithFrame:CGRectMake(16, 60, screenBounds.size.width - 32, 36)];
+searchField.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+searchField.layer.cornerRadius = 10.0;
+searchField.textColor = [UIColor whiteColor];
+searchField.font = [UIFont systemFontOfSize:15];
+searchField.placeholder = [NSString stringWithCString:"搜索 App" encoding:NSUTF8StringEncoding];
+searchField.clearButtonMode = UITextFieldViewModeWhileEditing;
+searchField.returnKeyType = UIReturnKeyDone;
+searchField.autocorrectionType = UITextAutocorrectionTypeNo;
+[searchField addTarget:self action:@selector(handleARCSearchChanged:) forControlEvents:UIControlEventEditingChanged];
+[searchField addTarget:self action:@selector(handleARCSearchDone:) forControlEvents:UIControlEventEditingDidEndOnExit];
+[rootView addSubview:searchField];
+GHLSSLauncherSearchField = searchField;
+scrollY = 108.0;
 }
-panel.layer.borderWidth = 1.0;
-panel.layer.borderColor = [[UIColor colorWithWhite:0.85 alpha:1.0] CGColor];
-panel.layer.shadowColor = [UIColor blackColor].CGColor;
-panel.layer.shadowOpacity = 0.25;
-panel.layer.shadowRadius = 12.0;
-panel.layer.shadowOffset = panelLeft ? CGSizeMake(6, 0) : CGSizeMake(-6, 0);
-[rootView addSubview:panel];
-// 标题。
-UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 20, 150, 30)];
-titleLabel.text = [NSString stringWithCString:"分屏" encoding:NSUTF8StringEncoding];
-titleLabel.textColor = [UIColor blackColor];
-titleLabel.font = [UIFont boldSystemFontOfSize:17];
-[panel addSubview:titleLabel];
-// App 行：图标 + 名字，点一行在悬浮窗里打开那个 App。
-// v40：只显示设定页里开着的 App（選擇應用开关，默认全开），按固定
-// 顺序（计算器、时钟、备忘录、设置、照片）排、没有空位；关掉的
-// 不出现（tag 还是 App 下标，handleAppButton 照旧认）。
-NSInteger visibleRow = 0;
-for (NSInteger i = 0; i < GHLSS_APP_COUNT; i++) {
-if (!GHLSSIsAppEnabled((int)i)) continue;
-UIButton *appButton = [UIButton buttonWithType:UIButtonTypeCustom];
-appButton.frame = CGRectMake(0, 64 + visibleRow * 64, panelWidth, 60);
-appButton.tag = i;
-visibleRow++;
-[appButton addTarget:self action:@selector(handleAppButton:) forControlEvents:UIControlEventTouchUpInside];
-UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(12, 8, 44, 44)];
-UIImage *icon = GHLSSAppIcon(GHLSSAppBundleIDs[i]);
+GHLSSARCSearchText = [NSString string];
+UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, scrollY, screenBounds.size.width, screenBounds.size.height - scrollY)];
+scroll.backgroundColor = [UIColor clearColor];
+[rootView addSubview:scroll];
+GHLSSLauncherScrollView = scroll;
+GHLSSLauncherWindow.rootViewController = launcherVC;
+[self rebuildARCContent];
+GHLSSLogLine("v41 launcher built");
+}
+
+// v41：ARC 內容重建（每次打開、搜索字變了、置頂變了、選完 App 後都調）：
+// 沒有搜索字：常用三開 + 遊戲模式 + 三段（置頂／最近／全部 App，
+// 像 App 資料庫那樣分段）+ 「＋」選 App + X 關掉；有搜索字：只顯示
+// 篩過的已安裝 App（篩緩存清單，不重新列舉）。
+- (void)rebuildARCContent {
+if (!GHLSSLauncherScrollView) return;
+for (UIView *sub in [GHLSSLauncherScrollView.subviews copy]) [sub removeFromSuperview];
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat screenW = screenBounds.size.width;
+CGFloat iconSize = GHLSSReadARCIconSize();
+CGFloat edgeDistance = GHLSSReadARCEdgeDistance();
+BOOL columnLeft = GHLSSIsARCColumnLeft();
+CGFloat colRight = columnLeft ? (edgeDistance + iconSize) : (screenW - edgeDistance);
+CGFloat y = 8.0;
+NSString *query = GHLSSARCSearchText;
+BOOL searching = (query && [query length] > 0);
+if (searching) {
+// 搜索：篩緩存清單（名字或 bundleID 含關鍵字，不分大小寫），
+// 上限走設定（searchResultLimit，預設 12）；沒加入啟動器的也列
+// 出來（searchShowsNotInLauncher 開著時），點了先加入再打開。
+y = [self addARCSectionLabel:"搜索結果" fromY:y iconSize:iconSize];
+NSArray *installed = GHLSSCachedInstalledAppList();
+NSMutableArray *matched = [NSMutableArray array];
+NSString *bidKey = [NSString stringWithCString:"bundleID" encoding:NSUTF8StringEncoding];
+NSString *nameKey = [NSString stringWithCString:"name" encoding:NSUTF8StringEncoding];
+int limit = GHLSSReadSearchResultLimit();
+for (id item in installed) {
+if (![item isKindOfClass:[NSDictionary class]]) continue;
+NSString *itemBid = [(NSDictionary *)item objectForKey:bidKey];
+NSString *itemName = [(NSDictionary *)item objectForKey:nameKey];
+if (!itemBid) continue;
+BOOL hit = ([itemBid rangeOfString:query options:NSCaseInsensitiveSearch].location != NSNotFound);
+if (!hit && itemName) hit = ([itemName rangeOfString:query options:NSCaseInsensitiveSearch].location != NSNotFound);
+if (!hit) continue;
+if (!GHLSSReadSearchShowsNotInLauncher() && !GHLSSIsAppInLauncher([itemBid UTF8String])) continue;
+[matched addObject:itemBid];
+if ((int)[matched count] >= limit) break;
+}
+GHLSSARCSearchResultCount = (int)[matched count];
+y = [self addARCIconsForBids:matched fromY:y iconSize:iconSize tagBase:1000 action:@selector(handleARCSearchResultButton:) isSearchResult:YES];
+if ([matched count] == 0) {
+UILabel *empty = [[UILabel alloc] initWithFrame:CGRectMake(colRight - 200, y, 200, 20)];
+empty.text = [NSString stringWithCString:"沒有找到" encoding:NSUTF8StringEncoding];
+empty.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+empty.font = [UIFont systemFontOfSize:13];
+empty.textAlignment = NSTextAlignmentRight;
+[GHLSSLauncherScrollView addSubview:empty];
+y += 24.0;
+}
+} else {
+// 常用三開：置頂的前三個（不夠就用最近的補，再不夠用啟動器順序補）。
+UIButton *trioBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+trioBtn.frame = CGRectMake(colRight - 120, y, 120, 36);
+trioBtn.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+trioBtn.layer.cornerRadius = 18.0;
+trioBtn.layer.borderWidth = 1.0;
+trioBtn.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.3].CGColor;
+[trioBtn setTitle:[NSString stringWithCString:"常用三開" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[trioBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+trioBtn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+[trioBtn addTarget:self action:@selector(launchTrio) forControlEvents:UIControlEventTouchUpInside];
+[GHLSSLauncherScrollView addSubview:trioBtn];
+y += 40.0;
+// 遊戲模式：浮窗釘在最上層（鎖屏之下允許的最高層級），再點關掉。
+// 完整遊戲模式＋橫屏支援仍排在真分屏之後，這開關是第一步（見 §113）。
+UILabel *gameLabel = [[UILabel alloc] initWithFrame:CGRectMake(colRight - 51 - 90, y + 5, 86, 20)];
+gameLabel.text = [NSString stringWithCString:"遊戲模式" encoding:NSUTF8StringEncoding];
+gameLabel.textColor = [UIColor whiteColor];
+gameLabel.font = [UIFont systemFontOfSize:13];
+gameLabel.textAlignment = NSTextAlignmentRight;
+[GHLSSLauncherScrollView addSubview:gameLabel];
+UISwitch *gameSwitch = [[UISwitch alloc] init];
+gameSwitch.frame = CGRectMake(colRight - 51, y, 51, 31);
+gameSwitch.on = GHLSSReadGameModeEnabled();
+[gameSwitch addTarget:self action:@selector(handleGameModeSwitch:) forControlEvents:UIControlEventValueChanged];
+[GHLSSLauncherScrollView addSubview:gameSwitch];
+y += 39.0;
+// 三段：置頂 / 最近 / 全部（只顯示啟動器裡開著的 App；置頂的不在
+// 最近裡重複，最近的不在全部裡重複）。
+NSArray *pinned = GHLSSReadIDList("pinnedAppIDs");
+NSArray *recent = GHLSSReadIDList("recentAppIDs");
+NSMutableArray *pinnedInLauncher = [NSMutableArray array];
+NSMutableArray *recentInLauncher = [NSMutableArray array];
+NSMutableArray *allRest = [NSMutableArray array];
+for (id item in pinned) {
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+int idx = bid ? GHLSSAppIndexForBundleID(bid) : -1;
+if (idx >= 0 && GHLSSIsAppEnabled(idx)) [pinnedInLauncher addObject:item];
+}
+for (id item in recent) {
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+int idx = bid ? GHLSSAppIndexForBundleID(bid) : -1;
+if (idx >= 0 && GHLSSIsAppEnabled(idx) && ![pinnedInLauncher containsObject:item]) [recentInLauncher addObject:item];
+}
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (GHLSSAppBundleIDs[i][0] == '\0' || !GHLSSIsAppEnabled(i)) continue;
+NSString *bidStr = [NSString stringWithCString:GHLSSAppBundleIDs[i] encoding:NSUTF8StringEncoding];
+if ([pinnedInLauncher containsObject:bidStr]) continue;
+if ([recentInLauncher containsObject:bidStr]) continue;
+[allRest addObject:bidStr];
+}
+if ([pinnedInLauncher count] > 0) {
+y = [self addARCSectionLabel:"置頂" fromY:y iconSize:iconSize];
+y = [self addARCIconsForBids:pinnedInLauncher fromY:y iconSize:iconSize tagBase:0 action:@selector(handleAppButton:) isSearchResult:NO];
+}
+if ([recentInLauncher count] > 0) {
+y = [self addARCSectionLabel:"最近" fromY:y iconSize:iconSize];
+y = [self addARCIconsForBids:recentInLauncher fromY:y iconSize:iconSize tagBase:0 action:@selector(handleAppButton:) isSearchResult:NO];
+}
+if ([allRest count] > 0) {
+y = [self addARCSectionLabel:"全部 App" fromY:y iconSize:iconSize];
+y = [self addARCIconsForBids:allRest fromY:y iconSize:iconSize tagBase:0 action:@selector(handleAppButton:) isSearchResult:NO];
+}
+}
+// 「＋」加入 App（ARC 裡面選）與 X 關掉。
+UIButton *plusBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+plusBtn.frame = CGRectMake(columnLeft ? edgeDistance : (screenW - edgeDistance - iconSize), y, iconSize, iconSize);
+plusBtn.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+plusBtn.layer.cornerRadius = iconSize * 0.5;
+plusBtn.layer.borderWidth = 1.0;
+plusBtn.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.4].CGColor;
+[plusBtn setTitle:[NSString stringWithCString:"+" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[plusBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+plusBtn.titleLabel.font = [UIFont systemFontOfSize:28];
+[plusBtn addTarget:self action:@selector(handleARCPickerButton:) forControlEvents:UIControlEventTouchUpInside];
+[GHLSSLauncherScrollView addSubview:plusBtn];
+if (GHLSSReadARCShowNames()) {
+UILabel *plusLabel = [[UILabel alloc] initWithFrame:CGRectMake(plusBtn.frame.origin.x - 8, y + iconSize + 2, iconSize + 16, 14)];
+plusLabel.text = [NSString stringWithCString:"加入 App" encoding:NSUTF8StringEncoding];
+plusLabel.textColor = [UIColor whiteColor];
+plusLabel.font = [UIFont systemFontOfSize:10];
+plusLabel.textAlignment = NSTextAlignmentCenter;
+[GHLSSLauncherScrollView addSubview:plusLabel];
+}
+y += iconSize + 22.0;
+UIButton *xBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+xBtn.frame = CGRectMake(columnLeft ? edgeDistance : (screenW - edgeDistance - iconSize), y, iconSize, iconSize);
+xBtn.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+xBtn.layer.cornerRadius = iconSize * 0.5;
+xBtn.layer.borderWidth = 1.0;
+xBtn.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.4].CGColor;
+[xBtn setTitle:[NSString stringWithCString:"×" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[xBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+xBtn.titleLabel.font = [UIFont systemFontOfSize:28];
+[xBtn addTarget:self action:@selector(handleCloseButton:) forControlEvents:UIControlEventTouchUpInside];
+[GHLSSLauncherScrollView addSubview:xBtn];
+if (GHLSSReadARCShowNames()) {
+UILabel *xLabel = [[UILabel alloc] initWithFrame:CGRectMake(xBtn.frame.origin.x - 8, y + iconSize + 2, iconSize + 16, 14)];
+xLabel.text = [NSString stringWithCString:"關閉" encoding:NSUTF8StringEncoding];
+xLabel.textColor = [UIColor whiteColor];
+xLabel.font = [UIFont systemFontOfSize:10];
+xLabel.textAlignment = NSTextAlignmentCenter;
+[GHLSSLauncherScrollView addSubview:xLabel];
+}
+y += iconSize + 22.0;
+GHLSSLauncherScrollView.contentSize = CGSizeMake(screenW, y + 8);
+}
+
+// v41：ARC 裡一段的標題（置頂／最近／全部 App／搜索結果），
+// 跟圖標列同一側對齊。
+- (CGFloat)addARCSectionLabel:(const char *)title fromY:(CGFloat)y iconSize:(CGFloat)size {
+CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
+CGFloat edgeDistance = GHLSSReadARCEdgeDistance();
+BOOL columnLeft = GHLSSIsARCColumnLeft();
+CGFloat colX = columnLeft ? edgeDistance : (screenW - edgeDistance - size);
+UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(colX - 8, y, size + 16, 18)];
+label.text = [NSString stringWithCString:title encoding:NSUTF8StringEncoding];
+label.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
+label.font = [UIFont boldSystemFontOfSize:13];
+label.textAlignment = columnLeft ? NSTextAlignmentLeft : NSTextAlignmentRight;
+[GHLSSLauncherScrollView addSubview:label];
+return y + 22.0;
+}
+
+// v41：ARC 裡一列圖標（bids 是 bundleID 字串的陣列；搜索結果用
+// tagBase 1000 + 第幾筆，點了走 handleARCSearchResultButton:；
+// 啟動器裡的 App 用槽位下標當 tag，點了走 handleAppButton:）。
+- (CGFloat)addARCIconsForBids:(NSArray *)bids fromY:(CGFloat)y iconSize:(CGFloat)size tagBase:(NSInteger)tagBase action:(SEL)action isSearchResult:(BOOL)isSearchResult {
+if (!bids || [bids count] == 0) return y;
+CGFloat pitch = size + 22.0;
+for (NSInteger k = 0; k < (NSInteger)[bids count]; k++) {
+id item = [bids objectAtIndex:k];
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+if (!bid || bid[0] == '\0') continue;
+char name[128];
+GHLSSAppNameForBundleID(bid, name, sizeof(name));
+NSInteger tag;
+if (isSearchResult) {
+tag = tagBase + k;
+if (tag >= 1000 + 64) continue;
+strncpy(GHLSSARCSearchResults[tag - 1000], bid, sizeof(GHLSSARCSearchResults[0]) - 1);
+GHLSSARCSearchResults[tag - 1000][sizeof(GHLSSARCSearchResults[0]) - 1] = '\0';
+} else {
+tag = GHLSSAppIndexForBundleID(bid);
+if (tag < 0) continue;
+}
+UIButton *btn = [self arcIconButtonForBundleID:bid name:name tag:tag action:action atY:y size:size isSearchResult:isSearchResult];
+[GHLSSLauncherScrollView addSubview:btn];
+y += pitch;
+}
+return y;
+}
+
+// v41：ARC 裡一顆圓形 App 圖標（icon + 名 + 狀態點）：開著的 App 帶
+// 綠點（主窗金色），點一下升為主窗；搜索結果裡還沒加入啟動器的帶
+// 小「＋」；置頂的帶 ★；長按圖標置頂/取消置頂（只在啟動器段裡）。
+- (UIButton *)arcIconButtonForBundleID:(const char *)bid name:(const char *)name tag:(NSInteger)tag action:(SEL)action atY:(CGFloat)y size:(CGFloat)size isSearchResult:(BOOL)isSearchResult {
+CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
+CGFloat edgeDistance = GHLSSReadARCEdgeDistance();
+BOOL columnLeft = GHLSSIsARCColumnLeft();
+CGFloat colX = columnLeft ? edgeDistance : (screenW - edgeDistance - size);
+UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+btn.frame = CGRectMake(colX, y, size, size);
+btn.tag = tag;
+[btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+UIImage *icon = GHLSSAppIcon(bid);
+UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, size, size)];
 if (icon) {
 iconView.image = icon;
 } else {
 iconView.backgroundColor = [UIColor grayColor];
-char ibuf[192];
-snprintf(ibuf, sizeof(ibuf), "v40 icon nil for %s", GHLSSAppBundleIDs[i]);
-GHLSSLogLine(ibuf);
 }
-iconView.layer.cornerRadius = 10.0;
+iconView.layer.cornerRadius = size * 0.22;
 iconView.layer.masksToBounds = YES;
-[appButton addSubview:iconView];
-UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(64, 0, 144, 60)];
-nameLabel.text = [NSString stringWithCString:GHLSSAppNames[i] encoding:NSUTF8StringEncoding];
-nameLabel.textColor = [UIColor blackColor];
-nameLabel.font = [UIFont systemFontOfSize:16];
-[appButton addSubview:nameLabel];
-[panel addSubview:appButton];
+[btn addSubview:iconView];
+int slotIdx = (bid) ? GHLSSAppIndexForBundleID(bid) : -1;
+BOOL inLauncher = (slotIdx >= 0 && GHLSSIsAppEnabled(slotIdx));
+BOOL isOpen = (slotIdx >= 0 && GHLSSCacheWindows[slotIdx] && !GHLSSCacheWindows[slotIdx].hidden);
+if (GHLSSReadARCShowOpenDots() && isOpen) {
+UIView *dot = [[UIView alloc] initWithFrame:CGRectMake(size - 12, 0, 12, 12)];
+BOOL isMain = (slotIdx == GHLSSActiveAppIndex);
+dot.backgroundColor = isMain ? [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0] : [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:1.0];
+dot.layer.cornerRadius = 6.0;
+dot.layer.borderWidth = 1.5;
+dot.layer.borderColor = [UIColor whiteColor].CGColor;
+[btn addSubview:dot];
+} else if (isSearchResult && !inLauncher) {
+UILabel *plus = [[UILabel alloc] initWithFrame:CGRectMake(size - 16, -4, 18, 18)];
+plus.text = [NSString stringWithCString:"+" encoding:NSUTF8StringEncoding];
+plus.textColor = [UIColor whiteColor];
+plus.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:1.0];
+plus.layer.cornerRadius = 9.0;
+plus.layer.masksToBounds = YES;
+plus.font = [UIFont boldSystemFontOfSize:12];
+plus.textAlignment = NSTextAlignmentCenter;
+[btn addSubview:plus];
 }
-// 关闭按钮（面板底部）。
-UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-closeButton.frame = CGRectMake(0, screenBounds.size.height - 60, panelWidth, 44);
-[closeButton setTitle:[NSString stringWithCString:"关闭" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[closeButton setTitleColor:[UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0] forState:UIControlStateNormal];
-closeButton.titleLabel.font = [UIFont systemFontOfSize:16];
-[closeButton addTarget:self action:@selector(handleCloseButton:) forControlEvents:UIControlEventTouchUpInside];
-[panel addSubview:closeButton];
-GHLSSLauncherWindow.rootViewController = launcherVC;
-GHLSSLogLine("v40 launcher built");
+if (!isSearchResult && GHLSSIsAppPinned(bid)) {
+UILabel *pin = [[UILabel alloc] initWithFrame:CGRectMake(-4, -4, 16, 16)];
+pin.text = [NSString stringWithCString:"★" encoding:NSUTF8StringEncoding];
+pin.textColor = [UIColor colorWithRed:1.0 green:0.85 blue:0.0 alpha:1.0];
+pin.font = [UIFont boldSystemFontOfSize:12];
+[btn addSubview:pin];
+}
+if (GHLSSReadARCShowNames() && name && name[0] != '\0') {
+UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(-8, size + 2, size + 16, 14)];
+nameLabel.text = [NSString stringWithCString:name encoding:NSUTF8StringEncoding];
+nameLabel.textColor = [UIColor whiteColor];
+nameLabel.font = [UIFont systemFontOfSize:10];
+nameLabel.textAlignment = NSTextAlignmentCenter;
+[btn addSubview:nameLabel];
+}
+if (!isSearchResult) {
+UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleARCIconLongPress:)];
+lp.minimumPressDuration = 0.5;
+[btn addGestureRecognizer:lp];
+}
+return btn;
+}
+
+// v41：啟動器段的圖標（槽位下標當 tag，點了走 handleAppButton:）。
+- (UIButton *)arcIconButtonForIndex:(int)idx atY:(CGFloat)y size:(CGFloat)size {
+return [self arcIconButtonForBundleID:GHLSSAppBundleIDs[idx] name:GHLSSAppNames[idx] tag:idx action:@selector(handleAppButton:) atY:y size:size isSearchResult:NO];
+}
+
+// v41：搜索框打字——即時篩（改字串、重建內容；篩緩存清單，
+// 不重新列舉）。
+- (void)handleARCSearchChanged:(UITextField *)textField {
+NSString *text = textField.text;
+GHLSSARCSearchText = text ? [text copy] : [NSString string];
+[self rebuildARCContent];
+}
+
+// v41：搜索框按完成——收起鍵盤。
+- (void)handleARCSearchDone:(UITextField *)textField {
+[textField resignFirstResponder];
+}
+
+// v41：點搜索結果——還沒加入啟動器的先加入（沒空槽位就記日誌、
+// 不開），再走 handleAppButton 同一條路（已開著升主窗、收著恢復、
+// 沒開的開新窗）。
+- (void)handleARCSearchResultButton:(UIButton *)sender {
+NSInteger resultIdx = sender.tag - 1000;
+if (resultIdx < 0 || resultIdx >= GHLSSARCSearchResultCount) return;
+const char *bid = GHLSSARCSearchResults[resultIdx];
+char name[128];
+GHLSSAppNameForBundleID(bid, name, sizeof(name));
+int slotIdx = GHLSSAppIndexForBundleID(bid);
+if (slotIdx < 0 || !GHLSSIsAppEnabled(slotIdx)) {
+if (!GHLSSSetAppInLauncher(bid, YES)) {
+GHLSSLogLine("v41 search result add failed, launcher full");
+return;
+}
+GHLSSLogLine("v41 search result added to launcher");
+slotIdx = GHLSSAppIndexForBundleID(bid);
+}
+if (slotIdx < 0) return;
+sender.tag = slotIdx;
+[self handleAppButton:sender];
+}
+
+// v41：長按 ARC 圖標——置頂/取消置頂（置頂的固定在最上面一段，
+// 存 prefs 鍵 pinnedAppIDs；震動一下回饋；重建內容即時生效）。
+- (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer {
+if (recognizer.state != UIGestureRecognizerStateBegan) return;
+UIButton *btn = (UIButton *)recognizer.view;
+if (!btn) return;
+NSInteger idx = btn.tag;
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+const char *bid = GHLSSAppBundleIDs[idx];
+BOOL pinned = !GHLSSIsAppPinned(bid);
+GHLSSSetAppPinned(bid, pinned);
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
+[self rebuildARCContent];
+}
+
+// v41：遊戲模式開關（ARC 裡 + 設定頁同一份鍵 gameModeEnabled）：
+// 開著時浮窗釘在鎖屏之下允許的最高層級（Alert - 0.5，底窗；
+// 主窗 Alert - 0.25），蓋過啟動器與其他 App；關掉回 1998/1998.25。
+// 完整遊戲模式＋橫屏支援仍排在真分屏之後，這開關是第一步。
+- (void)handleGameModeSwitch:(UISwitch *)sender {
+GHLSSWritePrefsBool("gameModeEnabled", sender.on);
+GHLSSApplyGameModeLevels();
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
+}
+
+// v41：常用三開——置頂的前三個（不夠就用最近的補，再不夠用啟動器
+// 順序補），一次最多三個，順序開（中間等上一個建完，見 launchTrioStep）。
+- (void)launchTrio {
+GHLSSPendingTrioCount = 0;
+GHLSSPendingTrioNext = 0;
+GHLSSPendingTrioRetries = 0;
+NSArray *pinned = GHLSSReadIDList("pinnedAppIDs");
+NSArray *recent = GHLSSReadIDList("recentAppIDs");
+NSMutableArray *chosen = [NSMutableArray array];
+for (id item in pinned) {
+if ([chosen count] >= 3) break;
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+int idx = bid ? GHLSSAppIndexForBundleID(bid) : -1;
+if (idx >= 0 && GHLSSIsAppEnabled(idx) && ![chosen containsObject:item]) [chosen addObject:item];
+}
+for (id item in recent) {
+if ([chosen count] >= 3) break;
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+int idx = bid ? GHLSSAppIndexForBundleID(bid) : -1;
+if (idx >= 0 && GHLSSIsAppEnabled(idx) && ![chosen containsObject:item]) [chosen addObject:item];
+}
+for (int i = 0; i < GHLSS_APP_COUNT && [chosen count] < 3; i++) {
+if (GHLSSAppBundleIDs[i][0] == '\0' || !GHLSSIsAppEnabled(i)) continue;
+NSString *bidStr = [NSString stringWithCString:GHLSSAppBundleIDs[i] encoding:NSUTF8StringEncoding];
+if (![chosen containsObject:bidStr]) [chosen addObject:bidStr];
+}
+for (id item in chosen) {
+const char *bid = [(NSString *)item UTF8String];
+strncpy(GHLSSPendingTrio[GHLSSPendingTrioCount], bid, sizeof(GHLSSPendingTrio[0]) - 1);
+GHLSSPendingTrio[GHLSSPendingTrioCount][sizeof(GHLSSPendingTrio[0]) - 1] = '\0';
+GHLSSPendingTrioCount++;
+}
+if (GHLSSPendingTrioCount == 0) {
+GHLSSLogLine("v41 trio nothing to open");
+return;
+}
+char buf[256];
+snprintf(buf, sizeof(buf), "v41 trio launch %d apps", GHLSSPendingTrioCount);
+GHLSSLogLine(buf);
+[self dismissLauncher];
+[self launchTrioStep];
+}
+
+// v41：常用三開的下一步——上一個還在建（GHLSSHostedLaunching），
+// 0.8 秒後再試（最多 12 次，超了跳過這一個）；建完了 1.0 秒後開下一個。
+- (void)launchTrioStep {
+if (GHLSSPendingTrioNext >= GHLSSPendingTrioCount) {
+GHLSSLogLine("v41 trio done");
+return;
+}
+if (GHLSSHostedLaunching) {
+if (GHLSSPendingTrioRetries >= 12) {
+GHLSSLogLine("v41 trio launch timed out, skipping one");
+GHLSSPendingTrioNext++;
+GHLSSPendingTrioRetries = 0;
+} else {
+GHLSSPendingTrioRetries++;
+}
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self launchTrioStep];
+});
+return;
+}
+GHLSSPendingTrioRetries = 0;
+const char *bid = GHLSSPendingTrio[GHLSSPendingTrioNext];
+char name[128];
+GHLSSAppNameForBundleID(bid, name, sizeof(name));
+int idx = GHLSSAppIndexForBundleID(bid);
+if (idx >= 0 && GHLSSCacheWindows[idx] && !GHLSSCacheMinimized[idx] && !GHLSSCacheWindows[idx].hidden) {
+GHLSSLogLine("v41 trio app already open, skipping");
+} else {
+[self launchHostedApp:bid name:name];
+}
+GHLSSPendingTrioNext++;
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self launchTrioStep];
+});
+}
+
+// v41：通知橫幅——新窗建好時短暫顯示「已打開 <App>」（浮窗設置 →
+// 通知橫幅設置；開關關了不顯示，時長走設定，預設 1.5 秒自動藏）。
+- (void)showNotificationBannerForName:(const char *)name {
+if (!GHLSSReadNotificationBanner()) return;
+if (!name) name = "";
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat w = screenBounds.size.width - 64.0;
+CGFloat h = 44.0;
+if (!GHLSSNotificationBannerWindow) {
+GHLSSNotificationBannerWindow = [[UIWindow alloc] initWithFrame:CGRectMake(32, GHLSSReadSafeDistance() + 8, w, h)];
+GHLSSNotificationBannerWindow.windowLevel = UIWindowLevelAlert - 0.25;
+GHLSSNotificationBannerWindow.backgroundColor = [UIColor clearColor];
+UIWindowScene *bannerScene = GHLSSActiveWindowScene();
+if (bannerScene) GHLSSNotificationBannerWindow.windowScene = bannerScene;
+UIViewController *vc = [[UIViewController alloc] init];
+UIView *pill = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
+pill.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+pill.layer.cornerRadius = 22.0;
+vc.view = pill;
+UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, w - 24, h)];
+label.tag = 99;
+label.textColor = [UIColor whiteColor];
+label.font = [UIFont systemFontOfSize:15];
+label.textAlignment = NSTextAlignmentCenter;
+[pill addSubview:label];
+GHLSSNotificationBannerWindow.rootViewController = vc;
+}
+GHLSSNotificationBannerWindow.frame = CGRectMake(32, GHLSSReadSafeDistance() + 8, w, h);
+UILabel *label = (UILabel *)[GHLSSNotificationBannerWindow.rootViewController.view viewWithTag:99];
+char text[192];
+snprintf(text, sizeof(text), "已打開 %s", name);
+if (label) label.text = [NSString stringWithCString:text encoding:NSUTF8StringEncoding];
+GHLSSNotificationBannerWindow.hidden = NO;
+double duration = GHLSSReadBannerDuration();
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(duration * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+GHLSSNotificationBannerWindow.hidden = YES;
+});
+char buf[192];
+snprintf(buf, sizeof(buf), "v41 notification banner %s", name);
+GHLSSLogLine(buf);
+}
+
+// v41：截圖/錄屏狀態變了（ARC 設置的截圖錄屏隱藏 ARC，預設開）：
+// 錄屏開始時把 ARC 藏起來，錄完不自動叫回來。截圖的通知在截圖完成
+// 後才發，藏了也來不及進那一張——截圖隱藏做不到（見 BUILD_LOG
+// §113），只做到錄屏隱藏。哆啦A夢鈕不藏（FV 的 ARC 鈕也一樣在圖裡）。
+- (void)handleScreenCaptureChanged:(NSNotification *)note {
+(void)note;
+BOOL captured = [UIScreen mainScreen].isCaptured;
+char buf[64];
+snprintf(buf, sizeof(buf), "v41 screen capture changed %d", captured ? 1 : 0);
+GHLSSLogLine(buf);
+if (captured && GHLSSReadARCHideOnScreenshot() && GHLSSLauncherVisible) {
+[self dismissLauncher];
+GHLSSLogLine("v41 arc hidden for screen capture");
+}
+}
+
+// v41：拖三屏分隔線——調側窗寬度（100..屏寬×0.5；右側窗往左拖變寬、
+// 左側窗往右拖變寬）。拖動時只改窗與視圖（live）；松手時才調 scene
+// 的 frame（跟右下角手柄同一條路）+ 存一次位置/大小。
+- (void)handleSideDividerDrag:(UIPanGestureRecognizer *)recognizer {
+UIWindow *divWindow = GHLSSWindowForView(recognizer.view);
+if (!divWindow) divWindow = GHLSSHostedWindow;
+if (!divWindow) return;
+GHLSSSetActiveToWindow(divWindow);
+if (!GHLSSHostedIsSideDock) return;
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+GHLSSDividerDragDisabled = !GHLSSReadSideWindowGestures();
+if (GHLSSDividerDragDisabled) {
+GHLSSLogLine("v41 divider drag disabled");
+return;
+}
+GHLSSLogLine("v41 divider dragged");
+}
+if (GHLSSDividerDragDisabled) return;
+CGPoint point = [recognizer translationInView:divWindow];
+[recognizer setTranslation:CGPointZero inView:divWindow];
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGRect frame = divWindow.frame;
+BOOL dockLeft = GHLSSIsWindowPositionLeft();
+CGFloat newW = frame.size.width + (dockLeft ? point.x : -point.x);
+if (newW < 100.0) newW = 100.0;
+if (newW > screenBounds.size.width * 0.5) newW = screenBounds.size.width * 0.5;
+CGFloat newX = dockLeft ? 0 : (screenBounds.size.width - newW);
+CGFloat newH = frame.size.height;
+divWindow.frame = CGRectMake(newX, frame.origin.y, newW, newH);
+if (GHLSSHostedContainer) GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
+if (GHLSSHostedContentView) GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
+if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
+if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(78, 0, newW - 156, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 36, 5, 26, 26);
+if (GHLSSHostedScaleSliderBar) GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSS_HOSTED_CONTROL_H, newW, 36);
+if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, newW - 70, 30);
+if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
+if (GHLSSHostedSideDivider) {
+CGFloat divX = dockLeft ? (newW - 16.0) : 0;
+GHLSSHostedSideDivider.frame = CGRectMake(divX, 0, 16, newH);
+}
+if (recognizer.state == UIGestureRecognizerStateEnded) {
+char rbuf[128];
+snprintf(rbuf, sizeof(rbuf), "v41 divider resized side window to %dx%d", (int)newW, (int)newH);
+GHLSSLogLine(rbuf);
+[self resizeHostedSceneToContentSize:CGSizeMake(newW, newH)];
+if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) {
+GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
+}
+}
+}
+
+// v41：ARC 裡的「＋」——開選 App 頁（已安裝 App 清單，當場勾選）。
+- (void)handleARCPickerButton:(id)sender {
+(void)sender;
+[self showAppPicker];
+}
+
+// v41：選 App 頁（ARC 裡「＋」開的已安裝 App 清單；跟設定頁三屏設置
+// 裡的選擇器同一份鍵、同一份清單，兩邊改了都同步）。每次打開都重建
+// 清單（緩存可能更新了；開關狀態即時讀 prefs）。列舉在後台做、結果
+// 寫緩存檔，這裡只讀緩存（見 GHLSSRefreshInstalledAppListInBackground）。
+- (void)showAppPicker {
+if (GHLSSAppPickerWindow && !GHLSSAppPickerWindow.hidden) {
+GHLSSLogLine("v41 app picker already open");
+return;
+}
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+if (!GHLSSAppPickerWindow) {
+GHLSSAppPickerWindow = [[UIWindow alloc] initWithFrame:screenBounds];
+GHLSSAppPickerWindow.windowLevel = UIWindowLevelAlert - 1.0;
+GHLSSAppPickerWindow.backgroundColor = [UIColor clearColor];
+UIWindowScene *pickerScene = GHLSSActiveWindowScene();
+if (pickerScene) GHLSSAppPickerWindow.windowScene = pickerScene;
+UIViewController *vc = [[UIViewController alloc] init];
+UIView *root = [[UIView alloc] initWithFrame:screenBounds];
+root.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+vc.view = root;
+UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, 44, screenBounds.size.width - 32, 30)];
+title.text = [NSString stringWithCString:"選擇應用" encoding:NSUTF8StringEncoding];
+title.textColor = [UIColor whiteColor];
+title.font = [UIFont boldSystemFontOfSize:20];
+[root addSubview:title];
+UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(16, 76, screenBounds.size.width - 32, 20)];
+sub.text = [NSString stringWithCString:"開了就出現在啟動器裡（最多 12 個）" encoding:NSUTF8StringEncoding];
+sub.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+sub.font = [UIFont systemFontOfSize:13];
+[root addSubview:sub];
+UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 104, screenBounds.size.width, screenBounds.size.height - 104 - 60)];
+scroll.tag = 77;
+[root addSubview:scroll];
+UIButton *done = [UIButton buttonWithType:UIButtonTypeSystem];
+done.frame = CGRectMake(0, screenBounds.size.height - 56, screenBounds.size.width, 44);
+[done setTitle:[NSString stringWithCString:"完成" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[done setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+done.titleLabel.font = [UIFont boldSystemFontOfSize:17];
+[done addTarget:self action:@selector(handleAppPickerDone:) forControlEvents:UIControlEventTouchUpInside];
+[root addSubview:done];
+GHLSSAppPickerWindow.rootViewController = vc;
+}
+UIScrollView *scroll = (UIScrollView *)[GHLSSAppPickerWindow.rootViewController.view viewWithTag:77];
+for (UIView *sub in [scroll.subviews copy]) [sub removeFromSuperview];
+NSArray *installed = GHLSSCachedInstalledAppList();
+NSString *bidKey = [NSString stringWithCString:"bundleID" encoding:NSUTF8StringEncoding];
+NSString *nameKey = [NSString stringWithCString:"name" encoding:NSUTF8StringEncoding];
+CGFloat y = 0;
+CGFloat rowH = 52.0;
+GHLSSAppPickerCount = 0;
+if (!installed || [installed count] == 0) {
+UILabel *empty = [[UILabel alloc] initWithFrame:CGRectMake(16, 8, screenBounds.size.width - 32, 40)];
+empty.text = [NSString stringWithCString:"還沒有已安裝 App 清單（後台列舉中，稍後再開）" encoding:NSUTF8StringEncoding];
+empty.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+empty.font = [UIFont systemFontOfSize:13];
+empty.numberOfLines = 2;
+[scroll addSubview:empty];
+y = 48.0;
+} else {
+for (id item in installed) {
+if (GHLSSAppPickerCount >= 256) break;
+if (![item isKindOfClass:[NSDictionary class]]) continue;
+NSString *itemBid = [(NSDictionary *)item objectForKey:bidKey];
+NSString *itemName = [(NSDictionary *)item objectForKey:nameKey];
+if (!itemBid || [itemBid length] == 0) continue;
+const char *bid = [itemBid UTF8String];
+strncpy(GHLSSAppPickerBids[GHLSSAppPickerCount], bid, sizeof(GHLSSAppPickerBids[0]) - 1);
+GHLSSAppPickerBids[GHLSSAppPickerCount][sizeof(GHLSSAppPickerBids[0]) - 1] = '\0';
+UIImage *icon = GHLSSAppIcon(bid);
+UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(16, y + 8, 36, 36)];
+if (icon) {
+iconView.image = icon;
+} else {
+iconView.backgroundColor = [UIColor grayColor];
+}
+iconView.layer.cornerRadius = 8.0;
+iconView.layer.masksToBounds = YES;
+[scroll addSubview:iconView];
+UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(60, y, screenBounds.size.width - 60 - 70, rowH)];
+nameLabel.text = itemName ? itemName : itemBid;
+nameLabel.textColor = [UIColor whiteColor];
+nameLabel.font = [UIFont systemFontOfSize:15];
+[scroll addSubview:nameLabel];
+UISwitch *sw = [[UISwitch alloc] init];
+sw.frame = CGRectMake(screenBounds.size.width - 16 - 51, y + 10, 51, 31);
+sw.on = GHLSSIsAppInLauncher(bid);
+sw.tag = GHLSSAppPickerCount;
+[sw addTarget:self action:@selector(handleAppPickerToggle:) forControlEvents:UIControlEventValueChanged];
+[scroll addSubview:sw];
+y += rowH;
+GHLSSAppPickerCount++;
+}
+}
+scroll.contentSize = CGSizeMake(screenBounds.size.width, y);
+GHLSSAppPickerWindow.hidden = NO;
+char buf[128];
+snprintf(buf, sizeof(buf), "v41 app picker opened %d apps", GHLSSAppPickerCount);
+GHLSSLogLine(buf);
+}
+
+// v41：選 App 頁關掉（ARC 內容重建，剛勾的立刻生效）。
+- (void)dismissAppPicker {
+if (GHLSSAppPickerWindow) GHLSSAppPickerWindow.hidden = YES;
+[self rebuildARCContent];
+GHLSSLogLine("v41 app picker closed");
+}
+
+// v41：選 App 頁的完成鈕。
+- (void)handleAppPickerDone:(id)sender {
+(void)sender;
+[self dismissAppPicker];
+}
+
+// v41：選 App 頁的開關——當場勾選，立刻生效、存 CFPreferences；
+// 滿了（12 個槽位用完）開關彈回關。關掉的 App 如果正開著窗，
+// 窗留著（只從啟動器拿掉，下次打不開而已）。
+- (void)handleAppPickerToggle:(UISwitch *)sender {
+NSInteger row = sender.tag;
+if (row < 0 || row >= GHLSSAppPickerCount) return;
+const char *bid = GHLSSAppPickerBids[row];
+BOOL on = sender.on;
+if (!GHLSSSetAppInLauncher(bid, on)) {
+sender.on = NO;
+GHLSSLogLine("v41 app picker full, switch reverted");
+return;
+}
+[self rebuildARCContent];
 }
 
 @end
@@ -3295,9 +4934,13 @@ CFRelease(v);
 if (domain) CFRelease(domain);
 if (key) CFRelease(key);
 char buf[128];
-snprintf(buf, sizeof(buf), "v40 deferred setup ran, switch=%s", state);
-GHLSSLogLine("v40 deferred setup ran");
+snprintf(buf, sizeof(buf), "v41 deferred setup ran, switch=%s", state);
+GHLSSLogLine("v41 deferred setup ran");
 GHLSSLogLine(buf);
+// v41：自選 App 槽位從 prefs 讀進來（ARC 第一次打開就看得到）；
+// 已安裝 App 清單在後台列舉、寫緩存檔（不堵主線程），設定頁/ARC 只讀緩存。
+GHLSSLoadCustomApps();
+GHLSSRefreshInstalledAppListInBackground();
 // 右边缘感应带：24pt 宽、全高、透明，层级在 SpringBoard 内容之上。
 // v23 的修法：窗显式挂 windowScene（没挂 scene 的窗可能不显示，
 // v22 的教训）；带子的视图给显式 frame（不用 plain init 的零 frame）。
@@ -3311,9 +4954,9 @@ GHLSSStripWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *stripScene = GHLSSActiveWindowScene();
 if (stripScene) {
 GHLSSStripWindow.windowScene = stripScene;
-GHLSSLogLine("v40 window scene found");
+GHLSSLogLine("v41 window scene found");
 } else {
-GHLSSLogLine("v40 window scene nil");
+GHLSSLogLine("v41 window scene nil");
 }
 UIViewController *stripVC = [[UIViewController alloc] init];
 GHLSSPlainStripView *stripView = [[GHLSSPlainStripView alloc] initWithFrame:CGRectMake(0, 0, stripWidth, screenBounds.size.height)];
@@ -3321,14 +4964,14 @@ stripView.backgroundColor = [UIColor clearColor];
 stripVC.view = stripView;
 GHLSSStripWindow.rootViewController = stripVC;
 GHLSSStripWindow.hidden = NO;
-GHLSSLogLine("v40 edge strip built");
+GHLSSLogLine("v41 edge strip built");
 // 诊断日志：窗与带子到底是什么状态（真机一看就知道上没上屏）。
 char dbuf[256];
 CGRect wf = GHLSSStripWindow.frame;
-snprintf(dbuf, sizeof(dbuf), "v40 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
+snprintf(dbuf, sizeof(dbuf), "v41 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
 GHLSSLogLine(dbuf);
 CGRect sf = stripView.frame;
-snprintf(dbuf, sizeof(dbuf), "v40 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v41 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
 GHLSSLogLine(dbuf);
 // 5.1 的处理器（唯一的自定义处理类）。
 GHLSSLauncherShared = [[GHLSSLauncher alloc] init];
@@ -3338,28 +4981,33 @@ edgePan.edges = UIRectEdgeRight;
 edgePan.delegate = GHLSSLauncherShared;
 [stripView addGestureRecognizer:edgePan];
 GHLSSLauncherEdgePan = edgePan;
-GHLSSLogLine("v40 edge gesture added");
+GHLSSLogLine("v41 edge gesture added");
 // v40：感应带跟小窗位置设定走（初始位置按设定放；设定改了，下次开
 // 启动器时 showLauncher 会再调 GHLSSUpdateStripPosition 跟到对的边）。
 GHLSSUpdateStripPosition();
 // v38：哆啦A夢鈕（皇上要金色「分」按钮改成可爱型哆啦A夢图，3D 大笑
 // 版）。24pt 的感应带放不下 56pt 的圆钮（圆钮一半会伸出窗外、点
-// 不到），所以哆啦A夢鈕单独一个 56x56 的小窗（右边缘、竖直居中、
-// 层级 Alert - 4，和感应带同级），感应带只留右边缘滑动手势。图
-// 从 prefs bundle 里读（NSBundle bundleWithPath: +
-// pathForResource:ofType:，路径用运行时现做的字串；@3x 由系统按
-// 屏幕 scale 自动挑）；读不到就退回金色圆钮 + 「分」字（不空白、
-// 不崩）。
-CGFloat doraemonSize = 56.0;
-CGRect doraemonFrame = CGRectMake(screenBounds.size.width - doraemonSize, (screenBounds.size.height - doraemonSize) / 2.0, doraemonSize, doraemonSize);
+// 不到），所以哆啦A夢鈕单独一个小窗（右边缘、竖直居中、图从 prefs
+// bundle 里读；读不到就退回金色圆钮 + 「分」字（不空白、不崩）。
+// v41：大小走設定（doraemonIconSize，44–72，預設 56）；左右邊走設定
+// （doraemonSide，沒設跟小窗位置）；高度從 prefs 恢復（上次拖到的
+// 位置，沒拖過就居中）；層級 Alert - 1.25（1998.75，貼邊 peek 之上、
+// ARC 之下——圖 1 裡鈕疊在最下面那張 peek 卡上）。
+CGFloat doraemonSize = GHLSSReadDoraemonIconSize();
+CGFloat doraemonX = GHLSSIsDoraemonSideLeft() ? 0 : (screenBounds.size.width - doraemonSize);
+double savedDoraemonY = GHLSSReadDoraemonButtonY();
+CGFloat doraemonCenterY = (savedDoraemonY >= 0) ? (CGFloat)savedDoraemonY : (screenBounds.size.height / 2.0);
+if (doraemonCenterY < 100.0) doraemonCenterY = 100.0;
+if (doraemonCenterY > screenBounds.size.height - 100.0) doraemonCenterY = screenBounds.size.height - 100.0;
+CGRect doraemonFrame = CGRectMake(doraemonX, doraemonCenterY - doraemonSize / 2.0, doraemonSize, doraemonSize);
 GHLSSDoraemonButtonWindow = [[UIWindow alloc] initWithFrame:doraemonFrame];
-GHLSSDoraemonButtonWindow.windowLevel = UIWindowLevelAlert - 4.0;
+GHLSSDoraemonButtonWindow.windowLevel = UIWindowLevelAlert - 1.25;
 GHLSSDoraemonButtonWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *doraemonScene = GHLSSActiveWindowScene();
 if (doraemonScene) {
 GHLSSDoraemonButtonWindow.windowScene = doraemonScene;
 } else {
-GHLSSLogLine("v40 doraemon scene nil");
+GHLSSLogLine("v41 doraemon scene nil");
 }
 UIViewController *doraemonVC = [[UIViewController alloc] init];
 UIView *doraemonRoot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, doraemonSize, doraemonSize)];
@@ -3399,7 +5047,7 @@ if (screenScale > 0) {
 doraemonImage = [UIImage imageWithCGImage:doraemonImage.CGImage scale:screenScale orientation:doraemonImage.imageOrientation];
 }
 [doraemonButton setImage:doraemonImage forState:UIControlStateNormal];
-GHLSSLogLine("v40 doraemon image loaded");
+GHLSSLogLine("v41 doraemon image loaded");
 } else {
 // 退回金色圆钮 + 「分」字（图读不到时不空白、不崩）。
 doraemonButton.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
@@ -3408,40 +5056,52 @@ doraemonButton.layer.borderColor = [UIColor blackColor].CGColor;
 [doraemonButton setTitle:[NSString stringWithCString:"分" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
 [doraemonButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
 doraemonButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-GHLSSLogLine("v40 doraemon image missing, fallback to gold");
+GHLSSLogLine("v41 doraemon image missing, fallback to gold");
 }
-[doraemonButton addTarget:GHLSSLauncherShared action:@selector(handleHandleButton:) forControlEvents:UIControlEventTouchUpInside];
-// v40：哆啦A夢鈕可移動式（皇上 11:50：固定在右邊緣一個位置，想自己拖
-// 它）——給鈕加一個拖動手勢：沿右邊緣上下移動，x 固定在右邊緣不動，
-// y 跟著手指走、夾在屏幕內（100 到 h-100，別頂到劉海、別掉出底邊）；
-// 放手就停在放下的高度，不用吸附。鈕的大小（56pt）、樣子不變。
-// 點按跟拖動分開：UIPanGestureRecognizer 有內建位移門檻（約 10pt），
-// 手指沒怎麼動、快速抬起時 pan 不認、TouchUpInside 照舊開側邊啟動器；
+// v41：單擊開 ARC、雙擊輪切主窗（代替原來的 TouchUpInside：單擊手勢
+// 要等雙擊失敗才認，雙擊時不誤開 ARC；見 handleDoraemonButtonSingleTap /
+// handleDoraemonButtonDoubleTap）。點按跟拖動分開：pan 有內建位移門檻
+// （約 10pt），手指沒怎麼動、快速抬起時 pan 不認、單擊照舊開 ARC；
 // 拖動了 pan 認出來（cancelsTouchesInView 預設 YES，會取消鈕的點按
-// 追蹤），才算移動鈕的位置。鈕留在右邊緣（啟動器是右側滑出的，
-// 移到左邊緣不在 v40 範圍）。
+// 追蹤），才算移動鈕的位置。
+UITapGestureRecognizer *doraemonSingleTap = [[UITapGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleDoraemonButtonSingleTap:)];
+doraemonSingleTap.numberOfTapsRequired = 1;
+doraemonSingleTap.delegate = GHLSSLauncherShared;
+UITapGestureRecognizer *doraemonDoubleTap = [[UITapGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleDoraemonButtonDoubleTap:)];
+doraemonDoubleTap.numberOfTapsRequired = 2;
+doraemonDoubleTap.delegate = GHLSSLauncherShared;
+[doraemonSingleTap requireGestureRecognizerToFail:doraemonDoubleTap];
+[doraemonButton addGestureRecognizer:doraemonSingleTap];
+[doraemonButton addGestureRecognizer:doraemonDoubleTap];
 UIPanGestureRecognizer *doraemonDrag = [[UIPanGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleDoraemonButtonDrag:)];
 doraemonDrag.minimumNumberOfTouches = 1;
 doraemonDrag.maximumNumberOfTouches = 1;
 doraemonDrag.delegate = GHLSSLauncherShared;
 [doraemonButton addGestureRecognizer:doraemonDrag];
 // v40：一键关全部浮窗（皇上 11:55 糾正「全加」）——长按哆啦A夢鈕
-//（约 0.5 秒）关掉全部已开的浮窗 + 已收起的小卡。长按与点按/拖动
+// 关掉全部已开的浮窗 + 已收起的 peek。长按与点按/拖动
 // 分开：长按要手指基本不动（UILongPressGestureRecognizer 内建
 // allowableMovement 约 10pt，拖动了它就不认）；短按（无拖动、无长按）
 // 仍是开启动器；长按松手不触发启动器（长按旗标 suppress
-// TouchUpInside，见 handleHandleButton）。
+// 单击，见 handleDoraemonButtonSingleTap）。
+// v41：長按時間走調度設定（longPressDuration，0.3–1.0 秒，預設 0.5）。
 UILongPressGestureRecognizer *doraemonLongPress = [[UILongPressGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleDoraemonButtonLongPress:)];
-doraemonLongPress.minimumPressDuration = 0.5;
+doraemonLongPress.minimumPressDuration = GHLSSReadLongPressDuration();
 doraemonLongPress.delegate = GHLSSLauncherShared;
 [doraemonButton addGestureRecognizer:doraemonLongPress];
 [doraemonRoot addSubview:doraemonButton];
 GHLSSDoraemonButton = doraemonButton;
-GHLSSDoraemonButtonWindow.hidden = NO;
-GHLSSLogLine("v40 doraemon button added");
+// v41：顯示走設定（doraemonVisible，預設開；關了鈕不顯示，ARC 只能邊緣滑動叫出）。
+GHLSSDoraemonButtonWindow.hidden = !GHLSSReadDoraemonVisible();
+GHLSSLogLine("v41 doraemon button added");
 CGRect bf = doraemonButton.frame;
-snprintf(dbuf, sizeof(dbuf), "v40 doraemon button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v41 doraemon button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
 GHLSSLogLine(dbuf);
+// v41：錄屏開始時藏 ARC（NSNotificationCenter，不是被禁的
+// CFNotificationCenterAddObserver；截圖藏不了——通知在截圖完成後才發，
+// 見 §113）。
+[[NSNotificationCenter defaultCenter] addObserver:GHLSSLauncherShared selector:@selector(handleScreenCaptureChanged:) name:UIScreenCapturedDidChangeNotification object:nil];
+GHLSSLogLine("v41 screen capture observer added");
 // v32：锁屏信号——libnotify 的 notify_register_dispatch（<notify.h>，
 // 纯 C API，传 C 字串）。这不是被禁的 CFNotificationCenterAddObserver，
 // 不碰 CFString，回调跑在主队列。v31 的做法（锁了且有 hosted scene
@@ -3470,21 +5130,21 @@ BOOL anyScene = NO;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (GHLSSCacheScenes[i]) {
 anyScene = YES;
-GHLSSBackgroundCachedSceneAtIndex(i, "v40 scene backgrounded on lock");
+GHLSSBackgroundCachedSceneAtIndex(i, "v41 scene backgrounded on lock");
 }
 if (GHLSSCacheWindows[i] && !GHLSSCacheMinimized[i] && !GHLSSCacheWindows[i].hidden) {
 GHLSSCacheWindows[i].hidden = YES;
 GHLSSCacheHiddenByLock[i] = YES;
 if (i == GHLSSActiveAppIndex) GHLSSHostedHiddenByLock = YES;
 char hbuf[128];
-snprintf(hbuf, sizeof(hbuf), "v40 hosted window hidden on lock %s", GHLSSCacheBundleIDs[i]);
+snprintf(hbuf, sizeof(hbuf), "v41 hosted window hidden on lock %s", GHLSSCacheBundleIDs[i]);
 GHLSSLogLine(hbuf);
 } else if (GHLSSCacheWindows[i]) {
-GHLSSLogLine("v40 lock, window already minimized");
+GHLSSLogLine("v41 lock, window already minimized");
 }
 }
 if (!anyScene) {
-GHLSSLogLine("v40 lock state locked, no hosted scene");
+GHLSSLogLine("v41 lock state locked, no hosted scene");
 }
 GHLSSUpdateDimOverlay();
 } else {
@@ -3500,23 +5160,23 @@ GHLSSCacheHiddenByLock[i] = NO;
 if (i == GHLSSActiveAppIndex) GHLSSHostedHiddenByLock = NO;
 anyRestored = YES;
 char hbuf[128];
-snprintf(hbuf, sizeof(hbuf), "v40 hosted window shown on unlock %s", GHLSSCacheBundleIDs[i]);
+snprintf(hbuf, sizeof(hbuf), "v41 hosted window shown on unlock %s", GHLSSCacheBundleIDs[i]);
 GHLSSLogLine(hbuf);
 char fbuf[160];
-snprintf(fbuf, sizeof(fbuf), "v40 foreground pushed on unlock %s", GHLSSCacheBundleIDs[i]);
+snprintf(fbuf, sizeof(fbuf), "v41 foreground pushed on unlock %s", GHLSSCacheBundleIDs[i]);
 GHLSSPushForegroundCachedSceneAtIndex(i, fbuf);
 }
 }
 if (!anyRestored) {
-GHLSSLogLine("v40 lock state unlocked");
+GHLSSLogLine("v41 lock state unlocked");
 }
 GHLSSUpdateDimOverlay();
 }
 });
 if (lockNotifyResult == 0) {
-GHLSSLogLine("v40 lockstate notify registered");
+GHLSSLogLine("v41 lockstate notify registered");
 } else {
-GHLSSLogLine("v40 lockstate notify register failed");
+GHLSSLogLine("v41 lockstate notify register failed");
 }
 });
 }

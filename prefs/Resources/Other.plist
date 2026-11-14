@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>注意⚠️：重启用户空间方可生效。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>cameraPermissionEnabled</string>
+			<key>label</key>
+			<string>开启相机权限？</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>如果你想在分屏中使用相机，发现相机无法运行，则可以打开此开关。注意：相机能不能用还取決於被托管 App 自己的相机授权和系统，这个开关只存偏好、做不到修好相机。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Search</string>
+			<key>label</key>
+			<string>搜索界面设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>DesktopIcons</string>
+			<key>label</key>
+			<string>桌面图标设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>FloatingIcon</string>
+			<key>label</key>
+			<string>悬浮图标设置</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>其他杂项功能</string>
+</dict>
+</plist>

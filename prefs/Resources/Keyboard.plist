@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>键盘在浮窗内的表现取決於被托管 App 与系统，本开关目前只存偏好、做不到改键盘行为，待真机验证。</string>
+			<key>label</key>
+			<string>浮窗键盘设置</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>keyboardAvoidEnabled</string>
+			<key>label</key>
+			<string>键盘弹出时浮窗自动上移</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>浮窗键盘设置</string>
+</dict>
+</plist>
