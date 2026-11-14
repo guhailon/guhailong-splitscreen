@@ -132,21 +132,6 @@
 				<string>maximize</string>
 			</array>
 		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSPageResetController</string>
-			<key>label</key>
-			<string>重置本页为默认</string>
-			<key>pageKeys</key>
-			<array>
-				<string>gestureTripleTap</string>
-				<string>gestureSwipeV</string>
-				<string>gestureSwipeH</string>
-				<string>gestureTwoFingerTap</string>
-			</array>
-		</dict>
 	</array>
 	<key>title</key>
 	<string>手势自定义</string>

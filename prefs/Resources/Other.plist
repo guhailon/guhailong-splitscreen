@@ -34,31 +34,9 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSCardBgListController</string>
-			<key>label</key>
-			<string>卡片背景图</string>
-		</dict>
-		<dict>
-			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>浮窗設定卡片頂上的龍頭頭像、卡片背景圖都能換：相冊選圖、存起來；頭像居中裁方形，背景圖上面罩半透明白、字才看得清；都能恢復默認。卡片上點頭像直接換是探針（SpringBoard 上彈相冊不一定行），設定頁這邊才是可靠的路。</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>floatBallEnabled</string>
-			<key>label</key>
-			<string>悬浮球</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -90,38 +68,9 @@
 			<key>cell</key>
 			<string>PSLinkCell</string>
 			<key>detail</key>
-			<string>Search</string>
-			<key>label</key>
-			<string>搜索界面设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>DesktopIcons</string>
-			<key>label</key>
-			<string>桌面图标设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
 			<string>FloatingIcon</string>
 			<key>label</key>
-			<string>悬浮图标设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSPageResetController</string>
-			<key>label</key>
-			<string>重置本页为默认</string>
-			<key>pageKeys</key>
-			<array>
-				<string>floatBallEnabled</string>
-				<string>autoHideDoraemonInFullscreen</string>
-			</array>
+			<string>悬浮球与图标设置</string>
 		</dict>
 	</array>
 	<key>title</key>

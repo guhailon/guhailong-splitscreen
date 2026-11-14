@@ -258,7 +258,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>35</real>
+			<real>35.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -266,9 +266,9 @@
 			<key>label</key>
 			<string>侧窗圆角</string>
 			<key>max</key>
-			<real>50</real>
+			<real>50.0</real>
 			<key>min</key>
-			<real>0</real>
+			<real>0.0</real>
 			<key>showValue</key>
 			<true/>
 		</dict>
@@ -300,9 +300,9 @@
 			<key>label</key>
 			<string>侧窗阴影透明度</string>
 			<key>max</key>
-			<real>1</real>
+			<real>1.0</real>
 			<key>min</key>
-			<real>0</real>
+			<real>0.0</real>
 			<key>showValue</key>
 			<true/>
 		</dict>
@@ -312,7 +312,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>10</real>
+			<real>10.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -320,35 +320,11 @@
 			<key>label</key>
 			<string>侧窗阴影模糊半径</string>
 			<key>max</key>
-			<real>30</real>
+			<real>30.0</real>
 			<key>min</key>
-			<real>0</real>
+			<real>0.0</real>
 			<key>showValue</key>
 			<true/>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSPageResetController</string>
-			<key>label</key>
-			<string>重置本页为默认</string>
-			<key>pageKeys</key>
-			<array>
-				<string>closeThreeScreenAlsoClosesSide</string>
-				<string>windowPosition</string>
-				<string>threeScreenEnabled</string>
-				<string>sideWidthPreset</string>
-				<string>sideDividerThickness</string>
-				<string>sideDividerColor</string>
-				<string>edgeSwipeOpensThreeScreen</string>
-				<string>sideCornerRadius</string>
-				<string>sideShadowEnabled</string>
-				<string>sideShadowOpacity</string>
-				<string>sideShadowRadius</string>
-				<string>toolbarOrder</string>
-				<string>threeScreenAppOrder</string>
-			</array>
 		</dict>
 	</array>
 	<key>title</key>

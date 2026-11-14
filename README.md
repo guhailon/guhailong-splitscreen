@@ -1,6 +1,16 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.51（实验版 v51）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.52（实验版 v52）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v52 是什么（十五项整理＋修 bug）
+
+**皇上 2026-11-14 21:57–22:17：**一共十五項：拿掉 ARC 搜索框、設定搜索頁、主頁底版本歷程大段文字；選擇器要列全部 App；懸浮球與圖標設置合併、只留一個重置、取消桌面圖標設置、卡片背景圖移到主頁最上、狀態移到檢查更新下；狀態頁「源」點了沒反應；ARC 總開關、演示模式、顯示哆啦A夢鈕、新手模式都可以取消；懸浮球設置都沒有反應；ARC 點 App 開成窄側窗是 bug。
+
+**修法：**（1）ARC 搜索框整套拿掉（搜索框、搜索分支、搜索篩選、點結果 handler、`arcSearchEnabled`）；（2）設定搜索頁整套拿掉（`GHLSSSettingsSearchController`、動態索引、Search.plist）；（3）主頁底版本歷程改成只留一行日誌路徑；（4）選擇器改走 `LSApplicationWorkspace allApplications` 列舉（運行時查找、不連私有框架），固定 5 個 App 釘最前面、上限 12 個不變；（5）FloatingIcon.plist 變成合併頁（懸浮球開關加進來，球固定哆啦A夢圖、點開 ARC、長按開三屏；卡片頭像只影響卡片）；（6）各子頁「重置本页为默认」全拿掉，只留主頁全局重置，`GHLSSPageResetController` 整個刪掉；（7）桌面圖標設置取消（Other 行＋DesktopIcons.plist）；（8）卡片背景圖搬到 Root 最上面；（9）狀態移到檢查更新正下方；（10）狀態頁「源」點按修好（狀態頁自己加 `didSelectRow`、派發加 `spec->action` 兜底、開連結記成敗；QQ／群同路一起修）；（11）ARC 總開關取消（ARC 永開，`arcEnabled` 拿掉）；（12）演示模式整個取消（`GHLSSApplyDemoMode`、演示圓點、tick 呼叫全清）；（13）顯示哆啦A夢鈕取消（鈕永遠顯示，`doraemonVisible` 拿掉；全屏自動藏留著）；（14）新手模式整個取消（`ghlssNoviceHide` 過濾全清）；（15）側窗條件改只認 `GHLSSForceThreeScreenOnce`（三屏開關只啟用三屏功能，不再把每次開窗劫成側窗；側窗分支記觸發原因 switch／mode／once）。
+
+**懸浮球 bug 根因：**15.log 證明球建起來了（`floatBallEnabled=1` → `float ball image loaded` → `float ball built`），開關寫入／讀取／tick 都正常。真因是手勢代理 `shouldReceiveTouch:` 只豁免哆啦A夢鈕，球本身是 UIButton，三個手勢（點／長按／拖）全被「碰到 UIButton 回 NO」否決——球看得見但點不動、拖不動（v40 鈕拖不動的同一個 bug，v41 修鈕時沒補球）。修法：代理加 `GHLSSFloatBallButton` 豁免；另加建球狀態日誌＋scene 重試掛載。
+
+**誠實狀態：**沒真機驗過，測法見 BUILD_LOG §132。App 列舉是探針（QQ／微信／抖音出不出來要真機驗）；狀態頁點按根因靜態定不死三者中的哪一個（修法三個假設全堵＋日誌能定死），真機點了看日誌才算數。
 
 ## v51 是什么（哆啦A夢鈕全屏任意拖動）
 

@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>56</real>
+			<real>56.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -18,9 +18,9 @@
 			<key>label</key>
 			<string>ARC 图标大小</string>
 			<key>max</key>
-			<real>72</real>
+			<real>72.0</real>
 			<key>min</key>
-			<real>40</real>
+			<real>40.0</real>
 			<key>showValue</key>
 			<true/>
 		</dict>
@@ -79,21 +79,6 @@
 			<string>arcShowNames</string>
 			<key>label</key>
 			<string>显示 App 名字</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSPageResetController</string>
-			<key>label</key>
-			<string>重置本页为默认</string>
-			<key>pageKeys</key>
-			<array>
-				<string>arcIconSize</string>
-				<string>arcColumnSide</string>
-				<string>arcShowOpenDots</string>
-				<string>arcShowNames</string>
-			</array>
 		</dict>
 	</array>
 	<key>title</key>

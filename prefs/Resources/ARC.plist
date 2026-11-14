@@ -7,26 +7,6 @@
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>ARC总开关</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>arcEnabled</string>
-			<key>label</key>
-			<string>arc总开关</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>在這裡選要出現在啟動器裡的 App，最多 12 個（固定 5 個＋自選 7 個）。</string>
 			<key>label</key>
@@ -44,7 +24,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>關了 ARC 打不開（邊緣滑動、哆啦A夢鈕、懸浮球都叫不出來）；浮窗本身還能從三屏設置里開。</string>
+			<string>邊緣滑動、哆啦A夢鈕、懸浮球都能叫出 ARC；浮窗也能從三屏設置里開。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -181,29 +161,6 @@
 			<real>0.0</real>
 			<key>showValue</key>
 			<true/>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>演示模式開了藏哆啦A夢鈕／貼邊小卡／任務欄／通知橫幅，屏幕乾乾淨淨好截圖錄影；退出點屏幕角落的半透明小點。ARC 里也有同一個開關，兩邊同步。</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSPageResetController</string>
-			<key>label</key>
-			<string>重置本页为默认</string>
-			<key>pageKeys</key>
-			<array>
-				<string>arcEnabled</string>
-				<string>arcHideOnScreenshot</string>
-				<string>arcHaptics</string>
-				<string>arcTouchSound</string>
-				<string>arcOpenMode</string>
-				<string>arcEdgeDistance</string>
-			</array>
 		</dict>
 	</array>
 	<key>title</key>

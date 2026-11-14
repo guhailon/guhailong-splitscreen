@@ -146,7 +146,7 @@
 			<key>label</key>
 			<string>长按多久关全部浮窗</string>
 			<key>max</key>
-			<real>1</real>
+			<real>1.0</real>
 			<key>min</key>
 			<real>0.3</real>
 			<key>showValue</key>
@@ -157,23 +157,6 @@
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>0.3–1.0 秒，默认 0.5 秒。</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSPageResetController</string>
-			<key>label</key>
-			<string>重置本页为默认</string>
-			<key>pageKeys</key>
-			<array>
-				<string>edgeSwipeCount</string>
-				<string>edgeSwipeSide</string>
-				<string>windowDragEnabled</string>
-				<string>sideWindowGestures</string>
-				<string>doraemonDoubleTapEnabled</string>
-				<string>longPressDuration</string>
-			</array>
 		</dict>
 	</array>
 	<key>title</key>

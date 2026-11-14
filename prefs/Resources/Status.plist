@@ -8,7 +8,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>顧海龍集團分屏 v1.0.51（實驗版 v51）</string>
+			<string>顧海龍集團分屏 v1.0.52（實驗版 v52）</string>
 			<key>label</key>
 			<string>版本</string>
 		</dict>
@@ -45,8 +45,6 @@
 			<string>ghlssCopyDiagnostics</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
-			<key>ghlssNoviceHide</key>
-			<true/>
 			<key>label</key>
 			<string>複製診斷信息</string>
 		</dict>
@@ -61,8 +59,6 @@
 			<string>ghlssCopyQQ</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
-			<key>ghlssNoviceHide</key>
-			<true/>
 			<key>label</key>
 			<string>QQ：2309103548（點一下複製）</string>
 		</dict>
@@ -71,8 +67,6 @@
 			<string>ghlssCopyQQGroup</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
-			<key>ghlssNoviceHide</key>
-			<true/>
 			<key>label</key>
 			<string>QQ交流群：1130823454（點一下複製）</string>
 		</dict>
@@ -81,8 +75,6 @@
 			<string>ghlssOpenRepoSource</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
-			<key>ghlssNoviceHide</key>
-			<true/>
 			<key>label</key>
 			<string>顧海龍集團越獄源（點一下打開）</string>
 		</dict>
