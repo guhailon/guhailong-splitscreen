@@ -320,7 +320,48 @@
 				<string>safeDistance</string>
 				<string>tapOutsideEnabled</string>
 				<string>tapOutsideAction</string>
+				<string>geoCalculatorX</string>
+				<string>geoCalculatorY</string>
+				<string>geoCalculatorW</string>
+				<string>geoCalculatorH</string>
+				<string>geoCalculatorScale</string>
+				<string>geoCalculatorPeekW</string>
+				<string>geoCalculatorPeekH</string>
+				<string>geoClockX</string>
+				<string>geoClockY</string>
+				<string>geoClockW</string>
+				<string>geoClockH</string>
+				<string>geoClockScale</string>
+				<string>geoClockPeekW</string>
+				<string>geoClockPeekH</string>
+				<string>geoNotesX</string>
+				<string>geoNotesY</string>
+				<string>geoNotesW</string>
+				<string>geoNotesH</string>
+				<string>geoNotesScale</string>
+				<string>geoNotesPeekW</string>
+				<string>geoNotesPeekH</string>
+				<string>geoSettingsX</string>
+				<string>geoSettingsY</string>
+				<string>geoSettingsW</string>
+				<string>geoSettingsH</string>
+				<string>geoSettingsScale</string>
+				<string>geoSettingsPeekW</string>
+				<string>geoSettingsPeekH</string>
+				<string>geoPhotosX</string>
+				<string>geoPhotosY</string>
+				<string>geoPhotosW</string>
+				<string>geoPhotosH</string>
+				<string>geoPhotosScale</string>
+				<string>geoPhotosPeekW</string>
+				<string>geoPhotosPeekH</string>
 			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>重置本頁也會清掉各 App 存過的浮窗位置／大小（包括以前拖大存住的尺寸），下次開窗回到預設尺寸。</string>
 		</dict>
 	</array>
 	<key>title</key>

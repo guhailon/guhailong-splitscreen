@@ -1,4 +1,4 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.48（实验版 v48）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.49（实验版 v49）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
 
@@ -9,6 +9,16 @@
 **做了什麼：**ARC 啟動器裡右上角的「常用三開」深色藥丸按鈕整個拿掉（連 `launchTrio`／`launchTrioStep` 順序開三個的動作、`GHLSSPendingTrio` 待開清單一起刪）；「常跟 XX 一起開：YY」深色橫條推薦列整個拿掉（連 `handleARCPairButton:`、`GHLSSPairPartnerForBundleID`、`GHLSSARCPairMain`／`GHLSSARCPairOther`、開新窗時記配對的 `GHLSSRecordPair`／`recentPairs` 一起刪）。ARC 本身、搜索、置頂／最近／全部三段、遊戲模式開關、「＋」選 App、已開綠點都不動。**三屏組合照常：**設定頁三屏組合子頁點一對成對開的那條路（`openThreeScreenPair` 鍵＋2 秒輪詢 `checkPendingPairOpen`）留著——那是三屏組合唯一開法，推薦列本來就沒走這條（它直接調 `openPairWithBundleIDs`），所以拿掉推薦不影響三屏組合；已存的 `recentPairs` 沒人讀了，留在偏好裡無害。設定頁 Root.plist 頁腳／control 描述／本檔 v42 節的「智能配對推薦」字句同步改掉（歷史段落留「1.0.48 已拿掉」的註記）。
 
 **誠實狀態：**刪除是純減法（UI 兩塊＋支撐函數），沒動共用路徑（`openPairWithBundleIDs`、`GHLSSSplitPairString`、`GHLSSSaveLastThreeScreenPair` 都留著）；但沒真機驗過——ARC 打開確認兩樣都不見、其他功能照常，要皇上真機確認。測法：見 BUILD_LOG §128。
+
+## v49 是什么（修 peek 小窗全黑＋主浮窗太大）
+
+**皇上 2026-11-14 20:07–20:08：**主浮窗（時鐘計時器）幾乎全屏，「為什麼不跟以前一樣」；peek 小窗「還是黑屏」（設置主窗正常，右邊三個 peek 全黑）；「都沒去修改好」。照片裡控制條已是毛玻璃鈕，證實裝的是 1.0.47。
+
+**根因（代碼定死）：**peek 黑——變成 peek 的窗 scene 都被推回後台（手動最小化 `minimizeHostedWindow`、v42.3 自動 peek `GHLSSAutoPeekOtherWindows`、鎖屏回調三處），後台 FBScene 停止合成；且無路徑推回前景（解鎖只推 `HiddenByLock` 的窗，收著的明文跳過）。v41 把最小化改成活內容 peek 卻留著推後台，v42.3 讓每次切窗都自動 peek，所以到處是黑小窗。窗大——三條路都能變近全屏且都會把大尺寸存進 per-App 幾何（拖頂自動放大最可能：中窗居中窗頂 69.5pt，門檻是 safeDistance+24=74pt，隨便拖一下就觸發；控制條點「大」寫回全域 preset；放大手勢），恢復無尺寸上限、無重置入口，所以窗一旦變大就一直大。
+
+**修法：**peek 三處——`minimizeHostedWindow` 不再推後台、`GHLSSAutoPeekOtherWindows` 不再推後台、解鎖回調也推收著的 peek 回前景；窗大三項——拖頂放大門檻改成 `<= safeDistance`、`buildHostedWindow` 幾何恢復塊把 geoW/geoH 夾到不超過當前預設、浮窗設置頁「重置本頁」現在也清 5 個固定 App 的幾何鍵（`geo<前綴>X/Y/W/H/Scale/PeekW/PeekH`，共 35 個），下次開窗回到預設尺寸。放大手勢（`performGestureAction` 的 maximize）不動——它是用戶主動手勢；`openThreeScreenPair`／三屏組合不動。
+
+**誠實狀態：**peek 的 scene 保持前景＝多個 App 同時在前景跑，耗電會比後台化高——這是「活內容小窗」承諾的代價；peek 顯示的是左上切片的活內容，不是整 App 等比縮小（FV 的做法，符合設計預期）。三處修法缺一不可，否則鎖一次屏又全黑。沒真機驗過，測法見 BUILD_LOG §129。
 
 ## v47 是什么（熱修復：系統設定五個子頁點進去空白）
 
