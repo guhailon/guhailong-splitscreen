@@ -152,32 +152,6 @@
 			<key>label</key>
 			<string>arc-层数/按钮设置</string>
 		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>arc 与屏幕边缘距离</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSliderCell</string>
-			<key>default</key>
-			<real>20.0</real>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>arcEdgeDistance</string>
-			<key>label</key>
-			<string>arc 与屏幕边缘距离</string>
-			<key>max</key>
-			<real>60.0</real>
-			<key>min</key>
-			<real>0.0</real>
-			<key>showValue</key>
-			<true/>
-		</dict>
 	</array>
 	<key>title</key>
 	<string>arc设置</string>

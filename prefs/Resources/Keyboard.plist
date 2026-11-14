@@ -8,7 +8,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>键盘在浮窗内的表现取決於被托管 App 与系统，本开关目前只存偏好、做不到改键盘行为，待真机验证。</string>
+			<string>鍵盤彈出時浮窗自動上移：收到鍵盤通知就按鍵盤高度把浮窗上移，鍵盤收起回原位。探針：鍵盤通知由被托管 App 行程發，可能到不了 SpringBoard，收不到就不動，需真機驗證。</string>
 			<key>label</key>
 			<string>浮窗键盘设置</string>
 		</dict>

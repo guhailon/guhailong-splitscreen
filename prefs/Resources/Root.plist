@@ -8,7 +8,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>顾海龙集团分屏 v1.0.55（实验版 v55）</string>
+			<string>顾海龙集团分屏 v1.0.56（实验版 v56）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -82,9 +82,83 @@
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
-			<string>enabled</string>
+			<string>gameModeEnabled</string>
 			<key>label</key>
-			<string>启用分屏</string>
+			<string>游戏模式</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>遊戲模式開著時，進選好的遊戲 App 自動開：浮窗變淡到 0.5、縮到邊上成小窗、不吃觸摸（只剩哆啦A夢鈕可點）；出遊戲自動恢復原樣。哆啦A夢鈕點一下叫回浮窗。橫屏自動用橫屏尺寸。亮度音量按每款遊戲記住（音量是探針，真機未證實）；勿擾聯動是探針。</string>
+			<key>label</key>
+			<string>遊戲模式自動觸發</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSAppPickerListController</string>
+			<key>ghlssPickerMode</key>
+			<string>game</string>
+			<key>label</key>
+			<string>選擇遊戲 App</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>gameRememberBrightnessVolume</string>
+			<key>label</key>
+			<string>進遊戲記住亮度音量</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>gameClearBackground</string>
+			<key>label</key>
+			<string>進遊戲自動清後台</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>gameDoubleTapSwitchWeChat</string>
+			<key>label</key>
+			<string>雙擊哆啦A夢切遊戲／微信</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>gameMinimalAnimations</string>
+			<key>label</key>
+			<string>遊戲時浮窗動畫減到最少</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -96,25 +170,15 @@
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
-			<string>gameModeEnabled</string>
+			<string>gameDNDProbe</string>
 			<key>label</key>
-			<string>游戏模式</string>
+			<string>進遊戲開勿擾（探針）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>遊戲布局：遊戲模式開、ARC 開、固定中心關、圓角 20、安全距離 20、陰影開、任務欄關、浮窗大。</string>
 			<key>label</key>
-			<string>布局预设</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssApplyLayoutGame</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>游戏布局</string>
+			<string>配置方案</string>
 		</dict>
 		<dict>
 			<key>cell</key>

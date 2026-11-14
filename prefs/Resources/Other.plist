@@ -6,20 +6,6 @@
 	<array>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSLogViewerListController</string>
-			<key>label</key>
-			<string>查看日志</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>在設定 App 裡直接看分屏日誌：最新在最上面（預設最後 200 行），能刷新、能清空、能分享。</string>
-		</dict>
-		<dict>
-			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>本頁改完馬上生效，不用重啟用戶空間。</string>
