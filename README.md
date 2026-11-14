@@ -1,6 +1,12 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.38（实验版 v38）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.39（实验版 v39）
 
 原创 iOS 越狱分屏插件，包名 `com.guhailong.splitscreen`。
+
+## v39 是什么（哆啦A夢鈕读图路径 + sublayerTransform 左上锚点 + 解锁推前景）
+
+v38 真机测（BUILD_LOG §107–§108）：撞崩修法有效——已在跑的设置再打开不进安全模式；剩下三个显示问题，日誌 `GuHaiLongSplitScreen-9.log` 定死。v39 只修这三处：**① 哆啦A夢鈕还是金色「分」：**读图路径写死 `/Library/...`，Dopamine 是 rootless，实际在 `/var/jb/Library/...`，`bundleWithPath:` 拿到 nil、图读不到、退回金色「分」（日志只有 `image missing`，没有 `image loaded`）。修法：先试 `/var/jb/Library/...`，再试 `/Library/...`。**② 计算器/设置位置往右下偏：**`sublayerTransform` 是绕内容区 layer 的 anchorPoint 缩，默认 (0.5,0.5) 是中心，不是左上；scale<1.0 的 App（计算器 0.77、设置 0.845）偏了中心×(1−scale)，scale=1.0 的 App 没事（日志数字全对、窗没被改过）。修法：建 contentView 时把 anchorPoint=(0,0)、position=(0,0)（frame 仍是 (0,0,winW,winH)），一次改，建窗、resize、滑杆的 sublayerTransform 全都绕左上缩；`GHLSSApplyScaleToHostedWindow` 里两个分支各重申一次锚点（防万一）。scene frame、scale 数值不动。**③ 浮窗开着、关屏、再进去是黑的：**解锁 handler 只把窗显示回来、不推 foreground，恢复路径又只在最小化时跑，scene 一直在后台（日志：unlock 后没有 foreground push）。修法：解锁分支显示窗之后，顺手推 foreground=YES + backgrounded=NO（跟 `restoreHostedWindow` 里 v30 的做法一样，包 @try/@catch；解锁时锁屏已不在，不影响密码）。
+
+测法：点右边缘的哆啦A夢鈕——图是大笑 3D 版哆啦A夢，不是金色圆钮；开计算器——按键全在窗里、左右没有白边、上面没有大片黑；开设置——列表贴边填满、不偏一边；浮窗开着、关屏、再解锁——浮窗内容还在、不是黑的；锁屏密码还能按（等 30 秒以上再按）；日志里应有 `v39 doraemon image loaded`、`v39 layer host scaled 84%`、`v39 foreground pushed on unlock`。
 
 ## v38 是什么（托管已有主 scene + 无标题栏大窗 + 哆啦A夢鈕）
 
