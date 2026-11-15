@@ -860,9 +860,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.59");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.60");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.59。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.60。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，請去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1617,178 +1617,9 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
 
 @end
 
-// v46：「三屏工具欄排序」——拖動換浮窗控制條兩顆鈕的左右順序
-// （釘選／縮放）。順序存 prefs 鍵 toolbarOrder（逗號分隔）；
-// 預設 pin,scale。v59：關閉／最小化鈕拿掉，舊順序表裡殘留的
-// "close"／"minimize"／"opacity" 讀進來直接過濾掉（只認下面
-// 兩個識別字，不會崩、不會出幽靈行）。兩顆都放右邊；窄側窗
-// 只放得下縮放。新開的窗照新順序；活動窗 2 秒內跟著重排
-// （tick 裡調 GHLSSRelayoutActiveTitleBar）。
-static const char *GHLSSToolbarSortIDs[2] = {
-    "pin", "scale"
-};
-static const char *GHLSSToolbarSortNames[2] = {
-    "钉选", "缩放"
-};
-
-@interface GHLSSToolbarSortListController : PSListController
-@property (nonatomic, strong) NSMutableArray *orderedIDs;
-@end
-
-@implementation GHLSSToolbarSortListController
-
-- (void)viewDidLoad {
-    // v56（§141-2 真 bug 修法）：先組順序、設 ivar，再調 super——
-    // super viewDidLoad 會先載 specifiers，那時 orderedIDs 還是 nil
-    // 就組出 0 行且快取住，viewDidAppear reload 只重載空快取。
-    NSMutableArray *ordered = [NSMutableArray array];
-    char *raw = GHLSSPrefsCString("toolbarOrder");
-    if (raw) {
-        NSString *rawStr = [NSString stringWithCString:raw encoding:NSUTF8StringEncoding];
-        free(raw);
-        if (rawStr && [rawStr length] > 0) {
-            NSArray *parts = [rawStr componentsSeparatedByString:GHLSSRuntimeString(",")];
-            for (NSString *tid in parts) {
-                for (int i = 0; i < 2; i++) {
-                    NSString *known = [NSString stringWithCString:GHLSSToolbarSortIDs[i] encoding:NSUTF8StringEncoding];
-                    if ([tid isEqualToString:known] && ![ordered containsObject:tid]) [ordered addObject:tid];
-                }
-            }
-        }
-    }
-    for (int i = 0; i < 2; i++) {
-        NSString *known = [NSString stringWithCString:GHLSSToolbarSortIDs[i] encoding:NSUTF8StringEncoding];
-        if (![ordered containsObject:known]) [ordered addObject:known];
-    }
-    self.orderedIDs = ordered;
-    [super viewDidLoad];
-    GHLSSPrefsLogLine("v57 prefs-page: ToolbarSort");
-    self.navigationItem.rightBarButtonItem = self.editButtonItem;
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    // v54：拖曳手柄沒出現過（19.log prefs-sort 全文 0 行）——兩層都開編輯：
-    // 控制器層 self.editing（框架認）＋表格層 setEditing，並記一行驗證
-    //（editing 是不是真開了、幾行），下次日誌看得見手柄到底有沒有出來。
-    @try {
-        [self setEditing:YES animated:NO];
-    } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v57 prefs-sort: self setEditing EXCEPTION");
-    }
-    UITableView *tv = GHLSSSafeTableViewForController(self, "sort");
-    if (tv) {
-        @try {
-            [tv reloadData];
-            [tv setEditing:YES animated:NO];
-            BOOL row0Reorder = NO;
-            @try {
-                UITableViewCell *row0 = [tv cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
-                if (row0) row0Reorder = row0.showsReorderControl;
-            } @catch (NSException *e) {
-            }
-            char buf[256];
-            snprintf(buf, sizeof(buf), "v58 prefs-sort: editing=%d rows=%ld row0Reorder=%d", (int)tv.editing, (long)[tv numberOfRowsInSection:0], (int)row0Reorder);
-            GHLSSPrefsLogLine(buf);
-        } @catch (NSException *e) {
-            GHLSSPrefsLogLine("v57 prefs-sort: setEditing EXCEPTION");
-        }
-    }
-}
-
-
-// v57（§144-3 真根因）：行是 PSStaticTextCell，天生灰字不可選；且從沒
-// 在 cell 上設 showsReorderControl——table view 不會自動設，預設 NO，
-// 手柄從來沒出現過。兩個 override 強制補上（cellForRow 調 super 後改；
-// willDisplayCell 再套一次，防 PSTableCell 的 setEditing 重設；調 super
-// 前用 instancesRespondToSelector 守著）。
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = nil;
-    if ([[self superclass] instancesRespondToSelector:@selector(tableView:cellForRowAtIndexPath:)]) {
-        cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
-    }
-    if (!cell) return cell;
-    GHLSSSortCellFixUp(cell);
-    return cell;
-}
-
-- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if ([[self superclass] instancesRespondToSelector:@selector(tableView:willDisplayCell:forRowAtIndexPath:)]) {
-        [super tableView:tableView willDisplayCell:cell forRowAtIndexPath:indexPath];
-    }
-    GHLSSSortCellFixUp(cell);
-}
-
-- (NSArray *)specifiers {
-    if (!_specifiers) {
-        @try {
-            NSMutableArray *specs = [NSMutableArray array];
-            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("两颗钮：钉选、缩放，都是毛玻璃圆钮、白符号，都放右边。拖右边的手柄换顺序，松手立刻存；窄侧窗只放得下缩放。新开的窗照新顺序，活动窗 2 秒内跟着重排。") forKey:GHLSSRuntimeString("footerText")];
-            [specs addObject:group];
-            for (NSString *tid in self.orderedIDs) {
-                NSString *name = tid;
-                for (int i = 0; i < 2; i++) {
-                    NSString *known = [NSString stringWithCString:GHLSSToolbarSortIDs[i] encoding:NSUTF8StringEncoding];
-                    if ([tid isEqualToString:known]) { name = GHLSSRuntimeString(GHLSSToolbarSortNames[i]); break; }
-                }
-                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:name target:self set:nil get:nil detail:nil cell:PSStaticTextCell edit:nil];
-                [specs addObject:spec];
-            }
-            _specifiers = specs;
-    
-        } @catch (NSException *e) {
-            const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
-            char buf[512];
-            snprintf(buf, sizeof(buf), "v57 prefs-toolbarsort specifiers EXCEPTION %s", reason);
-            GHLSSPrefsLogLine(buf);
-            NSMutableArray *safe = [NSMutableArray array];
-            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("排序頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
-            [safe addObject:group];
-            _specifiers = safe;
-        }
-        if (!_specifiers) _specifiers = [NSMutableArray array];
-    }
-    return _specifiers;
-}
-
-- (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
-    (void)tableView;
-    (void)indexPath;
-    return YES;
-}
-
-- (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
-    (void)tableView;
-    (void)indexPath;
-    return UITableViewCellEditingStyleNone;
-}
-
-- (BOOL)tableView:(UITableView *)tableView shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)indexPath {
-    (void)tableView;
-    (void)indexPath;
-    return NO;
-}
-
-- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)fromIndexPath toIndexPath:(NSIndexPath *)toIndexPath {
-    (void)tableView;
-    NSInteger from = fromIndexPath.row;
-    NSInteger to = toIndexPath.row;
-    if (from < 0 || to < 0 || from >= (NSInteger)[self.orderedIDs count] || to >= (NSInteger)[self.orderedIDs count]) return;
-    if (from == to) return;
-    NSString *tid = [self.orderedIDs objectAtIndex:from];
-    [self.orderedIDs removeObjectAtIndex:from];
-    [self.orderedIDs insertObject:tid atIndex:to];
-    NSString *joined = [self.orderedIDs componentsJoinedByString:GHLSSRuntimeString(",")];
-    GHLSSWritePrefsCString("toolbarOrder", [joined UTF8String]);
-    char buf[256];
-    snprintf(buf, sizeof(buf), "v57 prefs-sort: toolbar order moved %s %ld -> %ld", [tid UTF8String], (long)from, (long)to);
-    GHLSSPrefsLogLine(buf);
-}
-
-@end
-
+// v60：标题栏整个拿掉，「三屏工具栏排序」页跟着删（没有按钮可排了）。
+// GHLSSToolbarSortListController、GHLSSToolbarSortIDs／Names 全删；
+// App 排序页（GHLSSAppSortListController）不动。
 // ── v42 動態頁 ──
 // 下面 9 個控制器都是 prefs bundle 裡的自訂類（prefs bundle 不受
 // dylib「禁自訂 ObjC 類」那條限；主插件 Tweak.xm 裡還是只能用
@@ -3078,7 +2909,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("開") : GHLSSRuntimeString("關");
-    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.59\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.60\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("診斷信息已複製到剪貼板。")];
