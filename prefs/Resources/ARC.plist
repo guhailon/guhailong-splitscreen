@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>defaults</key>
+	<string>com.guhailong.splitscreen</string>
 	<key>items</key>
 	<array>
 		<dict>
@@ -19,14 +21,6 @@
 			<string>GHLSSAppPickerListController</string>
 			<key>label</key>
 			<string>加入 App</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSAppSortListController</string>
-			<key>label</key>
-			<string>三屏 App 排序</string>
 		</dict>
 		<dict>
 			<key>cell</key>

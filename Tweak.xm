@@ -1,4 +1,4 @@
-// GuHaiLongSplitScreen v1.0.57 (v42.15) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.58 (v42.16) — 顾海龙集团原创分屏插件（实验版）
 //
 // ── v42.3：浮窗切換改 FV 式＋小窗可拖調尺寸（皇上 2026-11-14 18:19–18:22） ──
 // 皇上說：主浮窗開著再點副浮窗，現在兩個大窗疊著，他不要；要 FV 那樣——
@@ -1838,7 +1838,16 @@ return GHLSSReadPrefsDouble("doraemonButtonX", -1.0);
 }
 // ── v42：新設定鍵的讀法（全部走上面三個現成 helper） ──
 // B1 側窗寬度預設（narrow 25% / medium 30% / wide 40%，預設 medium）。
+// v58：側窗寬度滑桿（sideWidthPercent，20–50%，預設 30）——有值就蓋過
+// 預設（滑桿沒動過就不寫值、走預設；讀不到／超出範圍也走預設）。
 static CGFloat GHLSSReadSideWidthFraction(void) {
+double pct = GHLSSReadPrefsDouble("sideWidthPercent", -1.0);
+if (pct >= 20.0 && pct <= 50.0) {
+char sbuf[96];
+snprintf(sbuf, sizeof(sbuf), "v58 side width slider %.0f%%", pct);
+GHLSSLogLine(sbuf);
+return (CGFloat)(pct / 100.0);
+}
 char *v = GHLSSReadPrefsCString("sideWidthPreset");
 CGFloat f = 0.30;
 if (v) {
@@ -3018,10 +3027,6 @@ contentView.frame = CGRectMake(0, 0, peekW, peekH);
 contentView.layer.anchorPoint = CGPointMake(0, 0);
 contentView.layer.position = CGPointMake(0, 0);
 const char *bid = GHLSSCacheBundleIDs[idx];
-CGFloat ratio = GHLSSCacheScaleRatios[idx];
-if (ratio <= 0) ratio = GHLSSDefaultScaleRatioForBundleID(bid);
-if (ratio < 0.5) ratio = 0.5;
-if (ratio > 2.0) ratio = 2.0;
 BOOL isFixed = GHLSSIsFixedLayoutBundleID(bid);
 const char *peekPath = "none";
 CGFloat peekScale = 1.0;
@@ -3047,17 +3052,10 @@ peekScale = displayScale;
 peekFrame = screenSize;
 contentView.layer.sublayerTransform = CATransform3DMakeScale(displayScale, displayScale, 1.0);
 } else if (GHLSSCachePresenters[idx] && GHLSSCachePresenters[idx].presentationView) {
-CGSize frameSize = GHLSSSceneFrameSizeForContentSizeAndScale(CGSizeMake(peekW, peekH), ratio);
 UIView *presenterView = GHLSSCachePresenters[idx].presentationView;
-presenterView.bounds = CGRectMake(0, 0, frameSize.width, frameSize.height);
-presenterView.layer.anchorPoint = CGPointMake(0, 0);
-presenterView.layer.position = CGPointMake(0, 0);
-contentView.layer.sublayerTransform = CATransform3DMakeScale(ratio, ratio, 1.0);
-peekPath = "presenter";
-peekScale = ratio;
-peekFrame = frameSize;
+CGSize frameSize;
 // v54 B：固定佈局 App 的 presenter 路走整體縮放——scene 保持自然佈局
-// 尺寸（計算器 320x693、文件 320x480），不推 peek/ratio 的小 frame
+// 尺寸（計算器 320x693、文件 320x480），不推 peek 小 frame
 //（計算器 145x279 塞不下四欄鍵盤）；整窗等比縮進 peek（寬高取小比）
 // 並置中。置中算法：sublayerTransform 會把 sublayer 的 position 也縮
 // 掉，所以 position 要先除以縮放比，落點才剛好是置中偏移。
@@ -3068,6 +3066,7 @@ CGFloat fitH = (natural.height > 0) ? peekH / natural.height : 1.0;
 CGFloat fitScale = (fitW < fitH) ? fitW : fitH;
 if (fitScale <= 0) fitScale = 1.0;
 presenterView.bounds = CGRectMake(0, 0, natural.width, natural.height);
+presenterView.layer.anchorPoint = CGPointMake(0, 0);
 CGFloat offX = (peekW - natural.width * fitScale) / 2.0;
 CGFloat offY = (peekH - natural.height * fitScale) / 2.0;
 presenterView.layer.position = CGPointMake(offX / fitScale, offY / fitScale);
@@ -3076,6 +3075,28 @@ frameSize = natural;
 peekPath = "fixed-presenter";
 peekScale = fitScale;
 peekFrame = natural;
+} else {
+// v58（§151-3）：非固定 App 的 presenter 路也走整體貼合＋置中——
+// 以前把 scene 推到 peek 小 frame（112x216，scale 1.0），App 在
+// 112 寬下重排版、固定寬元素溢出右緣被切掉（電話／音樂實證）；現在
+// scene 保持全屏尺寸、整窗等比縮進 peek（跟 layer-host 路同一做法），
+// App 按全屏排版再整體縮小，內容完整、置中、不切邊。恢復時
+// restoreHostedWindow 會再推回滿窗尺寸（見 restoreHostedWindow）。
+CGSize screenSize = [UIScreen mainScreen].bounds.size;
+CGFloat fitW = (screenSize.width > 0) ? peekW / screenSize.width : 1.0;
+CGFloat fitH = (screenSize.height > 0) ? peekH / screenSize.height : 1.0;
+CGFloat fitScale = (fitW < fitH) ? fitW : fitH;
+if (fitScale <= 0) fitScale = 1.0;
+presenterView.bounds = CGRectMake(0, 0, screenSize.width, screenSize.height);
+presenterView.layer.anchorPoint = CGPointMake(0, 0);
+CGFloat offX = (peekW - screenSize.width * fitScale) / 2.0;
+CGFloat offY = (peekH - screenSize.height * fitScale) / 2.0;
+presenterView.layer.position = CGPointMake(offX / fitScale, offY / fitScale);
+contentView.layer.sublayerTransform = CATransform3DMakeScale(fitScale, fitScale, 1.0);
+frameSize = screenSize;
+peekPath = "presenter";
+peekScale = fitScale;
+peekFrame = screenSize;
 }
 @try {
 [scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
@@ -3087,11 +3108,11 @@ settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
 }];
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v57 peek scene frame push failed");
+GHLSSLogLine("v58 peek scene frame push failed");
 }
 }
 char buf[256];
-snprintf(buf, sizeof(buf), "v57 peek scaled %s %s %dx%d scale=%.3f frame=%dx%d", bid ? bid : "?", peekPath, (int)peekW, (int)peekH, peekScale, (int)peekFrame.width, (int)peekFrame.height);
+snprintf(buf, sizeof(buf), "v58 peek scaled %s %s %dx%d scale=%.3f frame=%dx%d", bid ? bid : "?", peekPath, (int)peekW, (int)peekH, peekScale, (int)peekFrame.width, (int)peekFrame.height);
 GHLSSLogLine(buf);
 }
 
@@ -6794,6 +6815,8 @@ GHLSSLogLine("v57 launcher icons only");
 if (!bids || [bids count] == 0) return 8.0;
 NSInteger N = (NSInteger)[bids count];
 int L = GHLSSReadARCLayerCount();
+// v58（§152）：記原始值——下次日誌一眼看出設定檔裡到底是 "3" 還是沒寫進去。
+char *rawLayer = GHLSSReadPrefsCString("arcLayerCount");
 int E = (L < N) ? L : (int)N;
 if (E < 1) E = 1;
 int weights[4] = {1, 2, 3, 4};
@@ -6895,7 +6918,8 @@ if (bottom > maxBottom) maxBottom = bottom;
 }
 }
 char buf[192];
-snprintf(buf, sizeof(buf), "v57 arc layers=%d icons=%d effLayers=%d side=%s anchorY=%d", L, (int)N, E, slideLeft ? "left" : "right", (int)cy);
+snprintf(buf, sizeof(buf), "v58 arc layers=%d icons=%d effLayers=%d side=%s anchorY=%d raw=%s", L, (int)N, E, slideLeft ? "left" : "right", (int)cy, rawLayer ? rawLayer : "none");
+if (rawLayer) free(rawLayer);
 GHLSSLogLine(buf);
 return maxBottom + 12.0;
 }

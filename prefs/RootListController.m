@@ -769,9 +769,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.57");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.58");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.57。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.58。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，請去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1321,6 +1321,30 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
 
 @end
 
+// v58（§151-1）：排序頁灰字——只設 textLabel 沒用，PSStaticTextCell
+// 看得見的那個 label 不是 textLabel；掃 cell 整棵子 view，所有 UILabel
+// 都染 labelColor；再把 cellEnabled 開了（PSStaticTextCell 預設不可選
+// 會灰，手勢總覽同款寫法）；手柄保持。
+static void GHLSSSortCellFixUp(UITableViewCell *cell) {
+    if (!cell) return;
+    @try {
+        UIColor *c = [UIColor labelColor];
+        cell.textLabel.textColor = c;
+        cell.detailTextLabel.textColor = c;
+        NSMutableArray *stack = [NSMutableArray arrayWithObject:(UIView *)cell];
+        while ([stack count] > 0) {
+            UIView *v = [stack lastObject];
+            [stack removeLastObject];
+            if ([v isKindOfClass:[UILabel class]]) ((UILabel *)v).textColor = c;
+            for (UIView *sub in v.subviews) [stack addObject:sub];
+        }
+        if ([cell isKindOfClass:[PSTableCell class]]) ((PSTableCell *)cell).cellEnabled = YES;
+        cell.showsReorderControl = YES;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    } @catch (NSException *e) {
+    }
+}
+
 // ── v46 排序頁 ──
 // 兩個排序頁都是動態頁（行數看啟動器裡有幾個 App／工具欄固定 4 顆鈕），
 // 表格常駐編輯模式：進頁就能拖右邊的手柄換順序，鬆手立刻存 prefs。
@@ -1397,7 +1421,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
             } @catch (NSException *e) {
             }
             char buf[256];
-            snprintf(buf, sizeof(buf), "v57 prefs-sort: editing=%d rows=%ld row0Reorder=%d", (int)tv.editing, (long)[tv numberOfRowsInSection:0], (int)row0Reorder);
+            snprintf(buf, sizeof(buf), "v58 prefs-sort: editing=%d rows=%ld row0Reorder=%d", (int)tv.editing, (long)[tv numberOfRowsInSection:0], (int)row0Reorder);
             GHLSSPrefsLogLine(buf);
         } @catch (NSException *e) {
             GHLSSPrefsLogLine("v57 prefs-sort: setEditing EXCEPTION");
@@ -1417,12 +1441,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
         cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     }
     if (!cell) return cell;
-    @try {
-        cell.textLabel.textColor = [UIColor labelColor];
-        cell.showsReorderControl = YES;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    } @catch (NSException *e) {
-    }
+    GHLSSSortCellFixUp(cell);
     return cell;
 }
 
@@ -1430,12 +1449,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
     if ([[self superclass] instancesRespondToSelector:@selector(tableView:willDisplayCell:forRowAtIndexPath:)]) {
         [super tableView:tableView willDisplayCell:cell forRowAtIndexPath:indexPath];
     }
-    @try {
-        cell.textLabel.textColor = [UIColor labelColor];
-        cell.showsReorderControl = YES;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    } @catch (NSException *e) {
-    }
+    GHLSSSortCellFixUp(cell);
 }
 
 - (NSArray *)specifiers {
@@ -1584,7 +1598,7 @@ static const char *GHLSSToolbarSortNames[4] = {
             } @catch (NSException *e) {
             }
             char buf[256];
-            snprintf(buf, sizeof(buf), "v57 prefs-sort: editing=%d rows=%ld row0Reorder=%d", (int)tv.editing, (long)[tv numberOfRowsInSection:0], (int)row0Reorder);
+            snprintf(buf, sizeof(buf), "v58 prefs-sort: editing=%d rows=%ld row0Reorder=%d", (int)tv.editing, (long)[tv numberOfRowsInSection:0], (int)row0Reorder);
             GHLSSPrefsLogLine(buf);
         } @catch (NSException *e) {
             GHLSSPrefsLogLine("v57 prefs-sort: setEditing EXCEPTION");
@@ -1604,12 +1618,7 @@ static const char *GHLSSToolbarSortNames[4] = {
         cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     }
     if (!cell) return cell;
-    @try {
-        cell.textLabel.textColor = [UIColor labelColor];
-        cell.showsReorderControl = YES;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    } @catch (NSException *e) {
-    }
+    GHLSSSortCellFixUp(cell);
     return cell;
 }
 
@@ -1617,12 +1626,7 @@ static const char *GHLSSToolbarSortNames[4] = {
     if ([[self superclass] instancesRespondToSelector:@selector(tableView:willDisplayCell:forRowAtIndexPath:)]) {
         [super tableView:tableView willDisplayCell:cell forRowAtIndexPath:indexPath];
     }
-    @try {
-        cell.textLabel.textColor = [UIColor labelColor];
-        cell.showsReorderControl = YES;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    } @catch (NSException *e) {
-    }
+    GHLSSSortCellFixUp(cell);
 }
 
 - (NSArray *)specifiers {
@@ -2710,7 +2714,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("開") : GHLSSRuntimeString("關");
-    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.57\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.58\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("診斷信息已複製到剪貼板。")];
