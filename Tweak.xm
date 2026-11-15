@@ -1,4 +1,4 @@
-// GuHaiLongSplitScreen v1.0.58 (v42.16) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.59 (v42.17) — 顾海龙集团原创分屏插件（实验版）
 //
 // ── v42.3：浮窗切換改 FV 式＋小窗可拖調尺寸（皇上 2026-11-14 18:19–18:22） ──
 // 皇上說：主浮窗開著再點副浮窗，現在兩個大窗疊著，他不要；要 FV 那樣——
@@ -948,13 +948,12 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)closeHostedWindow;
 - (void)minimizeHostedWindow;
 - (void)restoreHostedWindow;
-- (void)handleHostedClose:(id)sender;
-- (void)handleHostedMinimize:(id)sender;
 - (void)handleScaleButton:(id)sender;
 - (void)handleScaleSlider:(UISlider *)sender;
 - (void)handleScaleSliderEnded:(UISlider *)sender;
 - (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer;
 - (void)handleTopStripTap:(UITapGestureRecognizer *)recognizer;
+- (void)handleGrabberDoubleTap:(UITapGestureRecognizer *)recognizer;
 - (void)handleResizeDrag:(UIPanGestureRecognizer *)recognizer;
 // v42.3：小窗（peek）右下角手柄拖調尺寸（見下面 handleResizeDrag 的分支）。
 - (void)handlePeekResizeDrag:(UIPanGestureRecognizer *)recognizer;
@@ -1060,12 +1059,11 @@ static BOOL GHLSSHostedLaunching = NO;
 // 活动窗的 scale 存在这里；切走时存缓存、切回来时读缓存。
 // 计算器默认 0.77（窗 320x737），别的 App 默认 1.0。
 static CGFloat GHLSSHostedScaleRatio = 1.0;
+// v59：雙擊抓手放大前存的窗框（還原用；全屏判斷直接比現在的框，
+// 不另設旗標——切窗／拖調尺寸後旗標會 stale，比框才準）。
+static CGRect GHLSSPreMaximizeFrame = {{0, 0}, {0, 0}};
 // 标题栏的缩放按钮（±）与滑杆条（UISlider + 百分比），见 buildHostedWindow。
 static UIButton *GHLSSHostedScaleButton = nil;
-// v46：控制條的關閉／最小化鈕（排序頁要能重排整條控制條，
-// 四顆鈕都要有全局指針 + 每 App 緩存，和 ±／釘同一做法）。
-static UIButton *GHLSSHostedCloseButton = nil;
-static UIButton *GHLSSHostedMinButton = nil;
 static UIView *GHLSSHostedScaleSliderBar = nil;
 static UISlider *GHLSSHostedScaleSlider = nil;
 static UILabel *GHLSSHostedScaleLabel = nil;
@@ -1135,9 +1133,6 @@ static UILabel *GHLSSCacheScaleLabels[GHLSS_APP_COUNT];
 // v42：每 App 的釘選鈕（控制條裡；v47「透」拿掉，透明度滑桿條的
 // 三個緩存數組一起刪）。
 static UIButton *GHLSSCachePinButtons[GHLSS_APP_COUNT];
-// v46：控制條關閉／最小化鈕的每 App 緩存（同上）。
-static UIButton *GHLSSCacheCloseButtons[GHLSS_APP_COUNT];
-static UIButton *GHLSSCacheMinButtons[GHLSS_APP_COUNT];
 // v42：底部任務欄、設定卡片（見下面宣告；v53：懸浮球已整個拿掉）。
 // v54：系統橫幅探針（見 showNotificationBannerWithText 下面，先聲明）。
 static void GHLSSCheckSystemBanner(void);
@@ -1219,9 +1214,6 @@ GHLSSCacheScaleSliders[i] = GHLSSHostedScaleSlider;
 GHLSSCacheScaleLabels[i] = GHLSSHostedScaleLabel;
 // v42：釘選鈕跟著同一份緩存走（v47「透」拿掉）。
 GHLSSCachePinButtons[i] = GHLSSHostedPinButton;
-// v46：關閉／最小化鈕跟著同一份緩存走。
-GHLSSCacheCloseButtons[i] = GHLSSHostedCloseButton;
-GHLSSCacheMinButtons[i] = GHLSSHostedMinButton;
 }
 
 // 把缓存第 idx 项装回活动量（切回来复用时调）。
@@ -1253,9 +1245,6 @@ GHLSSHostedScaleSlider = GHLSSCacheScaleSliders[idx];
 GHLSSHostedScaleLabel = GHLSSCacheScaleLabels[idx];
 // v42：釘選鈕跟著同一份緩存走（v47「透」拿掉）。
 GHLSSHostedPinButton = GHLSSCachePinButtons[idx];
-// v46：關閉／最小化鈕跟著同一份緩存走。
-GHLSSHostedCloseButton = GHLSSCacheCloseButtons[idx];
-GHLSSHostedMinButton = GHLSSCacheMinButtons[idx];
 GHLSSActiveAppIndex = idx;
 }
 
@@ -1285,9 +1274,6 @@ GHLSSHostedScaleSlider = nil;
 GHLSSHostedScaleLabel = nil;
 // v42：釘選鈕一起清（v47「透」拿掉）。
 GHLSSHostedPinButton = nil;
-// v46：關閉／最小化鈕一起清。
-GHLSSHostedCloseButton = nil;
-GHLSSHostedMinButton = nil;
 GHLSSActiveAppIndex = -1;
 }
 
@@ -1356,8 +1342,6 @@ GHLSSCacheScaleSliders[idx] = nil;
 GHLSSCacheScaleLabels[idx] = nil;
 // v42：釘選鈕一起清（v47「透」拿掉）。
 GHLSSCachePinButtons[idx] = nil;
-GHLSSCacheCloseButtons[idx] = nil;
-GHLSSCacheMinButtons[idx] = nil;
 // v41：销毁缓存项时收掉对应的貼邊 peek（死进程的舊窗不能留着）。
 GHLSSHideDockPeekForIndex(idx);
 if (idx == GHLSSActiveAppIndex) {
@@ -3191,9 +3175,10 @@ UIView *container = GHLSSCacheContainers[idx];
 handle.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
 handle.frame = CGRectMake(container.bounds.size.width - 36, container.bounds.size.height - 36, 36, 36);
 }
-// v55：恢復成大窗，裁切還原（大窗內容本來就按窗尺寸排，不裁）。
-if (GHLSSCacheContainers[idx]) GHLSSCacheContainers[idx].clipsToBounds = NO;
-if (GHLSSCacheContentViews[idx]) GHLSSCacheContentViews[idx].clipsToBounds = NO;
+// v59：恢復成大窗，裁切保持開（容器＋內容區的圓角靠裁切才看得見；
+// v55 以前關掉它，四角就變直角——見 13:22 照片。peek 路本來就開著裁切）。
+if (GHLSSCacheContainers[idx]) GHLSSCacheContainers[idx].clipsToBounds = YES;
+if (GHLSSCacheContentViews[idx]) GHLSSCacheContentViews[idx].clipsToBounds = YES;
 GHLSSLayoutDockPeeks();
 }
 
@@ -3266,26 +3251,26 @@ return NO;
 }
 
 // ── v46：排序頁的順序鍵 ──
-// 三屏工具欄排序（toolbarOrder）：控制條四顆鈕的左右順序，
-// 逗號分隔（close／minimize／pin／scale）；沒設或寫壞了就回
-// 預設順序。預設 = 現在的排法：左邊關閉／最小化，右邊釘選／縮放。
-// v47：「透」拿掉，舊順序表裡殘留的 "opacity" 讀進來直接過濾掉
-// （只認下面四個識別字，不會崩、不會出幽靈鈕）。
-static const char *GHLSSDefaultToolbarOrder[4] = {
-"close", "minimize", "pin", "scale"
+// 三屏工具欄排序（toolbarOrder）：控制條兩顆鈕的左右順序，
+// 逗號分隔（pin／scale）；沒設或寫壞了就回預設順序。預設 =
+// 現在的排法：左邊釘選，右邊縮放。v59：關閉／最小化鈕拿掉
+// （只留釘＋±），舊順序表裡殘留的 "close"／"minimize"／"opacity"
+// 讀進來直接過濾掉（只認下面兩個識別字，不會崩、不會出幽靈鈕）。
+static const char *GHLSSDefaultToolbarOrder[2] = {
+"pin", "scale"
 };
 static NSArray *GHLSSReadToolbarOrder(void) {
 NSArray *raw = GHLSSReadIDList("toolbarOrder");
 NSMutableArray *order = [NSMutableArray array];
 for (id item in raw) {
 if (![item isKindOfClass:[NSString class]]) continue;
-for (int i = 0; i < 4; i++) {
+for (int i = 0; i < 2; i++) {
 NSString *known = [NSString stringWithCString:GHLSSDefaultToolbarOrder[i] encoding:NSUTF8StringEncoding];
 if ([(NSString *)item isEqualToString:known] && ![order containsObject:item]) [order addObject:item];
 }
 }
-// 缺的按預設順序補回來（只寫了兩顆也行，剩下照預設排）。
-for (int i = 0; i < 4; i++) {
+// 缺的按預設順序補回來（只寫了一顆也行，剩下照預設排）。
+for (int i = 0; i < 2; i++) {
 NSString *known = [NSString stringWithCString:GHLSSDefaultToolbarOrder[i] encoding:NSUTF8StringEncoding];
 if (![order containsObject:known]) [order addObject:known];
 }
@@ -3306,11 +3291,10 @@ if (![sorted containsObject:item]) [sorted addObject:item];
 }
 return sorted;
 }
-// v46：順序表裡的識別字對到控制條的鈕（釘／透在窄側窗是 nil）。
+// v46：順序表裡的識別字對到控制條的鈕（釘在窄側窗是 nil）。
+// v59：關閉／最小化鈕已拿掉，順序表裡只剩 pin／scale。
 static UIButton *GHLSSToolbarButtonForID(NSString *tid) {
 if (!tid) return nil;
-if ([tid isEqualToString:[NSString stringWithCString:"close" encoding:NSUTF8StringEncoding]]) return GHLSSHostedCloseButton;
-if ([tid isEqualToString:[NSString stringWithCString:"minimize" encoding:NSUTF8StringEncoding]]) return GHLSSHostedMinButton;
 if ([tid isEqualToString:[NSString stringWithCString:"pin" encoding:NSUTF8StringEncoding]]) return GHLSSHostedPinButton;
 if ([tid isEqualToString:[NSString stringWithCString:"scale" encoding:NSUTF8StringEncoding]]) return GHLSSHostedScaleButton;
 return nil;
@@ -3349,11 +3333,10 @@ if (ev) ev.hidden = NO;
 b.backgroundColor = [UIColor clearColor];
 }
 }
-// v47：按 toolbarOrder 排活動窗控制條的四顆鈕：順序表前兩顆放左邊
-// （x=8、46），後兩顆放右邊（winW-78、winW-40）；32pt 圓、y=2。
-// 標題在兩邊鈕中間（x=86、寬 winW-170）。窄側窗（<200pt）
-// 只放得下關閉／最小化／縮放：左邊兩格按順序表裡關閉／最小化的
-// 先後，縮放固定右邊 winW-40；釘本來就沒有。tick 每 2 秒調
+// v47：按 toolbarOrder 排活動窗控制條的兩顆鈕（v59：只剩釘＋±，
+// 都放右邊：順序表第一顆 winW-78、第二顆 winW-40；32pt 圓、y=2）。
+// 標題在左邊空位（x=8、寬 winW-92）。窄側窗（<200pt）只放得下
+// 縮放（固定右邊 winW-40；釘本來就沒有）。tick 每 2 秒調
 // 一次（活動窗）：順序改了 2 秒內生效；拖調尺寸後鈕也自動回右緣
 // （舊問題順手修：以前 resize 只改標題欄框，鈕留在舊 x）。
 static void GHLSSRelayoutActiveTitleBar(void) {
@@ -3361,29 +3344,17 @@ if (!GHLSSHostedTitleBar) return;
 CGFloat winW = GHLSSHostedTitleBar.frame.size.width;
 if (winW <= 0) return;
 NSArray *order = GHLSSReadToolbarOrder();
-CGFloat leftX[2] = {8.0, 46.0};
 CGFloat rightX[2] = {winW - 78.0, winW - 40.0};
-if (winW >= 200.0) {
-for (int i = 0; i < 4 && i < (int)[order count]; i++) {
+for (int i = 0; i < 2 && i < (int)[order count]; i++) {
 UIButton *b = GHLSSToolbarButtonForID([order objectAtIndex:i]);
 if (!b) continue;
-CGFloat x = (i < 2) ? leftX[i] : rightX[i - 2];
-b.frame = CGRectMake(x, 2, 32, 32);
+if (winW < 200.0) {
+if (b == GHLSSHostedScaleButton) b.frame = CGRectMake(winW - 40, 2, 32, 32);
+continue;
 }
-} else {
-int li = 0;
-for (id item in order) {
-UIButton *b = GHLSSToolbarButtonForID(item);
-if (!b) continue;
-if (b == GHLSSHostedScaleButton) {
-b.frame = CGRectMake(winW - 40, 2, 32, 32);
-} else if (li < 2) {
-b.frame = CGRectMake(leftX[li], 2, 32, 32);
-li++;
+b.frame = CGRectMake(rightX[i], 2, 32, 32);
 }
-}
-}
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, winW - 170, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(8, 0, winW - 92, GHLSS_HOSTED_CONTROL_H);
 }
 // v46：哆啦A夢鈕大小／左右邊改完 2 秒內生效（不用 respring）：
 // tick 裡比對設定值跟上次套用的值，變了才重排。拖動中不碰——
@@ -5200,9 +5171,11 @@ stripNameLabel.shadowColor = [UIColor blackColor];
 stripNameLabel.shadowOffset = CGSizeMake(0, 1);
 stripNameLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
 [topStrip addSubview:stripNameLabel];
-UIView *pill = [[UIView alloc] initWithFrame:CGRectMake((winW - 72) / 2.0, 17, 72, 6)];
+// v59：細條上的小橫條改成 FV 抓手尺寸 36x5（本來 72x6 太長；
+// 雙擊它放大／還原——見 handleGrabberDoubleTap；拖動走細條的 stripDrag）。
+UIView *pill = [[UIView alloc] initWithFrame:CGRectMake((winW - 36) / 2.0, 17, 36, 5)];
 pill.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
-pill.layer.cornerRadius = 3.0;
+pill.layer.cornerRadius = 2.5;
 pill.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
 [topStrip addSubview:pill];
 UIPanGestureRecognizer *stripDrag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleTitleDrag:)];
@@ -5226,6 +5199,17 @@ tripleTap.delegate = self;
 tripleTap.cancelsTouchesInView = NO;
 [topStrip addGestureRecognizer:tripleTap];
 [stripTap requireGestureRecognizerToFail:tripleTap];
+// v59：雙擊細條（抓手）放大／還原——全屏尺寸 ↔ 放大前尺寸，
+// 走 resizeActiveWindowToFrame（跟貼邊吸附放大同一條路，見
+// handleGrabberDoubleTap）。單擊要等雙擊失敗才認（不然雙擊時
+// 控制條先跳一下）；雙擊要等三擊失敗（不然三擊時先放大）。
+UITapGestureRecognizer *stripDoubleTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleGrabberDoubleTap:)];
+stripDoubleTap.numberOfTapsRequired = 2;
+stripDoubleTap.delegate = self;
+stripDoubleTap.cancelsTouchesInView = NO;
+[topStrip addGestureRecognizer:stripDoubleTap];
+[stripTap requireGestureRecognizerToFail:stripDoubleTap];
+[stripDoubleTap requireGestureRecognizerToFail:tripleTap];
 UISwipeGestureRecognizer *swipeV = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleGestureSwipeVertical:)];
 swipeV.direction = UISwipeGestureRecognizerDirectionUp | UISwipeGestureRecognizerDirectionDown;
 swipeV.delegate = self;
@@ -5249,7 +5233,8 @@ snprintf(gbuf, sizeof(gbuf), "v57 gesture strip attached %lu recognizers", (unsi
 GHLSSLogLine(gbuf);
 }
 // v38：控制条（36pt，半透明黑底，默认藏着）——旧标题栏的活儿都搬
-// 到这里：红 X、黄最小化、App 名、± 缩放钮。控制条在细条之上
+// 到这里：App 名、釘選、± 缩放钮（v59：紅 X、黃最小化拿掉）。
+// 控制条在细条之上
 //（展开时盖住细条），自己也能拖动窗；点控制条中间（标题处）收起
 // 它（点在按钮上不触发——手势代理把按钮的触摸挡掉）。
 UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, winW, GHLSS_HOSTED_CONTROL_H)];
@@ -5296,24 +5281,11 @@ char gbuf[128];
 snprintf(gbuf, sizeof(gbuf), "v57 gesture bar attached %lu recognizers", (unsigned long)[titleBar.gestureRecognizers count]);
 GHLSSLogLine(gbuf);
 }
-// v47：關閉鈕（毛玻璃圓，左）。
-UIButton *closeBtn = GHLSSMakeFrostedControlButton();
-closeBtn.frame = CGRectMake(8, 2, 32, 32);
-[closeBtn setTitle:[NSString stringWithCString:"x" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[closeBtn addTarget:self action:@selector(handleHostedClose:) forControlEvents:UIControlEventTouchUpInside];
-[titleBar addSubview:closeBtn];
-GHLSSHostedCloseButton = closeBtn;
-// 最小化钮（黄圆，左二）：只藏窗、不销毁 scene（v40：贴边小卡——
-// 窗藏起来、右边缘留一张看得见的小卡，点卡恢复窗；见 minimizeHostedWindow）。
-UIButton *minBtn = GHLSSMakeFrostedControlButton();
-minBtn.frame = CGRectMake(46, 2, 32, 32);
-[minBtn setTitle:[NSString stringWithCString:"-" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[minBtn addTarget:self action:@selector(handleHostedMinimize:) forControlEvents:UIControlEventTouchUpInside];
-[titleBar addSubview:minBtn];
-GHLSSHostedMinButton = minBtn;
-// 标题：App 名，居中（v47：左右各兩顆 32pt 毛玻璃鈕，標題從 86 到 winW-84；
+// v59：關閉（X）／最小化（−）鈕拿掉，只留釘＋±（標題文字保留）。
+// 關閉／縮小改走手勢：右緣拖收成卡片、點窗外收起、長按哆啦A夢全關。
+// 標題：App 名，居中（v59：左邊沒鈕了，標題從 8 到 winW-84；
 // 窄側窗本來就放不下標題，跟以前一樣不顯示）。
-UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(86, 0, winW - 170, GHLSS_HOSTED_CONTROL_H)];
+UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(8, 0, winW - 92, GHLSS_HOSTED_CONTROL_H)];
 titleLabel.text = [NSString stringWithCString:name encoding:NSUTF8StringEncoding];
 titleLabel.textColor = [UIColor whiteColor];
 titleLabel.font = [UIFont boldSystemFontOfSize:16];
@@ -5329,7 +5301,7 @@ scaleBtn.frame = CGRectMake(winW - 40, 2, 32, 32);
 [titleBar addSubview:scaleBtn];
 GHLSSHostedScaleButton = scaleBtn;
 // v42：釘選鈕（「釘」，winW-78）；v47：「透」拿掉，不再建。
-// 窄側窗（<200pt）不放這顆（放不下，控制條只留關閉／最小化／±）。
+// 窄側窗（<200pt）不放這顆（放不下，控制條只留±）。
 // 釘住的窗金底、層級提到最上層（見 GHLSSBringWindowToFront）。
 if (winW >= 200.0) {
 UIButton *pinBtn = GHLSSMakeFrostedControlButton();
@@ -5342,7 +5314,7 @@ GHLSSSetFrostedButtonPinned(pinBtn, GHLSSIsWindowPinned(bundleID));
 } else {
 GHLSSHostedPinButton = nil;
 }
-// v47：控制條四顆鈕按 toolbarOrder 排（預設就是上面寫死的那個順序，
+// v47：控制條兩顆鈕按 toolbarOrder 排（預設就是上面寫死的那個順序，
 // 視覺不變；順序改了新開的窗照新順序，活動窗 2 秒內跟著重排）。
 GHLSSRelayoutActiveTitleBar();
 // v40：右下角缩放手柄（36x36 触摸区——比说的 24 稍大，好抓；
@@ -5742,24 +5714,6 @@ GHLSSSaveRestoreList();
 GHLSSUpdateTaskbar();
 }
 
-- (void)handleHostedClose:(id)sender {
-GHLSSLogLine("v57 hosted close tapped");
-// v40：多窗——控制条按钮是哪个窗的，就关哪个窗（先切活动量到
-// 按钮所在的窗，再关；不切的话关的是活动窗，可能是别的窗）。
-if ([sender isKindOfClass:[UIView class]]) {
-GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
-}
-[self closeHostedWindow];
-}
-
-- (void)handleHostedMinimize:(id)sender {
-GHLSSLogLine("v57 hosted minimize tapped");
-if ([sender isKindOfClass:[UIView class]]) {
-GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
-}
-[self minimizeHostedWindow];
-}
-
 // v38：点标题栏的 ± 钮——展开/收起缩放滑杆条（默认藏着）。
 - (void)handleScaleButton:(id)sender {
 // v40：多窗——先切活动量到按钮所在的窗（滑杆条是活动窗的）。
@@ -5936,6 +5890,65 @@ GHLSSHostedScaleSliderBar.hidden = YES;
 GHLSSLogLine("v57 control bar toggled");
 }
 
+// v59：雙擊細條抓手放大／還原——全屏尺寸 ↔ 放大前尺寸。
+// 放大走 resizeActiveWindowToFrame（跟貼邊吸附放大、performGestureAction
+// "maximize" 同一條路：窗框＋容器＋內容區＋細條＋控制條＋scene 一起改，
+// 尺寸存進 geo）；還原用放大前存的框（沒存過就走存過的 geo，再沒有走預設）。
+// 全屏判斷直接比現在的框（2pt 誤差）：切窗／拖調尺寸後旗標會 stale，
+// 比框才準。最小化的 peek 窗和側窗不處理（細條被點按層擋著，兜底而已）。
+- (void)handleGrabberDoubleTap:(UITapGestureRecognizer *)recognizer {
+UIWindow *tapWindow = GHLSSWindowForView(recognizer.view);
+if (!tapWindow) tapWindow = GHLSSHostedWindow;
+if (!tapWindow) return;
+GHLSSSetActiveToWindow(tapWindow);
+int idx = GHLSSActiveAppIndex;
+if (idx >= 0 && idx < GHLSS_APP_COUNT && GHLSSCacheMinimized[idx]) return;
+if (GHLSSHostedIsSideDock) return;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat safeDistance = GHLSSReadSafeDistance();
+CGRect fullFrame = CGRectMake(8.0, safeDistance, screenBounds.size.width - 16.0, screenBounds.size.height - safeDistance - 8.0);
+// resizeActiveWindowToFrame 的夾法（跟下面同一套常數）：
+// 寬 200～屏寬-16、高 300～屏高-120、x≥8、y≥安全距離、右／下留 8。
+CGFloat fullW = fullFrame.size.width;
+CGFloat fullH = fullFrame.size.height;
+if (fullW < 200.0) fullW = 200.0;
+if (fullW > screenBounds.size.width - 16.0) fullW = screenBounds.size.width - 16.0;
+if (fullH < 300.0) fullH = 300.0;
+if (fullH > screenBounds.size.height - 120.0) fullH = screenBounds.size.height - 120.0;
+CGFloat fullX = fullFrame.origin.x;
+CGFloat fullY = fullFrame.origin.y;
+if (fullX < 8.0) fullX = 8.0;
+if (fullY < safeDistance) fullY = safeDistance;
+if (fullX + fullW > screenBounds.size.width - 8.0) fullX = screenBounds.size.width - 8.0 - fullW;
+if (fullY + fullH > screenBounds.size.height - 8.0) fullY = screenBounds.size.height - 8.0 - fullH;
+fullFrame = CGRectMake(fullX, fullY, fullW, fullH);
+CGRect cur = tapWindow.frame;
+CGFloat dx = cur.origin.x - fullFrame.origin.x; if (dx < 0) dx = -dx;
+CGFloat dy = cur.origin.y - fullFrame.origin.y; if (dy < 0) dy = -dy;
+CGFloat dw = cur.size.width - fullFrame.size.width; if (dw < 0) dw = -dw;
+CGFloat dh = cur.size.height - fullFrame.size.height; if (dh < 0) dh = -dh;
+BOOL isFull = (dx <= 2.0 && dy <= 2.0 && dw <= 2.0 && dh <= 2.0);
+if (isFull) {
+CGRect back = GHLSSPreMaximizeFrame;
+if (back.size.width < 200.0 || back.size.height < 300.0) {
+CGFloat geoCX, geoCY, geoW, geoH, geoScale;
+if (idx >= 0 && idx < GHLSS_APP_COUNT && GHLSSRestoreGeometryForIndex(idx, &geoCX, &geoCY, &geoW, &geoH, &geoScale) && !GHLSSIsSideDockGeometry(geoW, geoH)) {
+back = CGRectMake(geoCX - geoW / 2.0, geoCY - geoH / 2.0, geoW, geoH);
+} else {
+CGFloat presetW, presetH;
+GHLSSPresetSizeForBundleID(GHLSSHostedBundleID, &presetW, &presetH);
+back = CGRectMake((screenBounds.size.width - presetW) / 2.0, (screenBounds.size.height - presetH) / 2.0, presetW, presetH);
+}
+}
+[self resizeActiveWindowToFrame:back];
+GHLSSLogLine("v59 grabber double-tap restored");
+} else {
+GHLSSPreMaximizeFrame = cur;
+[self resizeActiveWindowToFrame:fullFrame];
+GHLSSLogLine("v59 grabber double-tap maximized");
+}
+}
+
 // ── v42 新方法（窗控制／手勢／任務欄／配對／鍵盤） ──
 
 // v42：把活動窗改到指定 frame（尺寸預設、放大、手勢「放大」共用）：
@@ -5961,7 +5974,7 @@ if (GHLSSHostedContainer) GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, ne
 if (GHLSSHostedContentView) GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(8, 0, newW - 92, GHLSS_HOSTED_CONTROL_H);
 if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 40, 2, 32, 32);
 if (GHLSSHostedPinButton) GHLSSHostedPinButton.frame = CGRectMake(newW - 78, 2, 32, 32);
 if (GHLSSHostedScaleSliderBar) {
@@ -6525,7 +6538,7 @@ if (newH > screenBounds.size.height - 120.0) newH = screenBounds.size.height - 1
 GHLSSHostedWindow.frame = CGRectMake(frame.origin.x, frame.origin.y, newW, newH);
 GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
 GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
+GHLSSHostedTitleLabel.frame = CGRectMake(8, 0, newW - 92, GHLSS_HOSTED_CONTROL_H);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 // v38：缩放按钮与滑杆条跟着窗宽走（按钮在控制条右边，滑杆条在控制条下面）。
@@ -6586,7 +6599,7 @@ GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
 GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(8, 0, newW - 92, GHLSS_HOSTED_CONTROL_H);
 // 點按層與小 X 跟著小窗走（不然放大後露出的地方點了會直接碰到 App 內容）。
 if (GHLSSPeekTapOverlays[idx]) GHLSSPeekTapOverlays[idx].frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSPeekCloseButtons[idx]) GHLSSPeekCloseButtons[idx].frame = CGRectMake(newW - 22, 2, 20, 20);
@@ -7087,7 +7100,7 @@ if (GHLSSHostedContainer) GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, ne
 if (GHLSSHostedContentView) GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
 if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_CONTROL_H);
-if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(86, 0, newW - 170, GHLSS_HOSTED_CONTROL_H);
+if (GHLSSHostedTitleLabel) GHLSSHostedTitleLabel.frame = CGRectMake(8, 0, newW - 92, GHLSS_HOSTED_CONTROL_H);
 if (GHLSSHostedScaleButton) GHLSSHostedScaleButton.frame = CGRectMake(newW - 40, 2, 32, 32);
 // v42：縮放條 72pt（含尺寸行）+ 透明度條跟著側窗寬度走；
 // 釘選鈕（窄窗本來就沒有，這裡只在有鈕時移位）。
