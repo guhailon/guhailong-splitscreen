@@ -1,4 +1,4 @@
-// GuHaiLongSplitScreen v1.0.56 (v42.14) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.57 (v42.15) — 顾海龙集团原创分屏插件（实验版）
 //
 // ── v42.3：浮窗切換改 FV 式＋小窗可拖調尺寸（皇上 2026-11-14 18:19–18:22） ──
 // 皇上說：主浮窗開著再點副浮窗，現在兩個大窗疊著，他不要；要 FV 那樣——
@@ -1312,12 +1312,12 @@ if (!GHLSSCacheScenes[idx] && !GHLSSCacheWindows[idx]) return;
 if (GHLSSCacheWindows[idx]) GHLSSCacheWindows[idx].hidden = YES;
 // v38：layer-host 的项（有 layerHostView、没有 presenter）只清引用。
 if (GHLSSCacheLayerHostViews[idx] && !GHLSSCachePresenters[idx]) {
-GHLSSLogLine("v56 layer host entry cleared (scene kept)");
+GHLSSLogLine("v57 layer host entry cleared (scene kept)");
 } else {
 @try {
 if (GHLSSCacheSceneIDs[idx]) {
 char dbuf[256];
-snprintf(dbuf, sizeof(dbuf), "v56 destroying scene %s", [GHLSSCacheSceneIDs[idx] UTF8String]);
+snprintf(dbuf, sizeof(dbuf), "v57 destroying scene %s", [GHLSSCacheSceneIDs[idx] UTF8String]);
 GHLSSLogLine(dbuf);
 [[FBSceneManager sharedInstance] destroyScene:GHLSSCacheSceneIDs[idx] withTransitionContext:nil];
 }
@@ -1327,7 +1327,7 @@ if (GHLSSCachePresenters[idx]) {
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 destroy failed");
+GHLSSLogLine("v57 destroy failed");
 }
 }
 GHLSSCacheWindows[idx] = nil;
@@ -1363,7 +1363,7 @@ GHLSSHideDockPeekForIndex(idx);
 if (idx == GHLSSActiveAppIndex) {
 GHLSSClearActive();
 }
-GHLSSLogLine("v56 scene destroyed");
+GHLSSLogLine("v57 scene destroyed");
 }
 
 // v53：GHLSSBackgroundHostedScene 已刪（關窗後不再把 scene 推後台，
@@ -1632,7 +1632,7 @@ GHLSSHostedContentView.layer.anchorPoint = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.position = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.sublayerTransform = CATransform3DMakeScale(displayScale, displayScale, 1.0);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 layer host scaled %d%%", (int)(displayScale * 100.0));
+snprintf(buf, sizeof(buf), "v57 layer host scaled %d%%", (int)(displayScale * 100.0));
 GHLSSLogLine(buf);
 // pushFrame 对 layer-host 没有意义（scene frame 不能推），直接返回。
 return;
@@ -1654,7 +1654,7 @@ GHLSSHostedContentView.layer.anchorPoint = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.position = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.sublayerTransform = CATransform3DMakeScale(scale, scale, 1.0);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 scene scaled %d%%", (int)(scale * 100.0));
+snprintf(buf, sizeof(buf), "v57 scene scaled %d%%", (int)(scale * 100.0));
 GHLSSLogLine(buf);
 if (!pushFrame) return;
 int token = ++GHLSSScaleDebounceToken;
@@ -1674,11 +1674,11 @@ settings.peripheryInsets = UIEdgeInsetsZero;
 settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v56 scene frame updated %dx%d scale %d%%", (int)curFrameSize.width, (int)curFrameSize.height, (int)(curScale * 100.0));
+snprintf(fbuf, sizeof(fbuf), "v57 scene frame updated %dx%d scale %d%%", (int)curFrameSize.width, (int)curFrameSize.height, (int)(curScale * 100.0));
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 scene frame update failed");
+GHLSSLogLine("v57 scene frame update failed");
 }
 });
 }
@@ -1914,10 +1914,10 @@ static BOOL GHLSSReadRestoreWindowsAfterRespring(void) {
 return GHLSSReadPrefsBool("restoreWindowsAfterRespring", YES);
 }
 // v53：啟用分屏開關（預設關，跟設定頁預設一致；關了要真的停用——
-// v56：插件開關已取消（§141-7b：裝上就一直啟用，不再確認開關）——
-// 永遠回 YES，prefs 裡殘留的 enabled=NO 也直接忽略，不做遷移彈窗。
+// v57：開關加回來（§144-1：還原 1.0.55 寫法，讀 enabled 鍵；
+// 1.0.56 取消開關時改成永遠回 YES 的寫法作廢）。
 static BOOL GHLSSReadEnabled(void) {
-return YES;
+return GHLSSReadPrefsBool("enabled", NO);
 }
 // v53：C5 全屏時哆啦A夢鈕自動藏已取消（功能＋設定行都拿掉；鈕永遠顯示）。
 // C6 鍵盤彈出時浮窗自動上移（Keyboard.plist 的 keyboardAvoidEnabled，預設開；
@@ -2140,7 +2140,7 @@ if (!w) return;
 // v53：側窗尺寸不進 geo W/H 鍵（側窗／分隔線尺寸存進來就是毒化，
 // 下次恢復開成 207x827 窄條；見 16.log／17.log 的 207x827／124x827）。
 if (GHLSSCacheIsSideDock[idx]) {
-GHLSSLogLine("v56 geometry not saved, side dock");
+GHLSSLogLine("v57 geometry not saved, side dock");
 return;
 }
 char key[64];
@@ -2161,7 +2161,7 @@ GHLSSWritePrefsDouble(key, (double)s.height);
 GHLSSGeoKeyForIndex(idx, "Scale", key, sizeof(key));
 GHLSSWritePrefsDouble(key, (double)scale);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 geometry saved size only %s %dx%d scale %d%%", GHLSSCacheBundleIDs[idx], (int)s.width, (int)s.height, (int)(scale * 100.0));
+snprintf(buf, sizeof(buf), "v57 geometry saved size only %s %dx%d scale %d%%", GHLSSCacheBundleIDs[idx], (int)s.width, (int)s.height, (int)(scale * 100.0));
 GHLSSLogLine(buf);
 return;
 }
@@ -2176,7 +2176,7 @@ GHLSSWritePrefsDouble(key, (double)s.height);
 GHLSSGeoKeyForIndex(idx, "Scale", key, sizeof(key));
 GHLSSWritePrefsDouble(key, (double)scale);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 geometry saved %s %dx%d scale %d%%", GHLSSCacheBundleIDs[idx], (int)s.width, (int)s.height, (int)(scale * 100.0));
+snprintf(buf, sizeof(buf), "v57 geometry saved %s %dx%d scale %d%%", GHLSSCacheBundleIDs[idx], (int)s.width, (int)s.height, (int)(scale * 100.0));
 GHLSSLogLine(buf);
 }
 
@@ -2296,7 +2296,7 @@ cleared++;
 }
 if (cleared > 0) {
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 stored geometry healed, cleared %d", cleared);
+snprintf(buf, sizeof(buf), "v57 stored geometry healed, cleared %d", cleared);
 GHLSSLogLine(buf);
 }
 }
@@ -2436,7 +2436,7 @@ int idx = GHLSSAppIndexForBundleID(bundleID);
 char buf[256];
 if (idx >= 0 && idx < 5) {
 GHLSSWritePrefsBool(GHLSSAppEnabledKeys[idx], inLauncher);
-snprintf(buf, sizeof(buf), "v56 app selector %s %s", bundleID, inLauncher ? "on" : "off");
+snprintf(buf, sizeof(buf), "v57 app selector %s %s", bundleID, inLauncher ? "on" : "off");
 GHLSSLogLine(buf);
 return YES;
 }
@@ -2448,7 +2448,7 @@ GHLSSWritePrefsCString(GHLSSCustomBundleIDKeys[idx - 5], NULL);
 GHLSSWritePrefsBool(GHLSSAppEnabledKeys[idx], NO);
 GHLSSLoadCustomApps();
 }
-snprintf(buf, sizeof(buf), "v56 app selector %s %s", bundleID, inLauncher ? "on" : "off");
+snprintf(buf, sizeof(buf), "v57 app selector %s %s", bundleID, inLauncher ? "on" : "off");
 GHLSSLogLine(buf);
 return YES;
 }
@@ -2461,12 +2461,12 @@ if (empty) {
 GHLSSWritePrefsCString(GHLSSCustomBundleIDKeys[s], bundleID);
 GHLSSWritePrefsBool(GHLSSAppEnabledKeys[5 + s], YES);
 GHLSSLoadCustomApps();
-snprintf(buf, sizeof(buf), "v56 app selector %s on slot %d", bundleID, s + 1);
+snprintf(buf, sizeof(buf), "v57 app selector %s on slot %d", bundleID, s + 1);
 GHLSSLogLine(buf);
 return YES;
 }
 }
-GHLSSLogLine("v56 app selector full");
+GHLSSLogLine("v57 app selector full");
 return NO;
 }
 // v41：取一個 bundleID 的顯示名（啟動器槽位優先，其次緩存清單，
@@ -2601,7 +2601,7 @@ NSDictionary *item = [NSDictionary dictionaryWithObjectsAndKeys:bid, cacheBidKey
 [apps addObject:item];
 }
 }
-GHLSSLogLine("v56 installed apps fallback to disk scan");
+GHLSSLogLine("v57 installed apps fallback to disk scan");
 }
 [apps sortUsingComparator:^NSComparisonResult(id a, id b) {
 NSString *ba = [(NSDictionary *)a objectForKey:cacheBidKey];
@@ -2620,11 +2620,11 @@ return [na localizedCaseInsensitiveCompare:nb];
 NSString *cachePath = GHLSSAppListCachePath();
 if (cachePath) [apps writeToFile:cachePath atomically:YES];
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 installed apps cached %lu", (unsigned long)[apps count]);
+snprintf(buf, sizeof(buf), "v57 installed apps cached %lu", (unsigned long)[apps count]);
 GHLSSLogLine(buf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 installed apps scan failed");
+GHLSSLogLine("v57 installed apps scan failed");
 }
 });
 }
@@ -2744,7 +2744,7 @@ settings.backgrounded = YES;
 GHLSSLogLine(logLine);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 scene background failed");
+GHLSSLogLine("v57 scene background failed");
 }
 }
 
@@ -2764,7 +2764,7 @@ settings.backgrounded = NO;
 GHLSSLogLine(logLine);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground push failed");
+GHLSSLogLine("v57 foreground push failed");
 }
 }
 
@@ -2816,7 +2816,7 @@ GHLSSSaveGeometryForIndex(i);
 // 就全黑（跟手動最小化同一根因）；恢復時本來就推前景，不用在這裡先推後台。
 GHLSSShowDockPeekForIndex(i);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 auto peeked %s", GHLSSCacheBundleIDs[i]);
+snprintf(buf, sizeof(buf), "v57 auto peeked %s", GHLSSCacheBundleIDs[i]);
 GHLSSLogLine(buf);
 }
 }
@@ -2846,7 +2846,7 @@ GHLSSSetActiveToWindow(window);
 GHLSSMarkWindowFront(GHLSSAppIndexForWindow(window));
 // v42.3：一次一個大窗——其他大窗自動縮成 peek（見上面）。
 GHLSSAutoPeekOtherWindows(window);
-GHLSSLogLine("v56 window brought to front");
+GHLSSLogLine("v57 window brought to front");
 }
 
 // v54：狀態列高度（夾 startY 用）：取第一個連接場景的 statusBar 高度，拿不到就 44。
@@ -2892,7 +2892,7 @@ if (centerY < 100.0) centerY = 100.0;
 if (centerY > screenH - 100.0) centerY = screenH - 100.0;
 GHLSSDoraemonButtonWindow.frame = CGRectMake(centerX - size / 2.0, centerY - size / 2.0, size, size);
 GHLSSPeekNudgedDoraemonButton = NO;
-GHLSSLogLine("v56 doraemon button restored after peeks cleared");
+GHLSSLogLine("v57 doraemon button restored after peeks cleared");
 }
 
 // v55：排布後哆啦A夢鈕別壓住任何一扇 peek——鈕框跟任一扇相交就挪開
@@ -2927,7 +2927,7 @@ if (newY + btnH > screenH - 34.0) newY = screenH - 34.0 - btnH;
 }
 GHLSSDoraemonButtonWindow.frame = CGRectMake(newX, newY, btnW, btnH);
 GHLSSPeekNudgedDoraemonButton = YES;
-GHLSSLogLine("v56 doraemon button nudged away from peeks");
+GHLSSLogLine("v57 doraemon button nudged away from peeks");
 }
 
 
@@ -2986,7 +2986,7 @@ y += ph + GHLSS_DOCK_PEEK_GAP * shrink;
 // v55：哆啦A夢鈕別壓 peek（排布完再看，鈕框跟任一扇相交就挪開）。
 GHLSSNudgeDoraemonButtonAwayFromPeeks(peekFrames, n);
 char buf[160];
-snprintf(buf, sizeof(buf), "v56 dock layout n=%d startY=%d shrink=%d%%", n, (int)startY, (int)(shrink * 100.0));
+snprintf(buf, sizeof(buf), "v57 dock layout n=%d startY=%d shrink=%d%%", n, (int)startY, (int)(shrink * 100.0));
 GHLSSLogLine(buf);
 }
 
@@ -3087,11 +3087,11 @@ settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
 }];
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 peek scene frame push failed");
+GHLSSLogLine("v57 peek scene frame push failed");
 }
 }
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 peek scaled %s %s %dx%d scale=%.3f frame=%dx%d", bid ? bid : "?", peekPath, (int)peekW, (int)peekH, peekScale, (int)peekFrame.width, (int)peekFrame.height);
+snprintf(buf, sizeof(buf), "v57 peek scaled %s %s %dx%d scale=%.3f frame=%dx%d", bid ? bid : "?", peekPath, (int)peekW, (int)peekH, peekScale, (int)peekFrame.width, (int)peekFrame.height);
 GHLSSLogLine(buf);
 }
 
@@ -3149,7 +3149,7 @@ GHLSSCacheResizeHandles[idx].frame = CGRectMake(dispW - 36, dispH - 36, 36, 36);
 // v53：收成 peek 時把 scene 推到 peek 尺寸（App 按小窗重排版，不再是左上切片）。
 GHLSSPushPeekScaleForIndex(idx, dispW, dispH);
 char buf[160];
-snprintf(buf, sizeof(buf), "v56 window docked to peek %s %dx%d", GHLSSCacheBundleIDs[idx], (int)dispW, (int)dispH);
+snprintf(buf, sizeof(buf), "v57 window docked to peek %s %dx%d", GHLSSCacheBundleIDs[idx], (int)dispW, (int)dispH);
 GHLSSLogLine(buf);
 }
 
@@ -3212,7 +3212,7 @@ UITapGestureRecognizer *overlayTap = [[UITapGestureRecognizer alloc] initWithTar
 [overlayView addGestureRecognizer:overlayTap];
 overlayVC.view = overlayView;
 GHLSSDimOverlayWindow.rootViewController = overlayVC;
-GHLSSLogLine("v56 dim overlay created");
+GHLSSLogLine("v57 dim overlay created");
 }
 GHLSSDimOverlayWindow.hidden = NO;
 }
@@ -3398,7 +3398,7 @@ GHLSSDoraemonButton.layer.cornerRadius = size / 2.0;
 GHLSSAppliedDoraemonSize = size;
 GHLSSAppliedDoraemonLeft = left;
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 doraemon settings applied size=%d side=%s", (int)size, left ? "left" : "right");
+snprintf(buf, sizeof(buf), "v57 doraemon settings applied size=%d side=%s", (int)size, left ? "left" : "right");
 GHLSSLogLine(buf);
 }
 // v53：悬浮图标換了才重讀（設定頁換圖後 2 秒內生效，不用 respring；
@@ -3446,7 +3446,7 @@ GHLSSCacheHiddenByDisable[i] = YES;
 }
 }
 GHLSSUpdateTaskbar();
-GHLSSLogLine("v56 splitscreen disabled");
+GHLSSLogLine("v57 splitscreen disabled");
 return;
 }
 if (GHLSSDoraemonButtonWindow) GHLSSDoraemonButtonWindow.hidden = NO;
@@ -3457,13 +3457,13 @@ GHLSSCacheWindows[i].hidden = NO;
 GHLSSCacheHiddenByDisable[i] = NO;
 if (GHLSSCacheScenes[i]) {
 char fbuf[160];
-snprintf(fbuf, sizeof(fbuf), "v56 foreground pushed on re-enable %s", GHLSSCacheBundleIDs[i]);
+snprintf(fbuf, sizeof(fbuf), "v57 foreground pushed on re-enable %s", GHLSSCacheBundleIDs[i]);
 GHLSSPushForegroundCachedSceneAtIndex(i, fbuf);
 }
 }
 }
 GHLSSUpdateTaskbar();
-GHLSSLogLine("v56 splitscreen enabled");
+GHLSSLogLine("v57 splitscreen enabled");
 }
 static BOOL GHLSSIsAppPinned(const char *bundleID) {
 return GHLSSListContainsBid(GHLSSReadIDList("pinnedAppIDs"), bundleID);
@@ -3476,7 +3476,7 @@ NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEnc
 if (pinned) [ids insertObject:bidStr atIndex:0];
 GHLSSWriteIDList("pinnedAppIDs", ids);
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 app %s %s", bundleID, pinned ? "pinned" : "unpinned");
+snprintf(buf, sizeof(buf), "v57 app %s %s", bundleID, pinned ? "pinned" : "unpinned");
 GHLSSLogLine(buf);
 }
 // 最近開過的浮窗 App（上限 5 個，最近的在前；開窗時調）。
@@ -3577,21 +3577,21 @@ return -1;
 static void GHLSSGameSetVolume(float v) {
 @try {
 Class cls = objc_getClass("AVSystemController");
-if (!cls) { GHLSSLogLine("v56 game volume probe: AVSystemController missing"); return; }
+if (!cls) { GHLSSLogLine("v57 game volume probe: AVSystemController missing"); return; }
 SEL sharedSel = NSSelectorFromString([NSString stringWithCString:"sharedAVSystemController" encoding:NSUTF8StringEncoding]);
-if (![cls respondsToSelector:sharedSel]) { GHLSSLogLine("v56 game volume probe: no sharedAVSystemController"); return; }
+if (![cls respondsToSelector:sharedSel]) { GHLSSLogLine("v57 game volume probe: no sharedAVSystemController"); return; }
 id controller = ((id (*)(id, SEL))objc_msgSend)((id)cls, sharedSel);
-if (!controller) { GHLSSLogLine("v56 game volume probe: no controller"); return; }
+if (!controller) { GHLSSLogLine("v57 game volume probe: no controller"); return; }
 SEL setSel = NSSelectorFromString([NSString stringWithCString:"setVolumeTo:forCategory:" encoding:NSUTF8StringEncoding]);
-if (!setSel || ![controller respondsToSelector:setSel]) { GHLSSLogLine("v56 game volume probe: no setVolumeTo"); return; }
+if (!setSel || ![controller respondsToSelector:setSel]) { GHLSSLogLine("v57 game volume probe: no setVolumeTo"); return; }
 NSString *cat = [NSString stringWithCString:"Audio/Video" encoding:NSUTF8StringEncoding];
 ((void (*)(id, SEL, float, id))objc_msgSend)(controller, setSel, v, cat);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 game volume set %.2f", v);
+snprintf(buf, sizeof(buf), "v57 game volume set %.2f", v);
 GHLSSLogLine(buf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 game volume probe exception");
+GHLSSLogLine("v57 game volume probe exception");
 }
 }
 
@@ -3663,7 +3663,7 @@ char pair[256];
 snprintf(pair, sizeof(pair), "%s|%s", mainBid, sideBid);
 GHLSSWritePrefsCString("lastThreeScreenPair", pair);
 char buf[300];
-snprintf(buf, sizeof(buf), "v56 last three screen pair %s", pair);
+snprintf(buf, sizeof(buf), "v57 last three screen pair %s", pair);
 GHLSSLogLine(buf);
 }
 // v42：存重啟後要恢復的浮窗清單（看得見的窗：浮窗本身 + 貼邊 peek；
@@ -3724,7 +3724,7 @@ if (pct < threshold && !GHLSSLowBatteryDocked) {
 GHLSSLowBatteryDocked = YES;
 int docked = GHLSSDockAllVisibleWindows(YES);
 char buf[192];
-snprintf(buf, sizeof(buf), "v56 low battery %d%% docked %d windows", (int)pct, docked);
+snprintf(buf, sizeof(buf), "v57 low battery %d%% docked %d windows", (int)pct, docked);
 GHLSSLogLine(buf);
 if (GHLSSLauncherShared && docked > 0) {
 char msg[192];
@@ -3738,7 +3738,7 @@ snprintf(msg, sizeof(msg), "電量低於 %d%%，浮窗已收成貼邊小卡", (i
 if (GHLSSLowBatteryDocked && GHLSSLowBatteryDockedCount > 0) {
 if (GHLSSLauncherShared) [GHLSSLauncherShared showNotificationBannerWithText:"電量恢復，點貼邊小卡彈回浮窗"];
 char buf[192];
-snprintf(buf, sizeof(buf), "v56 low battery recovered %d%%, %d windows were docked", (int)pct, GHLSSLowBatteryDockedCount);
+snprintf(buf, sizeof(buf), "v57 low battery recovered %d%%, %d windows were docked", (int)pct, GHLSSLowBatteryDockedCount);
 GHLSSLogLine(buf);
 }
 GHLSSLowBatteryDocked = NO;
@@ -3763,7 +3763,7 @@ root.tag = 55;
 vc.view = root;
 GHLSSSettingsTaskbarWindow.rootViewController = vc;
 GHLSSSettingsTaskbarWindow.hidden = YES;
-GHLSSLogLine("v56 taskbar built");
+GHLSSLogLine("v57 taskbar built");
 }
 static void GHLSSUpdateTaskbar(void) {
 if (!GHLSSSettingsTaskbarWindow) return;
@@ -3801,7 +3801,7 @@ snapView.userInteractionEnabled = NO;
 [btn addSubview:snapView];
 if (!GHLSSTaskbarSnapshotLogged) {
 GHLSSTaskbarSnapshotLogged = YES;
-GHLSSLogLine("v56 taskbar snapshot ok");
+GHLSSLogLine("v57 taskbar snapshot ok");
 }
 } else {
 icon = GHLSSAppIcon(bid);
@@ -3868,7 +3868,7 @@ GHLSSGameModeActive = YES;
 strncpy(GHLSSGameActiveBid, gameBid, sizeof(GHLSSGameActiveBid) - 1);
 GHLSSGameActiveBid[sizeof(GHLSSGameActiveBid) - 1] = '\0';
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 game mode enter %s", gameBid);
+snprintf(buf, sizeof(buf), "v57 game mode enter %s", gameBid);
 GHLSSLogLine(buf);
 if (GHLSSReadGameRememberBrightnessVolume()) {
 CGFloat curB = [UIScreen mainScreen].brightness;
@@ -3884,11 +3884,11 @@ if (savedB < 0) { GHLSSWritePrefsDouble(bKey, (double)curB); savedB = (double)cu
 if (savedV < 0 && curV >= 0) { GHLSSWritePrefsDouble(vKey, (double)curV); savedV = (double)curV; }
 [UIScreen mainScreen].brightness = (CGFloat)savedB;
 if (savedV >= 0) GHLSSGameSetVolume((float)savedV);
-snprintf(buf, sizeof(buf), "v56 game brightness %.2f volume %.2f", savedB, savedV);
+snprintf(buf, sizeof(buf), "v57 game brightness %.2f volume %.2f", savedB, savedV);
 GHLSSLogLine(buf);
 }
 if (GHLSSReadGameDNDProbe()) {
-GHLSSLogLine("v56 game dnd probe: no reliable SpringBoard-side DND API, skipped");
+GHLSSLogLine("v57 game dnd probe: no reliable SpringBoard-side DND API, skipped");
 }
 GHLSSGameDimmedCount = 0;
 if (GHLSSLauncherShared) {
@@ -3900,7 +3900,7 @@ if (strcmp(GHLSSCacheBundleIDs[i], gameBid) == 0) continue;
 if (GHLSSIsWindowPinned(GHLSSCacheBundleIDs[i])) continue;
 GHLSSLoadCacheToActive(i);
 [GHLSSLauncherShared closeHostedWindow];
-snprintf(buf, sizeof(buf), "v56 game cleared background %s", GHLSSCacheBundleIDs[i]);
+snprintf(buf, sizeof(buf), "v57 game cleared background %s", GHLSSCacheBundleIDs[i]);
 GHLSSLogLine(buf);
 }
 }
@@ -3929,13 +3929,13 @@ GHLSSGameDimmedCount++;
 // 不還原（跟 FV 清後台一樣，清掉就沒了，要再開去啟動器點）。
 static void GHLSSGameModeRestore(void) {
 if (!GHLSSGameModeActive) return;
-GHLSSLogLine("v56 game mode exit");
+GHLSSLogLine("v57 game mode exit");
 if (GHLSSReadGameRememberBrightnessVolume()) {
 if (GHLSSGameSavedBrightness >= 0) [UIScreen mainScreen].brightness = GHLSSGameSavedBrightness;
 if (GHLSSGameSavedVolume >= 0) GHLSSGameSetVolume(GHLSSGameSavedVolume);
 }
 if (GHLSSReadGameDNDProbe()) {
-GHLSSLogLine("v56 game dnd probe: restore skipped (no reliable API)");
+GHLSSLogLine("v57 game dnd probe: restore skipped (no reliable API)");
 }
 if (GHLSSLauncherShared) {
 for (int k = 0; k < GHLSSGameDimmedCount; k++) {
@@ -3973,7 +3973,7 @@ if (strcmp(lastFront, front) != 0) {
 strncpy(lastFront, front, sizeof(lastFront) - 1);
 lastFront[sizeof(lastFront) - 1] = '\0';
 char fbuf[256];
-snprintf(fbuf, sizeof(fbuf), "v56 game frontmost %s", front);
+snprintf(fbuf, sizeof(fbuf), "v57 game frontmost %s", front);
 GHLSSLogLine(fbuf);
 }
 } else {
@@ -4009,7 +4009,7 @@ GHLSSLastToolbarOrder = [tbOrder copy];
 } else if (![tbOrder isEqualToArray:GHLSSLastToolbarOrder]) {
 GHLSSLastToolbarOrder = [tbOrder copy];
 GHLSSRelayoutActiveTitleBar();
-GHLSSLogLine("v56 tick toolbar order changed, relayout");
+GHLSSLogLine("v57 tick toolbar order changed, relayout");
 }
 NSArray *appOrder = GHLSSReadIDList("threeScreenAppOrder");
 if (!GHLSSLastAppOrder) {
@@ -4017,7 +4017,7 @@ GHLSSLastAppOrder = [appOrder copy];
 } else if (![appOrder isEqualToArray:GHLSSLastAppOrder]) {
 GHLSSLastAppOrder = [appOrder copy];
 if (GHLSSLauncherShared) [GHLSSLauncherShared rebuildARCContent];
-GHLSSLogLine("v56 tick app order changed, arc rebuilt");
+GHLSSLogLine("v57 tick app order changed, arc rebuilt");
 }
 }
 GHLSSPeriodicTickCount++;
@@ -4028,7 +4028,7 @@ if (GHLSSLauncherShared) [GHLSSLauncherShared checkPendingPairOpen];
 if (GHLSSReadPrefsBool("rescanAppsRequested", NO)) {
 GHLSSWritePrefsBool("rescanAppsRequested", NO);
 GHLSSRefreshInstalledAppListInBackground();
-GHLSSLogLine("v56 rescan apps requested from settings");
+GHLSSLogLine("v57 rescan apps requested from settings");
 }
 GHLSSSchedulePeriodicTick();
 });
@@ -4073,34 +4073,34 @@ GHLSSLauncherAnchorY = swipeLoc.y;
 // 次數/邊照調度設定走——下面那套計數邏輯不動，只換終點）。
 if (GHLSSReadEdgeSwipeOpensThreeScreen()) {
 if (GHLSSReadEdgeSwipeCount() <= 1) {
-GHLSSLogLine("v56 edge swipe 1x, opening three screen");
+GHLSSLogLine("v57 edge swipe 1x, opening three screen");
 [self openThreeScreenFromEdge];
 return;
 }
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v56 edge swipe 2nd, opening three screen");
+GHLSSLogLine("v57 edge swipe 2nd, opening three screen");
 [self openThreeScreenFromEdge];
 } else {
 GHLSSLastSwipeTime = now;
-GHLSSLogLine("v56 edge swipe 1st, armed");
+GHLSSLogLine("v57 edge swipe 1st, armed");
 }
 return;
 }
 if (GHLSSReadEdgeSwipeCount() <= 1) {
-GHLSSLogLine("v56 edge swipe 1x, opening ARC");
+GHLSSLogLine("v57 edge swipe 1x, opening ARC");
 [self showLauncher];
 return;
 }
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v56 edge swipe 2nd, opening ARC");
+GHLSSLogLine("v57 edge swipe 2nd, opening ARC");
 [self showLauncher];
 } else {
 GHLSSLastSwipeTime = now;
-GHLSSLogLine("v56 edge swipe 1st, armed");
+GHLSSLogLine("v57 edge swipe 1st, armed");
 }
 }
 
@@ -4111,7 +4111,7 @@ GHLSSLogLine("v56 edge swipe 1st, armed");
 (void)recognizer;
 if (GHLSSDoraemonLongPressed) {
 GHLSSDoraemonLongPressed = NO;
-GHLSSLogLine("v56 handle button tap suppressed after long press");
+GHLSSLogLine("v57 handle button tap suppressed after long press");
 return;
 }
 // v55：啟動器開著就收起（再點鈕切換）；錨點取鈕中心 Y。
@@ -4122,13 +4122,13 @@ return;
 if (GHLSSDoraemonButtonWindow) {
 GHLSSLauncherAnchorY = GHLSSDoraemonButtonWindow.frame.origin.y + GHLSSDoraemonButtonWindow.frame.size.height / 2.0;
 }
-GHLSSLogLine("v56 handle button tapped, opening ARC");
+GHLSSLogLine("v57 handle button tapped, opening ARC");
 [self showLauncher];
 }
 // v41：哆啦A夢鈕雙擊——輪切主窗（按順序表找下一個看得見的窗升為主窗）。
 - (void)handleDoraemonButtonDoubleTap:(UITapGestureRecognizer *)recognizer {
 (void)recognizer;
-GHLSSLogLine("v56 doraemon double tapped");
+GHLSSLogLine("v57 doraemon double tapped");
 [self cycleMainWindow];
 }
 // v41：把第 idx 個窗升為主窗（ARC 點已開的 App / 點 peek / 雙擊輪切）。
@@ -4142,7 +4142,7 @@ if (GHLSSCachedEntryIsAlive(idx)) {
 GHLSSLoadCacheToActive(idx);
 [self restoreHostedWindow];
 } else {
-GHLSSLogLine("v56 promote entry stale, relaunching");
+GHLSSLogLine("v57 promote entry stale, relaunching");
 const char *bid = GHLSSCacheBundleIDs[idx];
 if (bid && bid[0] != '\0') {
 [self launchHostedApp:bid name:GHLSSAppNames[idx]];
@@ -4163,17 +4163,17 @@ settings.backgrounded = NO;
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground push on promote failed");
+GHLSSLogLine("v57 foreground push on promote failed");
 }
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 window promoted to main %s", GHLSSCacheBundleIDs[idx]);
+snprintf(buf, sizeof(buf), "v57 window promoted to main %s", GHLSSCacheBundleIDs[idx]);
 GHLSSLogLine(buf);
 }
 // v41：雙擊哆啦A夢輪切主窗——按順序表找下一個看得見的窗升為主窗。
 // 雙擊開關關了就不切；少於 2 個可見窗也沒得切。
 - (void)cycleMainWindow {
 if (!GHLSSReadDoraemonDoubleTapEnabled()) {
-GHLSSLogLine("v56 window cycle disabled");
+GHLSSLogLine("v57 window cycle disabled");
 return;
 }
 // v56：遊戲模式開著時，雙擊哆啦A夢在當前遊戲與微信之間來回切
@@ -4182,10 +4182,10 @@ return;
 if (GHLSSGameModeActive && GHLSSGameActiveBid[0] != '\0' && GHLSSReadGameDoubleTapSwitchWeChat()) {
 const char *front = GHLSSFrontmostBundleID();
 if (front && strcmp(front, "com.tencent.xin") == 0) {
-GHLSSLogLine("v56 game double tap: wechat -> game");
+GHLSSLogLine("v57 game double tap: wechat -> game");
 [self openAppFullscreen:GHLSSGameActiveBid];
 } else {
-GHLSSLogLine("v56 game double tap: game -> wechat");
+GHLSSLogLine("v57 game double tap: game -> wechat");
 [self openAppFullscreen:"com.tencent.xin"];
 }
 return;
@@ -4200,7 +4200,7 @@ int idx = GHLSSFrontOrder[k];
 if (GHLSSCacheWindows[idx] && !GHLSSCacheWindows[idx].hidden) cands[n++] = idx;
 }
 if (n <= 1) {
-GHLSSLogLine("v56 window cycle nothing to cycle");
+GHLSSLogLine("v57 window cycle nothing to cycle");
 return;
 }
 int current = GHLSSActiveAppIndex;
@@ -4212,7 +4212,7 @@ int next = cands[(pos + 1) % n];
 [self promoteWindowToMainIndex:next];
 CFAbsoluteTime cycleEnd = CFAbsoluteTimeGetCurrent();
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 window cycled main %s %dms", GHLSSCacheBundleIDs[next], (int)((cycleEnd - cycleStart) * 1000.0));
+snprintf(buf, sizeof(buf), "v57 window cycled main %s %dms", GHLSSCacheBundleIDs[next], (int)((cycleEnd - cycleStart) * 1000.0));
 GHLSSLogLine(buf);
 }
 
@@ -4227,7 +4227,7 @@ GHLSSLogLine(buf);
 - (void)handleDoraemonButtonLongPress:(UILongPressGestureRecognizer *)recognizer {
 if (recognizer.state != UIGestureRecognizerStateBegan) return;
 GHLSSDoraemonLongPressed = YES;
-GHLSSLogLine("v56 close all windows");
+GHLSSLogLine("v57 close all windows");
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (GHLSSCacheWindows[i]) {
 GHLSSLoadCacheToActive(i);
@@ -4275,7 +4275,7 @@ if (recognizer.state == UIGestureRecognizerStateEnded) {
 GHLSSWritePrefsDouble("doraemonButtonX", (double)newX);
 GHLSSWritePrefsDouble("doraemonButtonY", (double)newY);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 doraemon button moved to x=%f y=%f", (double)newX, (double)newY);
+snprintf(buf, sizeof(buf), "v57 doraemon button moved to x=%f y=%f", (double)newX, (double)newY);
 GHLSSLogLine(buf);
 }
 }
@@ -4287,7 +4287,7 @@ GHLSSLogLine(buf);
 NSInteger idx = sender.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 if (!GHLSSCacheWindows[idx]) return;
-GHLSSLogLine("v56 docked peek tapped");
+GHLSSLogLine("v57 docked peek tapped");
 [self promoteWindowToMainIndex:(int)idx];
 }
 
@@ -4298,7 +4298,7 @@ GHLSSLogLine("v56 docked peek tapped");
 NSInteger idx = sender.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 if (!GHLSSCacheWindows[idx]) return;
-GHLSSLogLine("v56 docked peek closed");
+GHLSSLogLine("v57 docked peek closed");
 GHLSSLoadCacheToActive((int)idx);
 [self closeHostedWindow];
 }
@@ -4327,10 +4327,10 @@ char *action = GHLSSReadPrefsCString("tapOutsideAction");
 int isSide = !(action && strcmp(action, "close") == 0);
 if (action) free(action);
 if (isSide) {
-GHLSSLogLine("v56 tap outside docked");
+GHLSSLogLine("v57 tap outside docked");
 [self minimizeHostedWindow];
 } else {
-GHLSSLogLine("v56 tap outside closed");
+GHLSSLogLine("v57 tap outside closed");
 [self closeHostedWindow];
 }
 }
@@ -4346,7 +4346,7 @@ if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 const char *bid = GHLSSAppBundleIDs[idx];
 const char *name = GHLSSAppNames[idx];
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 app tapped %s", bid);
+snprintf(buf, sizeof(buf), "v57 app tapped %s", bid);
 GHLSSLogLine(buf);
 // v41：點選回饋（ARC 設置：震動/音效開關，預設都開）+ 最近使用記錄
 //（點過就算，置頂/最近都用這份記錄）。
@@ -4373,7 +4373,7 @@ GHLSSPushRecentApp(bid);
 UIWindow *cachedWindow = GHLSSCacheWindows[idx];
 if (cachedWindow && !GHLSSCacheMinimized[idx] && !cachedWindow.hidden) {
 // 已开着：带到最前。
-GHLSSLogLine("v56 window already open, bringing to front");
+GHLSSLogLine("v57 window already open, bringing to front");
 [self dismissLauncher];
 GHLSSBringWindowToFront(cachedWindow);
 GHLSSUpdateDimOverlay();
@@ -4383,16 +4383,16 @@ if (cachedWindow && GHLSSCacheMinimized[idx]) {
 // 收着：从小卡恢复（先确认进程还活着；死了就走正常开窗流程，
 // 复用守卫会销毁旧项重建）。
 if (GHLSSCachedEntryIsAlive(idx)) {
-GHLSSLogLine("v56 window minimized, restoring from dock");
+GHLSSLogLine("v57 window minimized, restoring from dock");
 GHLSSLoadCacheToActive(idx);
 [self restoreHostedWindow];
 [self dismissLauncher];
 return;
 }
-GHLSSLogLine("v56 docked entry stale, relaunching");
+GHLSSLogLine("v57 docked entry stale, relaunching");
 }
 if (GHLSSHostedLaunching) {
-GHLSSLogLine("v56 launch in progress, ignoring tap");
+GHLSSLogLine("v57 launch in progress, ignoring tap");
 return;
 }
 // v41：ARC 打開方式（預設浮窗）：全屏打開走 SB 啟動探針（失敗退回浮窗）、
@@ -4403,7 +4403,7 @@ CGRect screenBounds = [UIScreen mainScreen].bounds;
 BOOL isLandscape = screenBounds.size.width > screenBounds.size.height;
 int openMode = GHLSSReadARCMenuOpenMode();
 if (isLandscape && openMode != 1) {
-GHLSSLogLine("v56 landscape forces floating");
+GHLSSLogLine("v57 landscape forces floating");
 openMode = 1;
 }
 // 先收启动器（v23 卡死的教训：收窗是便宜操作，先做；
@@ -4459,10 +4459,10 @@ opened = NO;
 }
 if (opened) {
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 fullscreen open %s", bundleID);
+snprintf(buf, sizeof(buf), "v57 fullscreen open %s", bundleID);
 GHLSSLogLine(buf);
 } else {
-GHLSSLogLine("v56 fullscreen open unavailable, falling back to floating");
+GHLSSLogLine("v57 fullscreen open unavailable, falling back to floating");
 int fidx = GHLSSAppIndexForBundleID(bundleID);
 const char *fname = (fidx >= 0) ? GHLSSAppNames[fidx] : bundleID;
 [self launchHostedApp:bundleID name:fname];
@@ -4482,7 +4482,7 @@ char *nameCopy = strdup(name);
 if (!bidCopy || !nameCopy) {
 if (bidCopy) free(bidCopy);
 if (nameCopy) free(nameCopy);
-GHLSSLogLine("v56 launch failed no memory");
+GHLSSLogLine("v57 launch failed no memory");
 GHLSSForceThreeScreenOnce = NO;
 return;
 }
@@ -4495,7 +4495,7 @@ GHLSSPairPrevBid[sizeof(GHLSSPairPrevBid) - 1] = '\0';
 GHLSSPairPrevBid[0] = '\0';
 }
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 launch start %s", bundleID);
+snprintf(buf, sizeof(buf), "v57 launch start %s", bundleID);
 GHLSSLogLine(buf);
 // v41：最近使用記錄（開窗就算用過一次）+ 三屏替換：三屏模式下一次
 // 只能有一個側窗，舊側窗先收成 peek（scene 留著）。
@@ -4511,7 +4511,7 @@ GHLSSLoadCacheToActive(i);
 @try {
 NSString *bidStr = [NSString stringWithCString:bidCopy encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v56 launch failed bad bundle id");
+GHLSSLogLine("v57 launch failed bad bundle id");
 GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
@@ -4520,14 +4520,14 @@ return;
 }
 RBSProcessIdentity *identity = [RBSProcessIdentity identityForEmbeddedApplicationIdentifier:bidStr];
 if (!identity) {
-GHLSSLogLine("v56 launch failed no identity");
+GHLSSLogLine("v57 launch failed no identity");
 GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v56 identity ok");
+GHLSSLogLine("v57 identity ok");
 // 先看 App 是不是已经在跑（单场景 App 已有全屏版时，再建
 // 第二个 scene 可能只剩白窗——测前要先把目标 App 彻底关掉）。
 RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:identity];
@@ -4535,7 +4535,7 @@ RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:
 int pid = handle ? [handle pid] : 0;
 if (pid > 0) {
 char pbuf[128];
-snprintf(pbuf, sizeof(pbuf), "v56 app already running pid=%d", pid);
+snprintf(pbuf, sizeof(pbuf), "v57 app already running pid=%d", pid);
 GHLSSLogLine(pbuf);
 // 已经在跑：不走事务，直接去建 scene（和参考实现同一做法）。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -4545,19 +4545,19 @@ free(nameCopy);
 });
 return;
 }
-GHLSSLogLine("v56 handle pid=0");
+GHLSSLogLine("v57 handle pid=0");
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 if (!manager) {
-GHLSSLogLine("v56 manager failed nil");
+GHLSSLogLine("v57 manager failed nil");
 GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v56 manager ok");
+GHLSSLogLine("v57 manager ok");
 FBApplicationProcessLaunchTransaction *transaction = [[FBApplicationProcessLaunchTransaction alloc] initWithProcessIdentity:identity executionContextProvider:^id(void) {
-GHLSSLogLine("v56 launch provider called");
+GHLSSLogLine("v57 launch provider called");
 FBMutableProcessExecutionContext *context = [FBMutableProcessExecutionContext new];
 context.identity = identity;
 context.environment = [NSDictionary dictionary];
@@ -4565,14 +4565,14 @@ context.launchIntent = 4;
 return [manager launchProcessWithContext:context];
 }];
 if (!transaction) {
-GHLSSLogLine("v56 transaction failed nil");
+GHLSSLogLine("v57 transaction failed nil");
 GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
 free(nameCopy);
 return;
 }
-GHLSSLogLine("v56 transaction created");
+GHLSSLogLine("v57 transaction created");
 [transaction setCompletionBlock:^{
 // 事务完成可能跑在任意队列——场景创建回主线程做。
 dispatch_async(dispatch_get_main_queue(), ^{
@@ -4582,11 +4582,11 @@ free(nameCopy);
 });
 }];
 [transaction begin];
-GHLSSLogLine("v56 begin called");
-GHLSSLogLine("v56 launch transaction begun");
+GHLSSLogLine("v57 begin called");
+GHLSSLogLine("v57 launch transaction begun");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 launch failed exception");
+GHLSSLogLine("v57 launch failed exception");
 GHLSSForceThreeScreenOnce = NO;
 GHLSSHostedLaunching = NO;
 free(bidCopy);
@@ -4600,11 +4600,11 @@ free(nameCopy);
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name {
 @try {
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 scene start %s", bundleID);
+snprintf(buf, sizeof(buf), "v57 scene start %s", bundleID);
 GHLSSLogLine(buf);
 NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
 if (!bidStr) {
-GHLSSLogLine("v56 scene failed no bid");
+GHLSSLogLine("v57 scene failed no bid");
 GHLSSForceThreeScreenOnce = NO;
 return;
 }
@@ -4613,11 +4613,11 @@ RBSProcessPredicate *predicate = [RBSProcessPredicate predicateMatchingIdentity:
 RBSProcessHandle *handle = [RBSProcessHandle handleForPredicate:predicate error:nil];
 int pid = handle ? [handle pid] : 0;
 if (pid <= 0) {
-GHLSSLogLine("v56 scene failed no process");
+GHLSSLogLine("v57 scene failed no process");
 GHLSSForceThreeScreenOnce = NO;
 return;
 }
-snprintf(buf, sizeof(buf), "v56 process launched pid=%d", pid);
+snprintf(buf, sizeof(buf), "v57 process launched pid=%d", pid);
 GHLSSLogLine(buf);
 // v35 复用守卫：缓存里已有这个 App 的 scene（关窗或切走时没销毁）
 // 且进程还是同一个 pid、presenter 与它的 view 还活着——直接复用，
@@ -4634,17 +4634,17 @@ if (cacheIdx >= 0 && GHLSSCacheScenes[cacheIdx]) {
 if (pid == GHLSSCachePids[cacheIdx] && ((GHLSSCachePresenters[cacheIdx] && GHLSSCachePresenters[cacheIdx].presentationView) || GHLSSCacheLayerHostViews[cacheIdx])) {
 if (GHLSSCacheSceneIDs[cacheIdx]) {
 char rbuf[256];
-snprintf(rbuf, sizeof(rbuf), "v56 reusing cached scene %s", [GHLSSCacheSceneIDs[cacheIdx] UTF8String]);
+snprintf(rbuf, sizeof(rbuf), "v57 reusing cached scene %s", [GHLSSCacheSceneIDs[cacheIdx] UTF8String]);
 GHLSSLogLine(rbuf);
 } else {
-GHLSSLogLine("v56 reusing cached scene");
+GHLSSLogLine("v57 reusing cached scene");
 }
 GHLSSLoadCacheToActive(cacheIdx);
 // v41：三屏一次性的旗標在這裡清掉（復用舊 scene 不重建窗，
 // 側窗轉換下一版再做；這次先以普通浮窗打開，不讓旗標漏到下一次開窗）。
 if (GHLSSForceThreeScreenOnce) {
 GHLSSForceThreeScreenOnce = NO;
-GHLSSLogLine("v56 three screen request on cached window, opened as floating");
+GHLSSLogLine("v57 three screen request on cached window, opened as floating");
 }
 if (GHLSSHostedMinimized) {
 [self restoreHostedWindow];
@@ -4660,15 +4660,15 @@ if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
 settings.backgrounded = NO;
 }
 }];
-GHLSSLogLine("v56 foreground pushed on reuse");
+GHLSSLogLine("v57 foreground pushed on reuse");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground push on reuse failed");
+GHLSSLogLine("v57 foreground push on reuse failed");
 }
 }
 return;
 }
-GHLSSLogLine("v56 stored scene stale, destroying");
+GHLSSLogLine("v57 stored scene stale, destroying");
 GHLSSDestroyCachedEntryAtIndex(cacheIdx);
 }
 // v35：sceneID 仍是固定格式 `sceneID:<bundleID>-default`（v28 的
@@ -4690,7 +4690,7 @@ FBScene *existingScene = GHLSSExistingMainSceneForBundleID(bundleID);
 BOOL hostedExisting = NO;
 if (existingScene) {
 char ebuf[256];
-snprintf(ebuf, sizeof(ebuf), "v56 hosting existing scene %s", bundleID);
+snprintf(ebuf, sizeof(ebuf), "v57 hosting existing scene %s", bundleID);
 GHLSSLogLine(ebuf);
 @try {
 Class layerHostClass = objc_getClass("_UISceneLayerHostContainerView");
@@ -4713,29 +4713,29 @@ if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
 settings.backgrounded = NO;
 }
 }];
-GHLSSLogLine("v56 foreground pushed on existing scene");
+GHLSSLogLine("v57 foreground pushed on existing scene");
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground push on existing scene failed");
+GHLSSLogLine("v57 foreground push on existing scene failed");
 }
-GHLSSLogLine("v56 layer host ready");
+GHLSSLogLine("v57 layer host ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:existingScene presenter:nil layerHostView:layerHostView sceneID:sceneID pid:pid];
 hostedExisting = YES;
 } else {
-GHLSSLogLine("v56 layer host view nil, creating new");
+GHLSSLogLine("v57 layer host view nil, creating new");
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 layer host failed, creating new");
+GHLSSLogLine("v57 layer host failed, creating new");
 }
 }
 if (hostedExisting) return;
-GHLSSLogLine("v56 no existing scene, creating new");
+GHLSSLogLine("v57 no existing scene, creating new");
 FBProcessManager *manager = [FBProcessManager sharedInstance];
 [manager registerProcessForAuditToken:[handle auditToken]];
-GHLSSLogLine("v56 creating new scene");
+GHLSSLogLine("v57 creating new scene");
 char idbuf[256];
-snprintf(idbuf, sizeof(idbuf), "v56 sceneID %s", [sceneID UTF8String]);
+snprintf(idbuf, sizeof(idbuf), "v57 sceneID %s", [sceneID UTF8String]);
 GHLSSLogLine(idbuf);
 FBSMutableSceneDefinition *definition = [FBSMutableSceneDefinition definition];
 definition.identity = [FBSSceneIdentity identityForIdentifier:sceneID];
@@ -4768,18 +4768,18 @@ clientSettings.statusBarStyle = 0;
 parameters.clientSettings = clientSettings;
 FBScene *scene = [[FBSceneManager sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
 if (!scene) {
-GHLSSLogLine("v56 scene failed nil scene");
+GHLSSLogLine("v57 scene failed nil scene");
 return;
 }
-GHLSSLogLine("v56 scene created");
+GHLSSLogLine("v57 scene created");
 id presenterManager = [scene uiPresentationManager];
 if (!presenterManager) {
-GHLSSLogLine("v56 presenter failed no manager");
+GHLSSLogLine("v57 presenter failed no manager");
 return;
 }
 _UIScenePresenter *presenter = [presenterManager createPresenterWithIdentifier:sceneID];
 if (!presenter) {
-GHLSSLogLine("v56 presenter failed nil");
+GHLSSLogLine("v57 presenter failed nil");
 return;
 }
 [presenter modifyPresentationContext:^(UIMutableScenePresentationContext *context) {
@@ -4787,7 +4787,7 @@ context.appearanceStyle = 2;
 }];
 [presenter activate];
 if (!presenter.presentationView) {
-GHLSSLogLine("v56 presenter failed no view");
+GHLSSLogLine("v57 presenter failed no view");
 return;
 }
 // v28：记 presenterView 的尺寸与有没有 layer——计算器在 v26 还是黑的
@@ -4796,11 +4796,11 @@ return;
 @try {
 char pbuf[128];
 UIView *pv = presenter.presentationView;
-snprintf(pbuf, sizeof(pbuf), "v56 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
+snprintf(pbuf, sizeof(pbuf), "v57 presentationView w=%d h=%d layer=%d", (int)pv.bounds.size.width, (int)pv.bounds.size.height, pv.layer ? 1 : 0);
 GHLSSLogLine(pbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 presentationView failed");
+GHLSSLogLine("v57 presentationView failed");
 }
 // v28：scene 建好了、presenter 也 activate 了，但 v25 的窗是黑的——
 // 计算器进程没往 scene 里画。KonbanXV 的做法是建完 scene 就把
@@ -4811,28 +4811,28 @@ GHLSSLogLine("v56 presentationView failed");
 // 单独包 @try/@catch，出错只记日志、继续建窗。
 @try {
 char cbuf[128];
-snprintf(cbuf, sizeof(cbuf), "v56 scene contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(cbuf, sizeof(cbuf), "v57 scene contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(cbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 scene contentState failed");
+GHLSSLogLine("v57 scene contentState failed");
 }
 @try {
 [scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
 settings.foreground = YES;
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v56 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
+snprintf(fbuf, sizeof(fbuf), "v57 foreground pushed contentState=%lu", (unsigned long)[scene contentState]);
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground push failed");
+GHLSSLogLine("v57 foreground push failed");
 }
-GHLSSLogLine("v56 presenter ready");
+GHLSSLogLine("v57 presenter ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:scene presenter:presenter layerHostView:nil sceneID:sceneID pid:pid];
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 scene failed exception");
+GHLSSLogLine("v57 scene failed exception");
 } @finally {
 GHLSSHostedLaunching = NO;
 }
@@ -4858,7 +4858,7 @@ GHLSSPresetSizeForBundleID(bundleID, &winW, &winH);
 hostedContentSize = CGSizeMake(winW, winH);
 {
 char pbuf[128];
-snprintf(pbuf, sizeof(pbuf), "v56 window build preset size %dx%d %s", (int)winW, (int)winH, bundleID);
+snprintf(pbuf, sizeof(pbuf), "v57 window build preset size %dx%d %s", (int)winW, (int)winH, bundleID);
 GHLSSLogLine(pbuf);
 }
 // v38：新窗的 scaleRatio 用这个 App 的默认值（计算器 0.77，别的 1.0）。
@@ -4908,7 +4908,7 @@ GHLSSHostedScaleRatio = geoScale;
 geometryRestored = YES;
 restoredW = geoW;
 restoredH = geoH;
-GHLSSLogLine("v56 geometry restored");
+GHLSSLogLine("v57 geometry restored");
 }
 }
 if (!geometryRestored) {
@@ -4947,7 +4947,7 @@ BOOL threeScreenMode = (GHLSSReadARCMenuOpenMode() == 2);
 GHLSSForceThreeScreenOnce = NO;
 if (sideDock) {
 char sideBuf[160];
-snprintf(sideBuf, sizeof(sideBuf), "v56 three screen side dock switch=%d mode=%d once=%d", threeScreenSwitch ? 1 : 0, threeScreenMode ? 1 : 0, onceFlag ? 1 : 0);
+snprintf(sideBuf, sizeof(sideBuf), "v57 three screen side dock switch=%d mode=%d once=%d", threeScreenSwitch ? 1 : 0, threeScreenMode ? 1 : 0, onceFlag ? 1 : 0);
 GHLSSLogLine(sideBuf);
 CGFloat safeDistance = GHLSSReadSafeDistance();
 // v42：側窗寬度走預設（窄 25% / 中 30% / 寬 40%，預設中）。
@@ -4977,13 +4977,13 @@ geometryRestored = YES;
 restoredW = sideW;
 restoredH = sideH;
 char jbuf[192];
-snprintf(jbuf, sizeof(jbuf), "v56 side dock frame %dx%d@%d,%d side=%s", (int)sideW, (int)sideH, (int)sideX, (int)topY, dockLeft ? "left" : "right");
+snprintf(jbuf, sizeof(jbuf), "v57 side dock frame %dx%d@%d,%d side=%s", (int)sideW, (int)sideH, (int)sideX, (int)topY, dockLeft ? "left" : "right");
 GHLSSLogLine(jbuf);
 }
 if (strcmp(bundleID, "com.apple.calculator") == 0) {
 char wbuf[160];
 CGFloat calcScale = hostedContentSize.width / GHLSSSceneFrameSizeForBundleID(bundleID).width;
-snprintf(wbuf, sizeof(wbuf), "v56 calculator window %dx%d scale %d%%", (int)winW, (int)winH, (int)(calcScale * 100.0));
+snprintf(wbuf, sizeof(wbuf), "v57 calculator window %dx%d scale %d%%", (int)winW, (int)winH, (int)(calcScale * 100.0));
 GHLSSLogLine(wbuf);
 }
 GHLSSHostedWindow = [[UIWindow alloc] initWithFrame:winFrame];
@@ -4996,7 +4996,7 @@ UIWindowScene *hostedScene = GHLSSActiveWindowScene();
 if (hostedScene) {
 GHLSSHostedWindow.windowScene = hostedScene;
 } else {
-GHLSSLogLine("v56 hosted scene nil");
+GHLSSLogLine("v57 hosted scene nil");
 }
 // 窗的阴影与圆角（画在窗的 layer 上；内容容器自己裁圆角）。
 // v41：圆角、阴影开关/透明度/半径都走设定（浮窗设置 → 浮窗阴影设置）。
@@ -5057,7 +5057,7 @@ presenterView.layer.position = CGPointMake(0, 0);
 contentView.layer.sublayerTransform = CATransform3DMakeScale(GHLSSHostedScaleRatio, GHLSSHostedScaleRatio, 1.0);
 {
 char sbuf[128];
-snprintf(sbuf, sizeof(sbuf), "v56 scene scaled %d%%", (int)(GHLSSHostedScaleRatio * 100.0));
+snprintf(sbuf, sizeof(sbuf), "v57 scene scaled %d%%", (int)(GHLSSHostedScaleRatio * 100.0));
 GHLSSLogLine(sbuf);
 }
 } else if (layerHostView) {
@@ -5071,11 +5071,11 @@ CGFloat displayScale = GHLSSLayerHostDisplayScaleForContentSizeAndBundleID(hoste
 contentView.layer.sublayerTransform = CATransform3DMakeScale(displayScale, displayScale, 1.0);
 {
 char sbuf[128];
-snprintf(sbuf, sizeof(sbuf), "v56 layer host scaled %d%%", (int)(displayScale * 100.0));
+snprintf(sbuf, sizeof(sbuf), "v57 layer host scaled %d%%", (int)(displayScale * 100.0));
 GHLSSLogLine(sbuf);
 }
 } else {
-GHLSSLogLine("v56 window failed no view to embed");
+GHLSSLogLine("v57 window failed no view to embed");
 return;
 }
 // v38：记实际嵌进去的 view 的 frame——注意：frame 现在是图层的
@@ -5089,11 +5089,11 @@ return;
 UIView *embeddedView = (presenter && presenter.presentationView) ? presenter.presentationView : layerHostView;
 CGRect pvFrame = embeddedView.frame;
 char fbuf[160];
-snprintf(fbuf, sizeof(fbuf), "v56 hosted view frame %d,%d %dx%d", (int)pvFrame.origin.x, (int)pvFrame.origin.y, (int)pvFrame.size.width, (int)pvFrame.size.height);
+snprintf(fbuf, sizeof(fbuf), "v57 hosted view frame %d,%d %dx%d", (int)pvFrame.origin.x, (int)pvFrame.origin.y, (int)pvFrame.size.width, (int)pvFrame.size.height);
 GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 hosted view frame failed");
+GHLSSLogLine("v57 hosted view frame failed");
 }
 // v38：缩放滑杆条（默认藏着）——点控制条的 ± 钮展开，盖在内容区顶
 // 上（控制条下面，y=36；半透明黑底，不改窗尺寸、不推内容区）。
@@ -5187,6 +5187,9 @@ pill.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizin
 UIPanGestureRecognizer *stripDrag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleTitleDrag:)];
 stripDrag.minimumNumberOfTouches = 1;
 stripDrag.maximumNumberOfTouches = 1;
+// v57（§144-6 真根因）：pan 之前沒設 delegate——UIKit 同時識別要問雙方
+// delegate，nil 預設回 NO；pan 一有移動就先認，上下滑／左右滑永遠被迫失敗。
+stripDrag.delegate = self;
 [topStrip addGestureRecognizer:stripDrag];
 UITapGestureRecognizer *stripTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTopStripTap:)];
 stripTap.delegate = self;
@@ -5217,6 +5220,13 @@ twoFingerTap.numberOfTouchesRequired = 2;
 twoFingerTap.delegate = self;
 twoFingerTap.cancelsTouchesInView = NO;
 [topStrip addGestureRecognizer:twoFingerTap];
+// v57：診斷——建窗時記細條上到底掛了幾個 recognizer（日誌對得上才
+// 能定死「觸摸到沒到細條」）。
+{
+char gbuf[128];
+snprintf(gbuf, sizeof(gbuf), "v57 gesture strip attached %lu recognizers", (unsigned long)[topStrip.gestureRecognizers count]);
+GHLSSLogLine(gbuf);
+}
 // v38：控制条（36pt，半透明黑底，默认藏着）——旧标题栏的活儿都搬
 // 到这里：红 X、黄最小化、App 名、± 缩放钮。控制条在细条之上
 //（展开时盖住细条），自己也能拖动窗；点控制条中间（标题处）收起
@@ -5229,11 +5239,42 @@ GHLSSHostedTitleBar = titleBar;
 UIPanGestureRecognizer *barDrag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleTitleDrag:)];
 barDrag.minimumNumberOfTouches = 1;
 barDrag.maximumNumberOfTouches = 1;
+// v57（§144-6）：跟 stripDrag 同一個漏——沒設 delegate，滑動被 pan 擋掉。
+barDrag.delegate = self;
 [titleBar addGestureRecognizer:barDrag];
 UITapGestureRecognizer *barTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTopStripTap:)];
 barTap.delegate = self;
 [barTap requireGestureRecognizerToFail:barDrag];
 [titleBar addGestureRecognizer:barTap];
+// v57（§144-6）：控制條展開時蓋住細條（0–36pt 蓋 0–24pt），但上面
+// 本來只有拖動＋單擊——控制條一開，三擊／上下滑／左右滑／雙指點全死。
+// 控制條也掛同一套四個 recognizer（同一批 handler；單擊一樣等三擊失敗）。
+UITapGestureRecognizer *barTripleTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleGestureTripleTap:)];
+barTripleTap.numberOfTapsRequired = 3;
+barTripleTap.delegate = self;
+barTripleTap.cancelsTouchesInView = NO;
+[titleBar addGestureRecognizer:barTripleTap];
+[barTap requireGestureRecognizerToFail:barTripleTap];
+UISwipeGestureRecognizer *barSwipeV = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleGestureSwipeVertical:)];
+barSwipeV.direction = UISwipeGestureRecognizerDirectionUp | UISwipeGestureRecognizerDirectionDown;
+barSwipeV.delegate = self;
+barSwipeV.cancelsTouchesInView = NO;
+[titleBar addGestureRecognizer:barSwipeV];
+UISwipeGestureRecognizer *barSwipeH = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleGestureSwipeHorizontal:)];
+barSwipeH.direction = UISwipeGestureRecognizerDirectionLeft | UISwipeGestureRecognizerDirectionRight;
+barSwipeH.delegate = self;
+barSwipeH.cancelsTouchesInView = NO;
+[titleBar addGestureRecognizer:barSwipeH];
+UITapGestureRecognizer *barTwoFingerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleGestureTwoFingerTap:)];
+barTwoFingerTap.numberOfTouchesRequired = 2;
+barTwoFingerTap.delegate = self;
+barTwoFingerTap.cancelsTouchesInView = NO;
+[titleBar addGestureRecognizer:barTwoFingerTap];
+{
+char gbuf[128];
+snprintf(gbuf, sizeof(gbuf), "v57 gesture bar attached %lu recognizers", (unsigned long)[titleBar.gestureRecognizers count]);
+GHLSSLogLine(gbuf);
+}
 // v47：關閉鈕（毛玻璃圓，左）。
 UIButton *closeBtn = GHLSSMakeFrostedControlButton();
 closeBtn.frame = CGRectMake(8, 2, 32, 32);
@@ -5345,7 +5386,7 @@ divDrag.delegate = self;
 GHLSSHostedSideDivider = divider;
 // v54 J：分隔線位置記 log（frame＋分隔線 x，對照 A 的夾取）。
 char divBuf[160];
-snprintf(divBuf, sizeof(divBuf), "v56 side divider x=%d thickness=%d side=%s", (int)divX, (int)divThickness, dockLeft ? "left" : "right");
+snprintf(divBuf, sizeof(divBuf), "v57 side divider x=%d thickness=%d side=%s", (int)divX, (int)divThickness, dockLeft ? "left" : "right");
 GHLSSLogLine(divBuf);
 }
 GHLSSHostedWindow.rootViewController = vc;
@@ -5384,7 +5425,7 @@ if (newCacheIdx >= 0) {
 GHLSSActiveAppIndex = newCacheIdx;
 GHLSSSaveActiveToCache();
 }
-GHLSSLogLine("v56 window shown");
+GHLSSLogLine("v57 window shown");
 // v42：浮窗透明度（每窗 winOpacity_<bid>，沒設走全域；調窗的 alpha）。
 GHLSSHostedWindow.alpha = GHLSSReadWindowOpacityForBundleID(bundleID);
 // v40：新窗带到最前（别的窗回基础层级，这个窗升到最前层级、活动量
@@ -5423,7 +5464,7 @@ UIWindow *retryWindow = GHLSSHostedWindow;
 int retryIdx = newCacheIdx;
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v56 foreground retry check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v57 foreground retry check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!retryScene || !retryWindow) return;
 if (retryIdx >= 0 && GHLSSCacheScenes[retryIdx] != retryScene) return;
@@ -5433,17 +5474,17 @@ if ([retryScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v56 foreground retry contentState=%lu", (unsigned long)[retryScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v57 foreground retry contentState=%lu", (unsigned long)[retryScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground retry failed");
+GHLSSLogLine("v57 foreground retry failed");
 }
 });
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 char cbuf[160];
-snprintf(cbuf, sizeof(cbuf), "v56 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
+snprintf(cbuf, sizeof(cbuf), "v57 foreground retry2 check contentState=%lu minimized=%d", (unsigned long)(retryScene ? [retryScene contentState] : 0), (retryIdx >= 0 && GHLSSCacheMinimized[retryIdx]) ? 1 : 0);
 GHLSSLogLine(cbuf);
 if (!retryScene || !retryWindow) return;
 if (retryIdx >= 0 && GHLSSCacheScenes[retryIdx] != retryScene) return;
@@ -5453,17 +5494,17 @@ if ([retryScene contentState] != 2) {
 settings.foreground = YES;
 }];
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v56 foreground retry2 contentState=%lu", (unsigned long)[retryScene contentState]);
+snprintf(rbuf, sizeof(rbuf), "v57 foreground retry2 contentState=%lu", (unsigned long)[retryScene contentState]);
 GHLSSLogLine(rbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground retry2 failed");
+GHLSSLogLine("v57 foreground retry2 failed");
 }
 });
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 window failed exception");
+GHLSSLogLine("v57 window failed exception");
 }
 }
 
@@ -5493,7 +5534,7 @@ UIWindow *closingWin = GHLSSHostedWindow;
 CGRect startFrame = closingWin.frame;
 CGFloat startAlpha = closingWin.alpha;
 GHLSSHostedMinimized = YES;
-GHLSSLogLine("v56 window closed (scene kept)");
+GHLSSLogLine("v57 window closed (scene kept)");
 // v53：關窗後不再把 scene 推後台（黑屏修法；恢復時本來就推前景，
 // 關了再推後台只會讓下次恢復多一個黑的機會）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT) {
@@ -5508,7 +5549,7 @@ GHLSSHostedIsSideDock = NO;
 // v41：關三屏同時關側邊小窗（預設關）：關的是側窗、開關開著時，
 // 同場的其他可見浮窗也一起關掉（三屏會話結束）；關著時只關這個窗。
 if (wasSideDock && GHLSSReadCloseThreeScreenAlsoClosesSide()) {
-GHLSSLogLine("v56 three screen close also closes side windows");
+GHLSSLogLine("v57 three screen close also closes side windows");
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (i == idx) continue;
 if (GHLSSCacheWindows[i] && !GHLSSCacheWindows[i].hidden && !GHLSSCacheMinimized[i]) {
@@ -5560,7 +5601,7 @@ UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithS
 (void)e;
 }
 }
-GHLSSLogLine("v56 window minimized");
+GHLSSLogLine("v57 window minimized");
 // v49：最小化不再把 scene 推回後台——peek 要露活內容，後台化的
 // scene 停止合成，peek 就是黑的（v41 改成活內容 peek 卻留著推後台，
 // v42.3 自動 peek 讓黑小窗到處出現）。鎖屏安全不受影響：鎖屏回調
@@ -5638,7 +5679,7 @@ if (GHLSSHostedTitleBar) GHLSSHostedTitleBar.frame = CGRectMake(0, 0, targetW, G
 [self resizeHostedSceneToContentSize:CGSizeMake(targetW, targetH)];
 {
 char gbuf[256];
-snprintf(gbuf, sizeof(gbuf), "v56 window restored frame %dx%d geo %dx%d preset %dx%d", (int)targetW, (int)targetH, hasGeo ? (int)geoW : -1, hasGeo ? (int)geoH : -1, (int)presetW, (int)presetH);
+snprintf(gbuf, sizeof(gbuf), "v57 window restored frame %dx%d geo %dx%d preset %dx%d", (int)targetW, (int)targetH, hasGeo ? (int)geoW : -1, hasGeo ? (int)geoH : -1, (int)presetW, (int)presetH);
 GHLSSLogLine(gbuf);
 }
 if (GHLSSHostedSideDivider) GHLSSHostedSideDivider.hidden = YES;
@@ -5647,7 +5688,7 @@ GHLSSHostedIsSideDock = NO;
 GHLSSHostedWindow.hidden = NO;
 GHLSSHostedMinimized = NO;
 GHLSSBringWindowToFront(GHLSSHostedWindow);
-GHLSSLogLine("v56 window restored from peek");
+GHLSSLogLine("v57 window restored from peek");
 // v30：最小化后锁屏再解锁、恢复窗时内容是黑的——锁屏把 scene 的
 // foreground 状态弄丢了，只取消 hidden 不够；恢复时也要把
 // foreground=YES 再推一遍（建窗时同一个已证明能用的做法），
@@ -5663,12 +5704,12 @@ settings.backgrounded = NO;
 }
 }];
 char fbuf[128];
-snprintf(fbuf, sizeof(fbuf), "v56 foreground pushed on restore contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
+snprintf(fbuf, sizeof(fbuf), "v57 foreground pushed on restore contentState=%lu", (unsigned long)[GHLSSHostedScene contentState]);
 GHLSSLogLine(fbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 foreground push on restore failed");
+GHLSSLogLine("v57 foreground push on restore failed");
 }
 // v40：恢复完把状态存回缓存、更新阴影背景（窗又看得见了）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT) {
@@ -5681,7 +5722,7 @@ GHLSSUpdateTaskbar();
 }
 
 - (void)handleHostedClose:(id)sender {
-GHLSSLogLine("v56 hosted close tapped");
+GHLSSLogLine("v57 hosted close tapped");
 // v40：多窗——控制条按钮是哪个窗的，就关哪个窗（先切活动量到
 // 按钮所在的窗，再关；不切的话关的是活动窗，可能是别的窗）。
 if ([sender isKindOfClass:[UIView class]]) {
@@ -5691,7 +5732,7 @@ GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
 }
 
 - (void)handleHostedMinimize:(id)sender {
-GHLSSLogLine("v56 hosted minimize tapped");
+GHLSSLogLine("v57 hosted minimize tapped");
 if ([sender isKindOfClass:[UIView class]]) {
 GHLSSSetActiveToWindow(GHLSSWindowForView((UIView *)sender));
 }
@@ -5711,7 +5752,7 @@ GHLSSHostedScaleSliderBar.hidden = !GHLSSHostedScaleSliderBar.hidden;
 if (!GHLSSHostedScaleSliderBar.hidden && GHLSSHostedScaleSlider) {
 GHLSSHostedScaleSlider.value = GHLSSHostedScaleRatio;
 }
-GHLSSLogLine("v56 scale bar toggled");
+GHLSSLogLine("v57 scale bar toggled");
 }
 
 // v38：拖缩放滑杆——0.5–2.0，步进 0.01（UISlider 没有步进，handler
@@ -5738,7 +5779,7 @@ if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) {
 GHLSSCacheScaleRatios[GHLSSActiveAppIndex] = v;
 }
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 scale changed to %d%%", (int)(v * 100.0));
+snprintf(buf, sizeof(buf), "v57 scale changed to %d%%", (int)(v * 100.0));
 GHLSSLogLine(buf);
 GHLSSApplyScaleToHostedWindow(YES);
 }
@@ -5780,12 +5821,12 @@ if (recognizer.state == UIGestureRecognizerStateBegan) {
 // 不動（Began 讀一次，之後的事件看旗標，不每動一下讀 prefs）。
 GHLSSDragDisabled = !GHLSSReadWindowDragEnabled();
 if (GHLSSDragDisabled) {
-GHLSSLogLine("v56 window drag disabled");
+GHLSSLogLine("v57 window drag disabled");
 return;
 }
 GHLSSDragDockLeft = GHLSSIsWindowPositionLeft();
 GHLSSDragSafeDistance = GHLSSReadSafeDistance();
-GHLSSLogLine("v56 window dragged");
+GHLSSLogLine("v57 window dragged");
 }
 if (GHLSSDragDisabled) return;
 BOOL dockLeft = GHLSSDragDockLeft;
@@ -5817,7 +5858,7 @@ if (recognizer.state == UIGestureRecognizerStateEnded) {
 // 像影片一樣）。右側：中心进右缘 60pt 内；左側：中心进左缘 60pt 内。
 BOOL shouldDock = dockLeft ? (newX <= GHLSS_DOCK_DRAG_THRESHOLD) : (screenBounds.size.width - newX <= GHLSS_DOCK_DRAG_THRESHOLD);
 if (shouldDock) {
-GHLSSLogLine("v56 window docked by drag");
+GHLSSLogLine("v57 window docked by drag");
 [self minimizeHostedWindow];
 return;
 }
@@ -5828,7 +5869,7 @@ return;
 // 舊門檻 74pt 讓隨便拖一下就放大。
 if (!GHLSSHostedIsSideDock && (newY - winH / 2.0) <= safeDistance) {
 CGRect fullFrame = CGRectMake(8.0, safeDistance, screenBounds.size.width - 16.0, screenBounds.size.height - safeDistance - 8.0);
-GHLSSLogLine("v56 window snapped to fullscreen");
+GHLSSLogLine("v57 window snapped to fullscreen");
 [self resizeActiveWindowToFrame:fullFrame];
 return;
 }
@@ -5871,7 +5912,7 @@ GHLSSHostedTitleBar.hidden = !GHLSSHostedTitleBar.hidden;
 if (GHLSSHostedTitleBar.hidden && GHLSSHostedScaleSliderBar) {
 GHLSSHostedScaleSliderBar.hidden = YES;
 }
-GHLSSLogLine("v56 control bar toggled");
+GHLSSLogLine("v57 control bar toggled");
 }
 
 // ── v42 新方法（窗控制／手勢／任務欄／配對／鍵盤） ──
@@ -5921,7 +5962,7 @@ if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) {
 GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 }
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 window resized to %dx%d", (int)newW, (int)newH);
+snprintf(buf, sizeof(buf), "v57 window resized to %dx%d", (int)newW, (int)newH);
 GHLSSLogLine(buf);
 }
 
@@ -5940,7 +5981,7 @@ GHLSSWriteIDList("pinnedWindowIDs", ids);
 GHLSSSetFrostedButtonPinned(GHLSSHostedPinButton, !pinned);
 GHLSSBringWindowToFront(GHLSSHostedWindow);
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 window %s %s", GHLSSHostedBundleID, !pinned ? "pinned" : "unpinned");
+snprintf(buf, sizeof(buf), "v57 window %s %s", GHLSSHostedBundleID, !pinned ? "pinned" : "unpinned");
 GHLSSLogLine(buf);
 } else if (strcmp(action, "dock") == 0) {
 [self minimizeHostedWindow];
@@ -5987,7 +6028,7 @@ sub.layer.borderColor = current ? [UIColor colorWithRed:0.83 green:0.68 blue:0.2
 }
 }
 char buf[64];
-snprintf(buf, sizeof(buf), "v56 window size preset %d", preset);
+snprintf(buf, sizeof(buf), "v57 window size preset %d", preset);
 GHLSSLogLine(buf);
 }
 
@@ -6000,7 +6041,7 @@ char *action = GHLSSReadPrefsCString("gestureTripleTap");
 const char *a = action ? action : "pin";
 [self performGestureAction:a];
 if (action) free(action);
-GHLSSLogLine("v56 gesture triple tap");
+GHLSSLogLine("v57 gesture triple tap");
 }
 - (void)handleGestureSwipeVertical:(UISwipeGestureRecognizer *)recognizer {
 UIWindow *w = GHLSSWindowForView(recognizer.view);
@@ -6009,7 +6050,7 @@ char *action = GHLSSReadPrefsCString("gestureSwipeV");
 const char *a = action ? action : "dock";
 [self performGestureAction:a];
 if (action) free(action);
-GHLSSLogLine("v56 gesture swipe vertical");
+GHLSSLogLine("v57 gesture swipe vertical");
 }
 - (void)handleGestureSwipeHorizontal:(UISwipeGestureRecognizer *)recognizer {
 UIWindow *w = GHLSSWindowForView(recognizer.view);
@@ -6018,7 +6059,7 @@ char *action = GHLSSReadPrefsCString("gestureSwipeH");
 const char *a = action ? action : "close";
 [self performGestureAction:a];
 if (action) free(action);
-GHLSSLogLine("v56 gesture swipe horizontal");
+GHLSSLogLine("v57 gesture swipe horizontal");
 }
 - (void)handleGestureTwoFingerTap:(UITapGestureRecognizer *)recognizer {
 UIWindow *w = GHLSSWindowForView(recognizer.view);
@@ -6027,7 +6068,7 @@ char *action = GHLSSReadPrefsCString("gestureTwoFingerTap");
 const char *a = action ? action : "maximize";
 [self performGestureAction:a];
 if (action) free(action);
-GHLSSLogLine("v56 gesture two finger tap");
+GHLSSLogLine("v57 gesture two finger tap");
 }
 
 // v53：懸浮球三個 handler 已整個拿掉（只留一個哆啦A夢按鈕）。
@@ -6037,7 +6078,7 @@ NSInteger idx = sender.tag;
 if (idx == 99) {
 int docked = GHLSSDockAllVisibleWindows(NO);
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 taskbar dock all %d windows", docked);
+snprintf(buf, sizeof(buf), "v57 taskbar dock all %d windows", docked);
 GHLSSLogLine(buf);
 GHLSSUpdateTaskbar();
 return;
@@ -6057,7 +6098,7 @@ GHLSSUpdateTaskbar();
 - (void)openPairWithBundleIDs:(const char *)mainBid mainName:(const char *)mainName sideBid:(const char *)sideBid sideName:(const char *)sideName {
 if (!mainBid || !sideBid || !mainBid[0] || !sideBid[0]) return;
 char buf[300];
-snprintf(buf, sizeof(buf), "v56 opening pair %s + %s", mainBid, sideBid);
+snprintf(buf, sizeof(buf), "v57 opening pair %s + %s", mainBid, sideBid);
 GHLSSLogLine(buf);
 int mainIdx = GHLSSAppIndexForBundleID(mainBid);
 if (mainIdx >= 0 && GHLSSCacheWindows[mainIdx] && !GHLSSCacheWindows[mainIdx].hidden) {
@@ -6093,7 +6134,7 @@ if (GHLSSSplitPairString(lastPair, a, sizeof(a), b, sizeof(b))) {
 char nameA[128], nameB[128];
 GHLSSAppNameForBundleID(a, nameA, sizeof(nameA));
 GHLSSAppNameForBundleID(b, nameB, sizeof(nameB));
-GHLSSLogLine("v56 edge swipe opening last three screen pair");
+GHLSSLogLine("v57 edge swipe opening last three screen pair");
 free(lastPair);
 [self openPairWithBundleIDs:a mainName:nameA sideBid:b sideName:nameB];
 return;
@@ -6110,7 +6151,7 @@ if (r) { strncpy(bidBuf, r, sizeof(bidBuf) - 1); bid = bidBuf; }
 if (!bid) bid = "com.apple.calculator";
 char name[128];
 GHLSSAppNameForBundleID(bid, name, sizeof(name));
-GHLSSLogLine("v56 edge swipe opening recent app as side window");
+GHLSSLogLine("v57 edge swipe opening recent app as side window");
 GHLSSForceThreeScreenOnce = YES;
 [self launchHostedApp:bid name:name];
 }
@@ -6135,7 +6176,7 @@ char nameA[128], nameB[128];
 GHLSSAppNameForBundleID(a, nameA, sizeof(nameA));
 GHLSSAppNameForBundleID(b, nameB, sizeof(nameB));
 char buf[300];
-snprintf(buf, sizeof(buf), "v56 opening pair from settings %s + %s", a, b);
+snprintf(buf, sizeof(buf), "v57 opening pair from settings %s + %s", a, b);
 GHLSSLogLine(buf);
 [self openPairWithBundleIDs:a mainName:nameA sideBid:b sideName:nameB];
 }
@@ -6159,7 +6200,7 @@ if (cls && strstr(cls, "Keyboard")) { kbWindow = w; break; }
 if (kbWindow) break;
 }
 if (!kbWindow) {
-GHLSSLogLine("v56 keyboard drag no keyboard window (probe)");
+GHLSSLogLine("v57 keyboard drag no keyboard window (probe)");
 return;
 }
 if (kbWindow == GHLSSKeyboardDragTarget) return;
@@ -6167,7 +6208,7 @@ GHLSSKeyboardDragTarget = kbWindow;
 UIPanGestureRecognizer *drag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleKeyboardDrag:)];
 drag.delegate = self;
 [kbWindow addGestureRecognizer:drag];
-GHLSSLogLine("v56 keyboard drag attached (probe)");
+GHLSSLogLine("v57 keyboard drag attached (probe)");
 }
 
 // v54：拖外置鍵盤（探針）：跟手指移鍵盤窗，夾在屏幕內；系統隨時可能
@@ -6188,7 +6229,7 @@ if (ny > screenBounds.size.height - f.size.height) ny = screenBounds.size.height
 kbWindow.frame = CGRectMake(nx, ny, f.size.width, f.size.height);
 if (recognizer.state == UIGestureRecognizerStateEnded) {
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 keyboard dragged to %d,%d (probe)", (int)nx, (int)ny);
+snprintf(buf, sizeof(buf), "v57 keyboard dragged to %d,%d (probe)", (int)nx, (int)ny);
 GHLSSLogLine(buf);
 }
 }
@@ -6203,7 +6244,7 @@ GHLSSLogLine(buf);
 if (!GHLSSReadKeyboardAvoidEnabled()) return;
 int mode = GHLSSReadKeyboardPopupMode();
 if (mode == 1) {
-GHLSSLogLine("v56 keyboard show outer mode no shift");
+GHLSSLogLine("v57 keyboard show outer mode no shift");
 [self ghlssMaybeAttachKeyboardDrag:note];
 return;
 }
@@ -6227,7 +6268,7 @@ if (newY < minY) newY = minY;
 GHLSSHostedWindow.frame = CGRectMake(winFrame.origin.x, newY, winFrame.size.width, winFrame.size.height);
 GHLSSKeyboardShifted = YES;
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 window shifted up for keyboard %dpt mode=inner", (int)shift);
+snprintf(buf, sizeof(buf), "v57 window shifted up for keyboard %dpt mode=inner", (int)shift);
 GHLSSLogLine(buf);
 }
 - (void)handleKeyboardWillHide:(NSNotification *)note {
@@ -6237,7 +6278,7 @@ GHLSSLogLine(buf);
 // 開關無關（那個只管上移）；只認模式＋這個開關。
 if (GHLSSReadKeyboardPopupMode() == 1 && GHLSSReadCloseWindowOnExternalKeyboardHide()) {
 if (GHLSSHostedWindow && !GHLSSHostedMinimized) {
-GHLSSLogLine("v56 keyboard hide closing window (outer mode)");
+GHLSSLogLine("v57 keyboard hide closing window (outer mode)");
 [self closeHostedWindow];
 }
 return;
@@ -6245,7 +6286,7 @@ return;
 if (!GHLSSKeyboardShifted || !GHLSSHostedWindow) return;
 GHLSSHostedWindow.frame = GHLSSKeyboardSavedFrame;
 GHLSSKeyboardShifted = NO;
-GHLSSLogLine("v56 window restored after keyboard hide");
+GHLSSLogLine("v57 window restored after keyboard hide");
 }
 
 // v42：任意文字的通知橫幅（低電量收窗提示用；跟 showNotificationBannerForName
@@ -6287,7 +6328,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(duration * NSEC_PER_SE
 GHLSSNotificationBannerWindow.hidden = YES;
 });
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 notification banner text %s", text);
+snprintf(buf, sizeof(buf), "v57 notification banner text %s", text);
 GHLSSLogLine(buf);
 }
 
@@ -6297,13 +6338,13 @@ GHLSSLogLine(buf);
 - (void)handleBannerTap:(UITapGestureRecognizer *)recognizer {
 (void)recognizer;
 if (!GHLSSReadBannerOpensFloatingWindow()) {
-GHLSSLogLine("v56 banner tap ignored, switch off");
+GHLSSLogLine("v57 banner tap ignored, switch off");
 return;
 }
 for (int k = 0; k < GHLSS_APP_COUNT; k++) {
 int i = GHLSSFrontOrder[k];
 if (GHLSSCacheWindows[i] && GHLSSCacheMinimized[i] && !GHLSSCacheWindows[i].hidden) {
-GHLSSLogLine("v56 banner tap restoring peek");
+GHLSSLogLine("v57 banner tap restoring peek");
 [self promoteWindowToMainIndex:i];
 return;
 }
@@ -6315,14 +6356,14 @@ if (bid && bid[0] != '\0') {
 char name[128];
 GHLSSAppNameForBundleID(bid, name, sizeof(name));
 char buf[192];
-snprintf(buf, sizeof(buf), "v56 banner tap reopening %s", bid);
+snprintf(buf, sizeof(buf), "v57 banner tap reopening %s", bid);
 GHLSSLogLine(buf);
 [self launchHostedApp:bid name:name];
 return;
 }
 }
 }
-GHLSSLogLine("v56 banner tap no window to open");
+GHLSSLogLine("v57 banner tap no window to open");
 }
 
 // v54 (b)：從橫幅窗認是哪個 App（探針）：(1) rootViewController 的
@@ -6413,7 +6454,7 @@ GHLSSSystemBannerSeen = YES;
 char bid[128] = {0};
 if (GHLSSBannerAppForWindow(bannerWin, bid, sizeof(bid))) {
 char buf[256];
-snprintf(buf, sizeof(buf), "v56 system banner for %s, opening window (probe)", bid);
+snprintf(buf, sizeof(buf), "v57 system banner for %s, opening window (probe)", bid);
 GHLSSLogLine(buf);
 if (GHLSSLauncherShared) {
 char name[128];
@@ -6421,7 +6462,7 @@ GHLSSAppNameForBundleID(bid, name, sizeof(name));
 [GHLSSLauncherShared launchHostedApp:bid name:name];
 }
 } else {
-GHLSSLogLine("v56 system banner appeared, app unknown (probe)");
+GHLSSLogLine("v57 system banner appeared, app unknown (probe)");
 }
 } else if (!bannerWin) {
 GHLSSSystemBannerSeen = NO;
@@ -6473,7 +6514,7 @@ if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, new
 if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
 if (recognizer.state == UIGestureRecognizerStateEnded) {
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v56 window resized to %dx%d", (int)newW, (int)newH);
+snprintf(rbuf, sizeof(rbuf), "v57 window resized to %dx%d", (int)newW, (int)newH);
 GHLSSLogLine(rbuf);
 [self resizeHostedSceneToContentSize:CGSizeMake(newW, newH)];
 // v40：调尺寸结束存一次位置/大小/缩放（第 6 项）——下次开同一 App
@@ -6502,7 +6543,7 @@ CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGRect frame = GHLSSHostedWindow.frame;
 if (recognizer.state == UIGestureRecognizerStateBegan) {
 char bbuf[128];
-snprintf(bbuf, sizeof(bbuf), "v56 peek resize start %s %dx%d", GHLSSCacheBundleIDs[idx], (int)frame.size.width, (int)frame.size.height);
+snprintf(bbuf, sizeof(bbuf), "v57 peek resize start %s %dx%d", GHLSSCacheBundleIDs[idx], (int)frame.size.width, (int)frame.size.height);
 GHLSSLogLine(bbuf);
 }
 CGFloat fullW, fullH;
@@ -6534,12 +6575,12 @@ BOOL ended = (recognizer.state == UIGestureRecognizerStateEnded);
 BOOL cancelled = (recognizer.state == UIGestureRecognizerStateCancelled);
 if (!ended && !cancelled) return;
 char ebuf[128];
-snprintf(ebuf, sizeof(ebuf), "v56 peek resize end %s %dx%d", GHLSSCacheBundleIDs[idx], (int)newW, (int)newH);
+snprintf(ebuf, sizeof(ebuf), "v57 peek resize end %s %dx%d", GHLSSCacheBundleIDs[idx], (int)newW, (int)newH);
 GHLSSLogLine(ebuf);
 if (ended && newW >= fullW * 0.8 && newH >= fullH * 0.8) {
 // 放手時已接近滿窗 → 直接升為大窗（恢復到存過的滿窗尺寸；帶到最前時
 // 中央規則把剛才的大窗縮成 peek，來回切就這麼換）。
-GHLSSLogLine("v56 peek resized to full, promoting to main");
+GHLSSLogLine("v57 peek resized to full, promoting to main");
 [self restoreHostedWindow];
 return;
 }
@@ -6559,18 +6600,18 @@ if (!GHLSSHostedScene) return;
 // presenterView 的 bounds + sublayerTransform，0.05 秒防抖后推
 // 新 frame（= 新内容尺寸 ÷ scale）+ 重设安全区 insets（第 3 项）。
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 scene resized %d,%d", (int)size.width, (int)size.height);
+snprintf(buf, sizeof(buf), "v57 scene resized %d,%d", (int)size.width, (int)size.height);
 GHLSSLogLine(buf);
 GHLSSApplyScaleToHostedWindow(YES);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v56 scene resize failed");
+GHLSSLogLine("v57 scene resize failed");
 }
 }
 
 
 - (void)handleBackgroundTap:(UITapGestureRecognizer *)recognizer {
-GHLSSLogLine("v56 background tapped, dismissing launcher");
+GHLSSLogLine("v57 background tapped, dismissing launcher");
 [self dismissLauncher];
 }
 
@@ -6579,21 +6620,21 @@ GHLSSLogLine("v56 background tapped, dismissing launcher");
 // userInteractionEnabled 是 NO）。
 - (void)handleLauncherOverlayTap:(UITapGestureRecognizer *)recognizer {
 (void)recognizer;
-GHLSSLogLine("v56 launcher overlay tapped, dismissing");
+GHLSSLogLine("v57 launcher overlay tapped, dismissing");
 [self dismissLauncher];
 }
 
 - (void)showLauncher {
 // v53：分屏關著時 ARC 不再觸發（開關關了就真的停用）。
 if (!GHLSSReadEnabled()) {
-GHLSSLogLine("v56 launcher blocked, splitscreen disabled");
+GHLSSLogLine("v57 launcher blocked, splitscreen disabled");
 return;
 }
 // v54 F／G：開 ARC 前先按 prefs 槽位重載 App 清單（設定頁剛選的 App
 // 立刻看得到；dylib 記憶體的清單只在啟動時載過，否則是 stale 的）。
 GHLSSLoadCustomApps();
 if (GHLSSLauncherVisible) {
-GHLSSLogLine("v56 launcher already open");
+GHLSSLogLine("v57 launcher already open");
 return;
 }
 // v40：每次打开都重建（设定页的 App 开关、左右位置可能改了，重建
@@ -6608,7 +6649,7 @@ GHLSSUpdateStripPosition();
 GHLSSLauncherBackdropWindow.hidden = NO;
 GHLSSLauncherWindow.hidden = NO;
 GHLSSLauncherVisible = YES;
-GHLSSLogLine("v56 launcher opened");
+GHLSSLogLine("v57 launcher opened");
 // v41：叫出 ARC 時給一下震動（ARC 設置的震動反饋開關，預設開）。
 if (GHLSSReadARCHaptics()) {
 @try {
@@ -6625,7 +6666,7 @@ if (!GHLSSLauncherVisible) return;
 GHLSSLauncherWindow.hidden = YES;
 if (GHLSSLauncherBackdropWindow) GHLSSLauncherBackdropWindow.hidden = YES;
 GHLSSLauncherVisible = NO;
-GHLSSLogLine("v56 launcher dismissed");
+GHLSSLogLine("v57 launcher dismissed");
 }
 
 
@@ -6661,9 +6702,9 @@ GHLSSLauncherWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *launcherScene = GHLSSActiveWindowScene();
 if (launcherScene) {
 GHLSSLauncherWindow.windowScene = launcherScene;
-GHLSSLogLine("v56 launcher scene found");
+GHLSSLogLine("v57 launcher scene found");
 } else {
-GHLSSLogLine("v56 launcher scene nil");
+GHLSSLogLine("v57 launcher scene nil");
 }
 UIViewController *launcherVC = [[UIViewController alloc] init];
 UIView *contentView = [[UIView alloc] initWithFrame:screenBounds];
@@ -6675,7 +6716,7 @@ launcherVC.view = contentView;
 GHLSSLauncherContentView = contentView;
 GHLSSLauncherWindow.rootViewController = launcherVC;
 [self rebuildARCContent];
-GHLSSLogLine("v56 launcher built");
+GHLSSLogLine("v57 launcher built");
 }
 
 //（每次打開、置頂變了、選完 App 後都調）：v55——啟動器只剩 App 圖標
@@ -6727,14 +6768,14 @@ NSMutableArray *ordered = [NSMutableArray array];
 [ordered addObjectsFromArray:recentInLauncher];
 [ordered addObjectsFromArray:allRest];
 if ([ordered count] == 0) {
-GHLSSLogLine("v56 launcher no apps");
+GHLSSLogLine("v57 launcher no apps");
 return;
 }
 // v56：扇形末尾加一顆三屏工具圖標（跟 App 圖標一樣沿弧排布；
 // 不是 1.0.55 刪掉的四行——那四行不恢復）。
 [ordered addObject:[NSString stringWithCString:"GHLSS_THREE_SCREEN_TOOL" encoding:NSUTF8StringEncoding]];
 [self addARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
-GHLSSLogLine("v56 launcher icons only");
+GHLSSLogLine("v57 launcher icons only");
 }
 
 
@@ -6854,7 +6895,7 @@ if (bottom > maxBottom) maxBottom = bottom;
 }
 }
 char buf[192];
-snprintf(buf, sizeof(buf), "v56 arc layers=%d icons=%d effLayers=%d side=%s anchorY=%d", L, (int)N, E, slideLeft ? "left" : "right", (int)cy);
+snprintf(buf, sizeof(buf), "v57 arc layers=%d icons=%d effLayers=%d side=%s anchorY=%d", L, (int)N, E, slideLeft ? "left" : "right", (int)cy);
 GHLSSLogLine(buf);
 return maxBottom + 12.0;
 }
@@ -6931,7 +6972,7 @@ return btn;
 
 - (void)handleARCThreeScreenToolButton:(UIButton *)sender {
 (void)sender;
-GHLSSLogLine("v56 arc three screen tool tapped");
+GHLSSLogLine("v57 arc three screen tool tapped");
 [self dismissLauncher];
 [self openThreeScreenFromEdge];
 }
@@ -6969,7 +7010,7 @@ char text[192];
 snprintf(text, sizeof(text), "已打開 %s", name);
 [self showNotificationBannerWithText:text];
 char buf[192];
-snprintf(buf, sizeof(buf), "v56 notification banner %s", name);
+snprintf(buf, sizeof(buf), "v57 notification banner %s", name);
 GHLSSLogLine(buf);
 }
 
@@ -6981,11 +7022,11 @@ GHLSSLogLine(buf);
 (void)note;
 BOOL captured = [UIScreen mainScreen].isCaptured;
 char buf[64];
-snprintf(buf, sizeof(buf), "v56 screen capture changed %d", captured ? 1 : 0);
+snprintf(buf, sizeof(buf), "v57 screen capture changed %d", captured ? 1 : 0);
 GHLSSLogLine(buf);
 if (captured && GHLSSReadARCHideOnScreenshot() && GHLSSLauncherVisible) {
 [self dismissLauncher];
-GHLSSLogLine("v56 arc hidden for screen capture");
+GHLSSLogLine("v57 arc hidden for screen capture");
 }
 }
 
@@ -7001,10 +7042,10 @@ if (!GHLSSHostedIsSideDock) return;
 if (recognizer.state == UIGestureRecognizerStateBegan) {
 GHLSSDividerDragDisabled = !GHLSSReadSideWindowGestures();
 if (GHLSSDividerDragDisabled) {
-GHLSSLogLine("v56 divider drag disabled");
+GHLSSLogLine("v57 divider drag disabled");
 return;
 }
-GHLSSLogLine("v56 divider dragged");
+GHLSSLogLine("v57 divider dragged");
 }
 if (GHLSSDividerDragDisabled) return;
 CGPoint point = [recognizer translationInView:divWindow];
@@ -7038,7 +7079,7 @@ GHLSSHostedSideDivider.frame = CGRectMake(divX, 0, divThickness, newH);
 if (recognizer.state == UIGestureRecognizerStateEnded) {
 CGFloat divX = dockLeft ? (newW - GHLSSHostedSideDividerThickness) : 0;
 char rbuf[192];
-snprintf(rbuf, sizeof(rbuf), "v56 divider resized side window to %dx%d@%d divX=%d", (int)newW, (int)newH, (int)newX, (int)divX);
+snprintf(rbuf, sizeof(rbuf), "v57 divider resized side window to %dx%d@%d divX=%d", (int)newW, (int)newH, (int)newX, (int)divX);
 GHLSSLogLine(rbuf);
 [self resizeHostedSceneToContentSize:CGSizeMake(newW, newH)];
 if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) {
@@ -7057,7 +7098,7 @@ GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 // 寫緩存檔，這裡只讀緩存（見 GHLSSRefreshInstalledAppListInBackground）。
 - (void)showAppPicker {
 if (GHLSSAppPickerWindow && !GHLSSAppPickerWindow.hidden) {
-GHLSSLogLine("v56 app picker already open");
+GHLSSLogLine("v57 app picker already open");
 return;
 }
 CGRect screenBounds = [UIScreen mainScreen].bounds;
@@ -7147,7 +7188,7 @@ GHLSSAppPickerCount++;
 scroll.contentSize = CGSizeMake(screenBounds.size.width, y);
 GHLSSAppPickerWindow.hidden = NO;
 char buf[128];
-snprintf(buf, sizeof(buf), "v56 app picker opened %d apps", GHLSSAppPickerCount);
+snprintf(buf, sizeof(buf), "v57 app picker opened %d apps", GHLSSAppPickerCount);
 GHLSSLogLine(buf);
 }
 
@@ -7155,7 +7196,7 @@ GHLSSLogLine(buf);
 - (void)dismissAppPicker {
 if (GHLSSAppPickerWindow) GHLSSAppPickerWindow.hidden = YES;
 [self rebuildARCContent];
-GHLSSLogLine("v56 app picker closed");
+GHLSSLogLine("v57 app picker closed");
 }
 
 // v41：選 App 頁的完成鈕。
@@ -7174,7 +7215,7 @@ const char *bid = GHLSSAppPickerBids[row];
 BOOL on = sender.on;
 if (!GHLSSSetAppInLauncher(bid, on)) {
 sender.on = NO;
-GHLSSLogLine("v56 app picker full, switch reverted");
+GHLSSLogLine("v57 app picker full, switch reverted");
 return;
 }
 [self rebuildARCContent];
@@ -7189,13 +7230,17 @@ return;
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
 dispatch_get_main_queue(), ^{
 // 延后步骤（启动完成 5 秒后，主队列）：
-// 1) 寫日誌（v56：插件開關已取消，裝上就一直啟用，不再讀 enabled 鍵）；
+// 1) 寫日誌（v57：開關加回來，讀 enabled 鍵；預設關——裝完要自己去開）；
 // 2) 建右边缘感应带（24pt 宽透明窗），带子是自己写的普通视图，
 //    写日志；
 // 3) 感应带上挂右边缘滑动手势；哆啦A夢鈕单独一个 56x56 的小窗
 //    （右边缘、竖直居中，图从 prefs bundle 里读）。
 // 不登记通知、不建 FBScene、不 hook。
-GHLSSLogLine("v56 deferred setup ran, always-on");
+{
+char dbuf[64];
+snprintf(dbuf, sizeof(dbuf), "v57 deferred setup ran, enabled=%d", (int)GHLSSReadEnabled());
+GHLSSLogLine(dbuf);
+}
 // v53：啟動時自愈一次——清掉已存幾何裡的側窗尺寸（207x827／124x827 這類）。
 GHLSSHealStoredGeometryOnce();
 // v41：自選 App 槽位從 prefs 讀進來（ARC 第一次打開就看得到）；
@@ -7215,9 +7260,9 @@ GHLSSStripWindow.backgroundColor = [UIColor clearColor];
 UIWindowScene *stripScene = GHLSSActiveWindowScene();
 if (stripScene) {
 GHLSSStripWindow.windowScene = stripScene;
-GHLSSLogLine("v56 window scene found");
+GHLSSLogLine("v57 window scene found");
 } else {
-GHLSSLogLine("v56 window scene nil");
+GHLSSLogLine("v57 window scene nil");
 }
 UIViewController *stripVC = [[UIViewController alloc] init];
 GHLSSPlainStripView *stripView = [[GHLSSPlainStripView alloc] initWithFrame:CGRectMake(0, 0, stripWidth, screenBounds.size.height)];
@@ -7225,14 +7270,14 @@ stripView.backgroundColor = [UIColor clearColor];
 stripVC.view = stripView;
 GHLSSStripWindow.rootViewController = stripVC;
 GHLSSStripWindow.hidden = NO;
-GHLSSLogLine("v56 edge strip built");
+GHLSSLogLine("v57 edge strip built");
 // 诊断日志：窗与带子到底是什么状态（真机一看就知道上没上屏）。
 char dbuf[256];
 CGRect wf = GHLSSStripWindow.frame;
-snprintf(dbuf, sizeof(dbuf), "v56 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
+snprintf(dbuf, sizeof(dbuf), "v57 window frame=%d,%d,%d,%d hidden=%d scene=%s", (int)wf.origin.x, (int)wf.origin.y, (int)wf.size.width, (int)wf.size.height, GHLSSStripWindow.hidden ? 1 : 0, GHLSSStripWindow.windowScene ? "ok" : "nil");
 GHLSSLogLine(dbuf);
 CGRect sf = stripView.frame;
-snprintf(dbuf, sizeof(dbuf), "v56 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v57 strip frame=%d,%d,%d,%d", (int)sf.origin.x, (int)sf.origin.y, (int)sf.size.width, (int)sf.size.height);
 GHLSSLogLine(dbuf);
 // 5.1 的处理器（唯一的自定义处理类）。
 GHLSSLauncherShared = [[GHLSSLauncher alloc] init];
@@ -7242,7 +7287,7 @@ edgePan.edges = UIRectEdgeRight;
 edgePan.delegate = GHLSSLauncherShared;
 [stripView addGestureRecognizer:edgePan];
 GHLSSLauncherEdgePan = edgePan;
-GHLSSLogLine("v56 edge gesture added");
+GHLSSLogLine("v57 edge gesture added");
 // v40：感应带跟小窗位置设定走（初始位置按设定放；设定改了，下次开
 // 启动器时 showLauncher 会再调 GHLSSUpdateStripPosition 跟到对的边）。
 GHLSSUpdateStripPosition();
@@ -7276,7 +7321,7 @@ UIWindowScene *doraemonScene = GHLSSActiveWindowScene();
 if (doraemonScene) {
 GHLSSDoraemonButtonWindow.windowScene = doraemonScene;
 } else {
-GHLSSLogLine("v56 doraemon scene nil");
+GHLSSLogLine("v57 doraemon scene nil");
 }
 UIViewController *doraemonVC = [[UIViewController alloc] init];
 UIView *doraemonRoot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, doraemonSize, doraemonSize)];
@@ -7298,7 +7343,7 @@ if (screenScale > 0) {
 doraemonImage = [UIImage imageWithCGImage:doraemonImage.CGImage scale:screenScale orientation:doraemonImage.imageOrientation];
 }
 [doraemonButton setImage:doraemonImage forState:UIControlStateNormal];
-GHLSSLogLine("v56 doraemon image loaded");
+GHLSSLogLine("v57 doraemon image loaded");
 } else {
 // 退回金色圆钮 + 「分」字（图读不到时不空白、不崩）。
 doraemonButton.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
@@ -7307,7 +7352,7 @@ doraemonButton.layer.borderColor = [UIColor blackColor].CGColor;
 [doraemonButton setTitle:[NSString stringWithCString:"分" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
 [doraemonButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
 doraemonButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-GHLSSLogLine("v56 doraemon image missing, fallback to gold");
+GHLSSLogLine("v57 doraemon image missing, fallback to gold");
 }
 // v41：單擊開 ARC、雙擊輪切主窗（代替原來的 TouchUpInside：單擊手勢
 // 要等雙擊失敗才認，雙擊時不誤開 ARC；見 handleDoraemonButtonSingleTap /
@@ -7346,15 +7391,15 @@ GHLSSAppliedDoraemonSize = doraemonSize;
 GHLSSAppliedDoraemonLeft = GHLSSIsDoraemonSideLeft();
 // v52：鈕永遠顯示（顯示開關已取消）。
 GHLSSDoraemonButtonWindow.hidden = NO;
-GHLSSLogLine("v56 doraemon button added");
+GHLSSLogLine("v57 doraemon button added");
 CGRect bf = doraemonButton.frame;
-snprintf(dbuf, sizeof(dbuf), "v56 doraemon button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
+snprintf(dbuf, sizeof(dbuf), "v57 doraemon button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
 GHLSSLogLine(dbuf);
 // v41：錄屏開始時藏 ARC（NSNotificationCenter，不是被禁的
 // CFNotificationCenterAddObserver；截圖藏不了——通知在截圖完成後才發，
 // 見 §113）。
 [[NSNotificationCenter defaultCenter] addObserver:GHLSSLauncherShared selector:@selector(handleScreenCaptureChanged:) name:UIScreenCapturedDidChangeNotification object:nil];
-GHLSSLogLine("v56 screen capture observer added");
+GHLSSLogLine("v57 screen capture observer added");
 // v32：锁屏信号——libnotify 的 notify_register_dispatch（<notify.h>，
 // 纯 C API，传 C 字串）。这不是被禁的 CFNotificationCenterAddObserver，
 // 不碰 CFString，回调跑在主队列。v31 的做法（锁了且有 hosted scene
@@ -7383,21 +7428,21 @@ BOOL anyScene = NO;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (GHLSSCacheScenes[i]) {
 anyScene = YES;
-GHLSSBackgroundCachedSceneAtIndex(i, "v56 scene backgrounded on lock");
+GHLSSBackgroundCachedSceneAtIndex(i, "v57 scene backgrounded on lock");
 }
 if (GHLSSCacheWindows[i] && !GHLSSCacheMinimized[i] && !GHLSSCacheWindows[i].hidden) {
 GHLSSCacheWindows[i].hidden = YES;
 GHLSSCacheHiddenByLock[i] = YES;
 if (i == GHLSSActiveAppIndex) GHLSSHostedHiddenByLock = YES;
 char hbuf[128];
-snprintf(hbuf, sizeof(hbuf), "v56 hosted window hidden on lock %s", GHLSSCacheBundleIDs[i]);
+snprintf(hbuf, sizeof(hbuf), "v57 hosted window hidden on lock %s", GHLSSCacheBundleIDs[i]);
 GHLSSLogLine(hbuf);
 } else if (GHLSSCacheWindows[i]) {
-GHLSSLogLine("v56 lock, window already minimized");
+GHLSSLogLine("v57 lock, window already minimized");
 }
 }
 if (!anyScene) {
-GHLSSLogLine("v56 lock state locked, no hosted scene");
+GHLSSLogLine("v57 lock state locked, no hosted scene");
 }
 GHLSSUpdateDimOverlay();
 } else {
@@ -7413,36 +7458,36 @@ GHLSSCacheHiddenByLock[i] = NO;
 if (i == GHLSSActiveAppIndex) GHLSSHostedHiddenByLock = NO;
 anyRestored = YES;
 char hbuf[128];
-snprintf(hbuf, sizeof(hbuf), "v56 hosted window shown on unlock %s", GHLSSCacheBundleIDs[i]);
+snprintf(hbuf, sizeof(hbuf), "v57 hosted window shown on unlock %s", GHLSSCacheBundleIDs[i]);
 GHLSSLogLine(hbuf);
 }
 if (GHLSSCacheScenes[i]) {
 char fbuf[160];
-snprintf(fbuf, sizeof(fbuf), "v56 foreground pushed on unlock %s", GHLSSCacheBundleIDs[i]);
+snprintf(fbuf, sizeof(fbuf), "v57 foreground pushed on unlock %s", GHLSSCacheBundleIDs[i]);
 GHLSSPushForegroundCachedSceneAtIndex(i, fbuf);
 anyRestored = YES;
 }
 }
 if (!anyRestored) {
-GHLSSLogLine("v56 lock state unlocked");
+GHLSSLogLine("v57 lock state unlocked");
 }
 GHLSSUpdateDimOverlay();
 }
 });
 if (lockNotifyResult == 0) {
-GHLSSLogLine("v56 lockstate notify registered");
+GHLSSLogLine("v57 lockstate notify registered");
 } else {
-GHLSSLogLine("v56 lockstate notify register failed");
+GHLSSLogLine("v57 lockstate notify register failed");
 }
 // v42：鍵盤監聽（NSNotificationCenter，不是被禁的
 // CFNotificationCenterAddObserver；探針：鍵盤通知由 App 行程發，
 // 可能到不了 SpringBoard——邏輯已寫好，收到了就上移、收起回原位）。
 [[NSNotificationCenter defaultCenter] addObserver:GHLSSLauncherShared selector:@selector(handleKeyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
 [[NSNotificationCenter defaultCenter] addObserver:GHLSSLauncherShared selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
-GHLSSLogLine("v56 keyboard observers added");
+GHLSSLogLine("v57 keyboard observers added");
 // v42：電量監控開（低電量自動收窗讀 batteryLevel 用）。
 [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
-GHLSSLogLine("v56 battery monitoring enabled");
+GHLSSLogLine("v57 battery monitoring enabled");
 // v42：底部任務欄——開關開著就建（2 秒 tick 也會補建，
 // 所以設定改了不用 respring；v53：懸浮球已整個拿掉）。
 if (GHLSSReadTaskbarEnabled()) GHLSSBuildTaskbarIfNeeded();
@@ -7457,7 +7502,7 @@ NSArray *restoreList = GHLSSReadIDList("restoreWindows");
 NSInteger restoreCount = (NSInteger)[restoreList count];
 if (restoreCount > 0) {
 char rbuf[128];
-snprintf(rbuf, sizeof(rbuf), "v56 restore after respring %d windows", (int)restoreCount);
+snprintf(rbuf, sizeof(rbuf), "v57 restore after respring %d windows", (int)restoreCount);
 GHLSSLogLine(rbuf);
 for (NSInteger ri = 0; ri < restoreCount; ri++) {
 NSString *entry = [restoreList objectAtIndex:ri];
@@ -7470,7 +7515,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC))
 char nameBuf[128];
 GHLSSAppNameForBundleID([bid UTF8String], nameBuf, sizeof(nameBuf));
 char nbuf[192];
-snprintf(nbuf, sizeof(nbuf), "v56 restore launch %s", [bid UTF8String]);
+snprintf(nbuf, sizeof(nbuf), "v57 restore launch %s", [bid UTF8String]);
 GHLSSLogLine(nbuf);
 [GHLSSLauncherShared launchHostedApp:[bid UTF8String] name:nameBuf];
 });
@@ -7482,6 +7527,6 @@ GHLSSLogLine(nbuf);
 // v53：啟用開關跟進一次（關著就藏鈕／收窗／藏感應帶；開著恢復正常）。
 GHLSSApplyEnabledState();
 GHLSSSchedulePeriodicTick();
-GHLSSLogLine("v56 periodic tick scheduled");
+GHLSSLogLine("v57 periodic tick scheduled");
 });
 }
