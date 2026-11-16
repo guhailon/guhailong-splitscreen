@@ -1,4 +1,25 @@
-// GuHaiLongSplitScreen v1.0.65 (v42.23) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.67 (v42.25) — 顾海龙集团原创分屏插件（实验版）
+//
+// ── v42.25 (1.0.67)：皇上 2026-11-16 19:59 挑 A ──
+// 浮窗底部黑邊：主窗容器／內容區底色本來就是黑色；layer-host 路內容按寬
+// 等比縮（346/414≈0.836），高只剩 749，比窗 769 矮 20pt，貼左上對齊，
+// 黑條全在底部。A：窗改成 346×749（寬高比和屏幕 414×896 一致，內容正好
+// 填滿，完全沒黑邊；窗只矮 20pt）。計算器 320×693 早就是按屏幕比例算
+// 的，一致。本版包含 1.0.66 的兩項修法（拖動跟手＋鎖屏不推後台），
+// 1.0.66 不用單獨推，直接推 1.0.67。
+//
+// ── v42.24 (1.0.66)：皇上 2026-11-16 19:53 真機測 ──
+// (1) 恢復很順很快了 ✓（1.0.65 的動畫＋延後有效）。
+// (2) 小浮窗往下滑不跟手，好像要貼著邊才可以關：1.0.65 的 bug——
+// translationInView:w 量位移，w 是小窗自己（跟著手指走），量出來的
+// 位移被窗的移動吃掉，拖了不跟手、只有快甩才關得了。改拿固定不動的
+// 邊條窗（GHLSSStripWindow）當參考座標量手指位置，窗跟著手指走才準；
+// 閾值不變（≥60pt 或 ≥700pt/s 關，否則彈回）。
+// (3) 鎖屏後密碼可以按了，不卡 ✓（1.0.65 藏小卡有效）。
+// (4) 黑 peek 會亮回來，但皇上要全程不黑屏：鎖屏不再把 scene 推回後台
+// （鎖後黑的主因）；窗還是藏起來，密碼修法不動。代價是鎖屏時 App 進程
+// 還在跑，會多耗點電；鎖很久系統自己掛起／殺掉進程的話還是會黑，
+// 那時看門狗／恢復延後會把它推回來，關掉重開也行。解鎖推前景保留。
 //
 // ── v42.23 (1.0.65)：皇上 2026-11-16 15:23 真機測＋15:39 補充 ──
 // (1) 點小浮窗變主窗慢＋不順：恢復改 0.25 秒 ease-out 動畫（peek 位置長到
@@ -1378,8 +1399,8 @@ GHLSSLogLine("v57 scene destroyed");
 }
 
 // v53：GHLSSBackgroundHostedScene 已刪（關窗後不再把 scene 推後台，
-// 唯一呼叫處是 closeHostedWindow；鎖屏推後台走另一函數
-// GHLSSBackgroundCachedSceneAtIndex，不動）。
+// 唯一呼叫處是 closeHostedWindow）。v66：鎖屏推後台的
+// GHLSSBackgroundCachedSceneAtIndex 也刪了（全程不黑屏，鎖屏不再推後台）。
 
 // v38：悬浮窗的尺寸——没有标题栏了，内容区就是整个窗；圆角 35。
 // 一般 App 内容 350x757（85% 宽，757 是按屏高宽比算的：350/414×
@@ -1398,8 +1419,11 @@ GHLSSLogLine("v57 scene destroyed");
 // v63：浮窗固定尺寸——皇上 2026-11-16 照片裡百度貼吧浮窗量到約 346×769pt
 //（窗寬佔屏寬 0.836、窗高佔屏高 0.858，iPhone 11 邏輯尺寸 414×896；
 // 透視誤差 ±10pt）。一律開這個尺寸，拉大拉小後續再做。
+// v67：窗高改 749（皇上 2026-11-16 挑 A：346×769 的寬高比和屏幕
+// 414×896 對不上，內容按寬等比縮後高只剩 749，底部露 20pt 黑底；
+// 改成 346×749，寬高佔屏都是 0.836，內容正好填滿）。
 #define GHLSS_FIXED_WINDOW_W 346.0
-#define GHLSS_FIXED_WINDOW_H 769.0
+#define GHLSS_FIXED_WINDOW_H 749.0
 // v41：圓角改走設定（cornerRadius，預設 35；上面三處已改讀設定）。
 
 // v40：多窗层级（锁屏 2000 之下）：宿主窗基础 Alert - 2（1998）、
@@ -1517,7 +1541,8 @@ static CGFloat GHLSSGameSavedPosCY[GHLSS_APP_COUNT];
 static BOOL GHLSSGameSavedPosValid[GHLSS_APP_COUNT];
 
 // v63：某 App 的預設浮窗尺寸——固定尺寸（皇上 2026-11-16：照片量到約
-// 346×769pt，透視誤差 ±10pt；拉大拉小後續再做）。一律開這個尺寸，不再
+// 346×769pt，透視誤差 ±10pt；拉大拉小後續再做；v67 改 346×749，見上面）。
+// 一律開這個尺寸，不再
 // 讀 windowSizePreset（設定頁那行已藏起來）。例外：計算器永遠自己的
 // 320×693（內容就是窗）；三屏側窗不走這裡（自己算寬）。橫屏：寬高對調
 // 再夾進屏幕（沿用 v56 遊戲模式的橫屏邏輯，現在不分遊戲模式都適用）。
@@ -2754,26 +2779,8 @@ int pid = handle ? [handle pid] : 0;
 return (pid > 0 && pid == GHLSSCachePids[idx]);
 }
 
-// v40：把缓存第 idx 项的 scene 推回后台（锁屏时全窗循环用；和
-// v53 前的 GHLSSBackgroundHostedScene 同款，只是不动活动量）。
-static void GHLSSBackgroundCachedSceneAtIndex(int idx, const char *logLine) {
-if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
-FBScene *scene = GHLSSCacheScenes[idx];
-if (!scene) return;
-@try {
-[scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
-settings.foreground = NO;
-if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
-settings.backgrounded = YES;
-}
-}];
-GHLSSLogLine(logLine);
-} @catch (NSException *e) {
-(void)e;
-GHLSSLogLine("v57 scene background failed");
-}
-}
-
+// v66：GHLSSBackgroundCachedSceneAtIndex 已刪（全程不黑屏——鎖屏不再把
+// scene 推回後台，唯一呼叫處鎖屏回調已拿掉；-Werror 不許留著不用）。
 // v40：把缓存第 idx 项的 scene 推回前景（解锁时全窗循环用；
 // v39 的解锁推前景只管活动窗一个，v40 扩展到全部开着的窗）。
 static void GHLSSPushForegroundCachedSceneAtIndex(int idx, const char *logLine) {
@@ -3204,11 +3211,11 @@ settings.backgrounded = NO;
 }
 }];
 char pbuf[256];
-snprintf(pbuf, sizeof(pbuf), "v65 peek foreground pushed %s", GHLSSCacheBundleIDs[idx]);
+snprintf(pbuf, sizeof(pbuf), "v67 peek foreground pushed %s", GHLSSCacheBundleIDs[idx]);
 GHLSSLogLine(pbuf);
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v65 peek foreground push failed");
+GHLSSLogLine("v67 peek foreground push failed");
 }
 }
 }
@@ -3498,7 +3505,7 @@ if (GHLSSIsWindowPinned(GHLSSCacheBundleIDs[i])) continue;
 GHLSSLoadCacheToActive(i);
 [GHLSSLauncherShared closeHostedWindow];
 char buf[256];
-snprintf(buf, sizeof(buf), "v65 game cleared background %s", GHLSSCacheBundleIDs[i]);
+snprintf(buf, sizeof(buf), "v67 game cleared background %s", GHLSSCacheBundleIDs[i]);
 GHLSSLogLine(buf);
 }
 }
@@ -3538,7 +3545,7 @@ GHLSSWritePrefsDouble(key, (double)c.x);
 GHLSSGameWindowPosKey(GHLSSGameActiveBid, winBid, "CY", key, sizeof(key));
 GHLSSWritePrefsDouble(key, (double)c.y);
 char buf[256];
-snprintf(buf, sizeof(buf), "v65 game window pos saved %s %s center %d,%d", GHLSSGameActiveBid, winBid, (int)c.x, (int)c.y);
+snprintf(buf, sizeof(buf), "v67 game window pos saved %s %s center %d,%d", GHLSSGameActiveBid, winBid, (int)c.x, (int)c.y);
 GHLSSLogLine(buf);
 }
 static BOOL GHLSSRestoreGameWindowPos(const char *gameBid, const char *winBid, CGFloat *outCX, CGFloat *outCY) {
@@ -4000,7 +4007,7 @@ if (pcy < minCY) pcy = minCY;
 if (pcy > maxCY) pcy = maxCY;
 GHLSSHostedWindow.center = CGPointMake(pcx, pcy);
 GHLSSSaveGeometryForIndex(idx);
-GHLSSLogLine("v65 game window pos restored on exit");
+GHLSSLogLine("v67 game window pos restored on exit");
 }
 }
 }
@@ -4060,12 +4067,12 @@ if (!scene || !w || w.hidden) continue;
 NSUInteger cs = [scene contentState];
 if (cs != 2) {
 char wbuf[256];
-snprintf(wbuf, sizeof(wbuf), "v65 peek watchdog foreground pushed %s contentState=%lu", GHLSSCacheBundleIDs[i], (unsigned long)cs);
+snprintf(wbuf, sizeof(wbuf), "v67 peek watchdog foreground pushed %s contentState=%lu", GHLSSCacheBundleIDs[i], (unsigned long)cs);
 GHLSSPushForegroundCachedSceneAtIndex(i, wbuf);
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v65 peek watchdog check failed");
+GHLSSLogLine("v67 peek watchdog check failed");
 }
 }
 }
@@ -4373,9 +4380,16 @@ GHLSSLogLine("v57 docked peek tapped");
 // 的往下滑手勢觸發，徹底關掉這個窗（不再回來）。窗藏起來、peek 收掉、
 // scene 留著不銷毀（v35 規則）；別的窗不受影響。下次從啟動器重開這個
 // App，直接復用緩存裡的 scene。
-// v65：小浮窗往下滑取消的拖動跟手實現（見上面創建處註解）。拖動狀態記在
+// v66：小浮窗往下滑取消的拖動跟手實現（見上面創建處註解）。拖動狀態記在
 // 靜態量裡（一次只會拖一張小卡；點按不動手指不觸發 pan，照舊恢復主窗）。
+// v66 修 1.0.65 的跟手 bug：原來用 translationInView:w 量位移，w 是小窗
+// 自己（跟著手指走），量出來的位移會被窗的移動吃掉，拖了不跟手、只有
+// 快甩才關得了（皇上：要貼著邊才可以關）。改拿固定不動的邊條窗
+// （GHLSSStripWindow，390,0,24,896）當參考座標，手指位置每輪都量在它
+// 上面，窗跟著手指走才準。
 static CGPoint GHLSSPeekPanStartCenter = {0, 0};
+static CGPoint GHLSSPeekPanStartPoint = {0, 0};
+static CGFloat GHLSSPeekPanTotalDy = 0;
 static int GHLSSPeekPanIdx = -1;
 - (void)handleDockPeekPan:(UIPanGestureRecognizer *)recognizer {
 UIView *v = recognizer.view;
@@ -4384,13 +4398,21 @@ NSInteger idx = v.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 UIWindow *w = GHLSSCacheWindows[idx];
 if (!w) return;
+UIView *refView = GHLSSStripWindow ? (UIView *)GHLSSStripWindow : w;
 if (recognizer.state == UIGestureRecognizerStateBegan) {
 GHLSSPeekPanIdx = (int)idx;
 GHLSSPeekPanStartCenter = w.center;
+GHLSSPeekPanTotalDy = 0;
+if (recognizer.numberOfTouches > 0) {
+GHLSSPeekPanStartPoint = [recognizer locationOfTouch:0 inView:refView];
+}
 } else if (recognizer.state == UIGestureRecognizerStateChanged) {
 if (GHLSSPeekPanIdx != (int)idx) return;
-CGPoint t = [recognizer translationInView:w];
-CGFloat dy = t.y > 0 ? t.y : 0;
+if (recognizer.numberOfTouches == 0) return;
+CGPoint p = [recognizer locationOfTouch:0 inView:refView];
+CGFloat dy = p.y - GHLSSPeekPanStartPoint.y;
+if (dy < 0) dy = 0;
+GHLSSPeekPanTotalDy = dy;
 w.center = CGPointMake(GHLSSPeekPanStartCenter.x, GHLSSPeekPanStartCenter.y + dy);
 CGFloat alpha = 1.0 - dy / 300.0;
 if (alpha < 0.3) alpha = 0.3;
@@ -4398,10 +4420,9 @@ w.alpha = alpha;
 } else if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled) {
 if (GHLSSPeekPanIdx != (int)idx) return;
 GHLSSPeekPanIdx = -1;
-CGPoint t = [recognizer translationInView:w];
-CGPoint vel = [recognizer velocityInView:w];
-if (recognizer.state == UIGestureRecognizerStateEnded && (t.y >= 60 || vel.y >= 700)) {
-GHLSSLogLine("v65 docked peek dragged down closed");
+CGPoint vel = [recognizer velocityInView:refView];
+if (recognizer.state == UIGestureRecognizerStateEnded && (GHLSSPeekPanTotalDy >= 60 || vel.y >= 700)) {
+GHLSSLogLine("v67 docked peek dragged down closed");
 [UIView animateWithDuration:0.2 animations:^{
 w.center = CGPointMake(GHLSSPeekPanStartCenter.x, GHLSSPeekPanStartCenter.y + 220);
 w.alpha = 0.0;
@@ -5110,7 +5131,7 @@ if (gCX > maxCX) gCX = maxCX;
 if (gCY < minCY) gCY = minCY;
 if (gCY > maxCY) gCY = maxCY;
 winFrame = CGRectMake(gCX - winW / 2.0, gCY - winH / 2.0, winW, winH);
-GHLSSLogLine("v65 game window pos applied on open");
+GHLSSLogLine("v67 game window pos applied on open");
 }
 }
 if (strcmp(bundleID, "com.apple.calculator") == 0) {
@@ -5708,7 +5729,7 @@ CGFloat gCX, gCY;
 if (GHLSSRestoreGameWindowPos(GHLSSGameActiveBid, GHLSSHostedBundleID, &gCX, &gCY)) {
 targetCX = gCX;
 targetCY = gCY;
-GHLSSLogLine("v65 game window pos applied on restore");
+GHLSSLogLine("v67 game window pos applied on restore");
 }
 }
 CGFloat minCX = targetW / 2.0 + 8.0;
@@ -5748,7 +5769,7 @@ if (restoreCS != 0) {
 } else {
 FBScene *deferredScene = GHLSSHostedScene;
 CGSize deferredSize = CGSizeMake(targetW, targetH);
-GHLSSLogLine("v65 restore scene not ready, resize deferred");
+GHLSSLogLine("v67 restore scene not ready, resize deferred");
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 if (!deferredScene || deferredScene != GHLSSHostedScene || GHLSSHostedMinimized) return;
 NSUInteger cs2 = 2;
@@ -5761,7 +5782,7 @@ if (!deferredScene || deferredScene != GHLSSHostedScene || GHLSSHostedMinimized)
 [self resizeHostedSceneToContentSize:deferredSize];
 NSUInteger cs3 = 2;
 @try { cs3 = [deferredScene contentState]; } @catch (NSException *e) { (void)e; }
-if (cs3 == 0) GHLSSLogLine("v65 restore scene still not ready");
+if (cs3 == 0) GHLSSLogLine("v67 restore scene still not ready");
 });
 }
 });
@@ -5926,7 +5947,7 @@ return;
 // v63：尺寸固定——拖到頂部不再放大到全屏（拉大拉小後續再做）；
 // 掉下來走下面正常的夾取＋存位置。
 if (!GHLSSHostedIsSideDock && (newY - winH / 2.0) <= safeDistance) {
-GHLSSLogLine("v65 fullscreen snap disabled, fixed size");
+GHLSSLogLine("v67 fullscreen snap disabled, fixed size");
 }
 if (newX - winW / 2.0 <= 24.0) newX = winW / 2.0 + 8.0;
 else if (screenBounds.size.width - (newX + winW / 2.0) <= 24.0) newX = screenBounds.size.width - winW / 2.0 - 8.0;
@@ -5970,7 +5991,7 @@ GHLSSBringWindowToFront(tapWindow);
 // v63：尺寸固定——點細條不再開縮放滑桿條（拉大拉小後續再做）；
 // 點細條只剩帶到最前（上面已做）。滑桿條本來就是 hidden=YES 建的，
 // 唯一開它的路就是這裡，拿掉後它永遠不出現，裡面的小／中／大鈕也跟著沒用。
-GHLSSLogLine("v65 scale bar disabled, fixed size");
+GHLSSLogLine("v67 scale bar disabled, fixed size");
 }
 
 // ── v42 新方法（窗控制／手勢／任務欄／配對／鍵盤） ──
@@ -6044,7 +6065,7 @@ GHLSSLogLine(buf);
 [self cycleMainWindow];
 } else if (strcmp(action, "maximize") == 0) {
 // v63：尺寸固定——maximize 手勢停用（拉大拉小後續再做）。
-GHLSSLogLine("v65 maximize gesture disabled, fixed size");
+GHLSSLogLine("v67 maximize gesture disabled, fixed size");
 }
 }
 
@@ -6534,7 +6555,7 @@ return;
 }
 // v63：尺寸固定——大窗拖角落縮放停用（拉大拉小後續再做）；手柄在大窗上
 // 是藏著的（見建窗處），這裡是兜底。小窗（peek）調尺寸不受影響（上面已分流）。
-GHLSSLogLine("v65 window resize disabled, fixed size");
+GHLSSLogLine("v67 window resize disabled, fixed size");
 return;
 CGPoint point = [recognizer translationInView:GHLSSHostedContainer];
 [recognizer setTranslation:CGPointZero inView:GHLSSHostedContainer];
@@ -6865,7 +6886,7 @@ const char *chatNames[2] = {"微信", "QQ"};
 for (int c = 0; c < 2; c++) {
 if (!GHLSSIsAppInstalled(chatBids[c])) {
 char nbuf[128];
-snprintf(nbuf, sizeof(nbuf), "v65 game toolbox %s not installed, row hidden", chatBids[c]);
+snprintf(nbuf, sizeof(nbuf), "v67 game toolbox %s not installed, row hidden", chatBids[c]);
 GHLSSLogLine(nbuf);
 continue;
 }
@@ -6888,7 +6909,7 @@ NSString *recTitle = [NSString stringWithCString:"錄屏" encoding:NSUTF8StringE
 NSString *recSub = [NSString stringWithCString:"打開控制中心，手點錄屏" encoding:NSUTF8StringEncoding];
 UIButton *recBtn = [self gameToolboxRowWithTitle:recTitle subtitle:recSub icon:nil frame:CGRectMake(rowX, y, rowW, rowH) tag:1004 action:@selector(handleGameToolboxRecord:) highlighted:NO];
 [GHLSSLauncherContentView addSubview:recBtn];
-GHLSSLogLine("v65 game toolbox built");
+GHLSSLogLine("v67 game toolbox built");
 }
 
 // v63：工具箱裡一行（圓角行；highlighted 的那行金底黑字，其他深底白字）。
@@ -6934,10 +6955,10 @@ return btn;
 - (void)handleGameToolboxReturnToGame:(UIButton *)sender {
 (void)sender;
 if (GHLSSGameActiveBid[0] == '\0') {
-GHLSSLogLine("v65 game toolbox return: no active game");
+GHLSSLogLine("v67 game toolbox return: no active game");
 return;
 }
-GHLSSLogLine("v65 game toolbox return to game");
+GHLSSLogLine("v67 game toolbox return to game");
 [self dismissLauncher];
 [self openAppFullscreen:GHLSSGameActiveBid];
 }
@@ -6949,7 +6970,7 @@ GHLSSLogLine("v65 game toolbox return to game");
 NSInteger which = sender.tag;
 const char *bid = (which == 1) ? "com.tencent.mqq" : "com.tencent.xin";
 char buf[256];
-snprintf(buf, sizeof(buf), "v65 game toolbox app tapped %s", bid);
+snprintf(buf, sizeof(buf), "v67 game toolbox app tapped %s", bid);
 GHLSSLogLine(buf);
 int idx = GHLSSAppIndexForBundleID(bid);
 if (idx >= 0 && GHLSSIsAppEnabled(idx)) {
@@ -6968,7 +6989,7 @@ GHLSSAppNameForBundleID(bid, name, sizeof(name));
 // 工具箱保持開著（清完 Lee 還要點回遊戲／微信）。
 - (void)handleGameToolboxClearBackground:(UIButton *)sender {
 (void)sender;
-GHLSSLogLine("v65 game toolbox clear background");
+GHLSSLogLine("v67 game toolbox clear background");
 GHLSSGameClearBackgroundWindows(GHLSSGameActiveBid);
 }
 
@@ -6979,7 +7000,7 @@ GHLSSGameClearBackgroundWindows(GHLSSGameActiveBid);
 - (void)handleGameToolboxRecord:(UIButton *)sender {
 (void)sender;
 [self dismissLauncher];
-GHLSSLogLine("v65 game toolbox record: opening control center (not direct record)");
+GHLSSLogLine("v67 game toolbox record: opening control center (not direct record)");
 @try {
 NSString *ccName = [NSString stringWithCString:"SBControlCenterController" encoding:NSUTF8StringEncoding];
 Class ccClass = NSClassFromString(ccName);
@@ -6989,16 +7010,16 @@ id cc = ((id (*)(id, SEL))objc_msgSend)((id)ccClass, sharedSel);
 SEL presentSel = NSSelectorFromString([NSString stringWithCString:"presentAnimated:completion:" encoding:NSUTF8StringEncoding]);
 if (cc && [cc respondsToSelector:presentSel]) {
 ((void (*)(id, SEL, BOOL, id))objc_msgSend)(cc, presentSel, YES, nil);
-GHLSSLogLine("v65 game toolbox record: control center presented");
+GHLSSLogLine("v67 game toolbox record: control center presented");
 } else {
-GHLSSLogLine("v65 game toolbox record: present selector unavailable");
+GHLSSLogLine("v67 game toolbox record: present selector unavailable");
 }
 } else {
-GHLSSLogLine("v65 game toolbox record: SBControlCenterController unavailable");
+GHLSSLogLine("v67 game toolbox record: SBControlCenterController unavailable");
 }
 } @catch (NSException *e) {
 (void)e;
-GHLSSLogLine("v65 game toolbox record: control center open failed");
+GHLSSLogLine("v67 game toolbox record: control center open failed");
 }
 }
 
@@ -7644,8 +7665,8 @@ uint64_t lockState = 0;
 notify_get_state(token, &lockState);
 if (lockState == 1) {
 GHLSSScreenLocked = YES;
-// v40：锁屏管全部窗（v39 只管活动窗一个）——每个缓存窗的 scene 都
-// 推回后台；看得见的窗都藏起来（记 HiddenByLock，解锁时再显示回来）；
+// v40：锁屏管全部窗（v39 只管活动窗一个）——v66 起 scene 不再推回后台
+// （全程不黑屏，見下面）；看得见的窗都藏起来（记 HiddenByLock，解锁时再显示回来）；
 // 最小化着的窗本来就藏着，不碰它（解锁时它也不能自己弹出来，
 // 等用户点恢复/点小卡）。贴边小卡锁屏时不藏（卡在右边缘、
 // 不挡锁屏密码；解锁后还在，用户直接点卡恢复）。
@@ -7656,7 +7677,16 @@ BOOL anyScene = NO;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (GHLSSCacheScenes[i]) {
 anyScene = YES;
-GHLSSBackgroundCachedSceneAtIndex(i, "v57 scene backgrounded on lock");
+// v66：鎖屏不再把 scene 推回後台（皇上：要全程不黑屏）——鎖屏推後台
+// 是黑 peek 的主因（21.log／22.log 都是鎖後黑、解鎖推不回來）。窗還是
+// 藏起來（1.0.65 的密碼修法不動，藏窗才是不擋鍵盤的關鍵）；scene 留在
+// 前景，進程不掛起，解鎖後內容直接就是活的。代價：鎖屏時 App 進程還
+// 在跑，會多耗點電；鎖很久、系統自己把進程掛起／殺掉的話還是會黑，
+// 那時看門狗／恢復延後會把它推回來，關掉重開也行。解鎖分支的推前景
+// 保留（系統萬一還是把它推後台了，解鎖再推回來）。
+char kbuf[128];
+snprintf(kbuf, sizeof(kbuf), "v67 scene kept foreground on lock %s", GHLSSCacheBundleIDs[i]);
+GHLSSLogLine(kbuf);
 }
 if (GHLSSCacheWindows[i] && !GHLSSCacheWindows[i].hidden) {
 GHLSSCacheWindows[i].hidden = YES;
@@ -7664,7 +7694,7 @@ GHLSSCacheHiddenByLock[i] = YES;
 if (i == GHLSSActiveAppIndex) GHLSSHostedHiddenByLock = YES;
 char hbuf[128];
 if (GHLSSCacheMinimized[i]) {
-snprintf(hbuf, sizeof(hbuf), "v65 peek hidden on lock %s", GHLSSCacheBundleIDs[i]);
+snprintf(hbuf, sizeof(hbuf), "v67 peek hidden on lock %s", GHLSSCacheBundleIDs[i]);
 } else {
 snprintf(hbuf, sizeof(hbuf), "v57 hosted window hidden on lock %s", GHLSSCacheBundleIDs[i]);
 }
