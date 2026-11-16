@@ -1005,9 +1005,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.62");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.63");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.62。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.63。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，請去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1126,6 +1126,46 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已备份配置") message:GHLSSRuntimeString("备份在 GuHaiLongSplitScreen-backup.plist，恢复时读这个文件。")];
     } else {
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("备份失败") message:GHLSSRuntimeString("复制配置文件时出错。")];
+    }
+}
+
+// v63：清除已記的遊戲浮窗位置——刪掉全部 gameWinPos_ 開頭的設定鍵
+//（每款遊戲記浮窗位置的記錄），方便重設。檔案裡刪鍵再寫回，再逐鍵從
+// CFPreferences 刪一次（快取才會更新——v43 導入的教訓：直接換檔不動
+// cfprefsd 快取，開關看著像沒反應）。刪完彈提示。
+- (void)ghlssClearGameWindowPositions:(PSSpecifier *)specifier {
+    (void)specifier;
+    GHLSSPrefsLogLine("v63 prefs-config clear game window positions entry");
+    NSString *prefix = GHLSSRuntimeString("gameWinPos_");
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
+    NSString *path = GHLSSPrefsFilePath();
+    NSMutableDictionary *dict = [NSMutableDictionary dictionaryWithContentsOfFile:path];
+    NSMutableArray *toDelete = [NSMutableArray array];
+    if (dict) {
+        for (NSString *key in dict) {
+            if ([key hasPrefix:prefix]) [toDelete addObject:key];
+        }
+    }
+    int removed = (int)[toDelete count];
+    if (removed > 0) {
+        for (NSString *key in toDelete) [dict removeObjectForKey:key];
+        [dict writeToFile:path atomically:YES];
+        CFStringRef domain2 = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+        if (domain2) {
+            for (NSString *key in toDelete) {
+                CFPreferencesSetAppValue((__bridge CFStringRef)key, NULL, domain2);
+            }
+            CFPreferencesAppSynchronize(domain2);
+            CFRelease(domain2);
+        }
+        char buf[128];
+        snprintf(buf, sizeof(buf), "v63 prefs-config clear game window positions: removed %d keys", removed);
+        GHLSSPrefsLogLine(buf);
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已清除") message:GHLSSRuntimeString("已記的遊戲浮窗位置都清掉了，下次進遊戲浮窗回到預設位置。")];
+    } else {
+        GHLSSPrefsLogLine("v63 prefs-config clear game window positions: none saved");
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("沒有已記的位置") message:GHLSSRuntimeString("還沒有記過任何遊戲浮窗位置，不用清。")];
     }
 }
 
@@ -3403,7 +3443,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("開") : GHLSSRuntimeString("關");
-    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.62\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.63\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("診斷信息已複製到剪貼板。")];

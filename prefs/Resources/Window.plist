@@ -10,40 +10,6 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>新窗的尺寸：小 280×600、中 350×757、大 414×800（iPhone 11 邏輯尺寸 414×896；計算器在「中」時保持 320×693）。控制條點 ± 展開後也能點小／中／大換尺寸。</string>
-			<key>label</key>
-			<string>浮窗大小预设</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>medium</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>windowSizePreset</string>
-			<key>label</key>
-			<string>浮窗大小预设</string>
-			<key>validTitles</key>
-			<array>
-				<string>小（280×600）</string>
-				<string>中（350×757）</string>
-				<string>大（414×800）</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>small</string>
-				<string>medium</string>
-				<string>large</string>
-			</array>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
 			<string>開窗時從這邊滑進來，收起的貼邊小窗也貼這邊；預設右邊。</string>
 			<key>label</key>
 			<string>浮窗滑出方向</string>

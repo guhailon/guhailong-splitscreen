@@ -205,6 +205,14 @@
 			<string>進遊戲開勿擾（探針）</string>
 		</dict>
 		<dict>
+			<key>action</key>
+			<string>ghlssClearGameWindowPositions</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>清除已記的遊戲浮窗位置</string>
+		</dict>
+		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
