@@ -1,4 +1,15 @@
-// GuHaiLongSplitScreen v1.0.68 (v42.26) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.69 (v42.27) — 顾海龙集团原创分屏插件（实验版）
+//
+// ── v42.27 (1.0.69)：皇上 2026-11-16 20:45 挑 A ──
+// 小浮窗（peek）黑邊：小窗 112×216 寬高比 0.519，屏幕 414×896 是 0.462；
+// 內容按最小貼合比 0.241 縮、左右置中，寬只剩 99.8，左右各留約 6pt 黑邊。
+// 1.0.67 只改了主窗，小窗沒動所以還在。A：小窗改 112×242（寬不變、高 26pt，
+// 寬高比和屏幕一致，內容正好填滿，沒黑邊；小窗像個迷你手機屏，字大 12%）。
+// 記住的尺寸：皇上 20:47 說已經開大過的 App 也要取消——啟動時一次清掉全部
+// 已存的 PeekW/PeekH（寫 0＝沒存過，GHLSSResetStoredPeekSizesOnce，照 v53
+// 自愈的寫法，%ctor 延後塊裡跑），全部回到 112×242；以後想改大再拖。
+// 4 扇以上本來就會等比縮高排布（shrink），242 只讓 4 扇時縮得更多一點，
+// 1–3 扇不影響。
 //
 // ── v42.26 (1.0.68)：皇上 2026-11-16 20:04 勾中的 4 ──
 // 其他拖動手勢同款不跟手（和 1.0.65 小浮窗下滑同一個根因：
@@ -1450,9 +1461,9 @@ GHLSSLogLine("v57 scene destroyed");
 #define GHLSS_GAME_BASE_LEVEL (UIWindowLevelAlert - 0.5)
 #define GHLSS_GAME_FRONT_LEVEL (UIWindowLevelAlert - 0.25)
 // v41：貼邊 peek 的尺寸（圖 1 的樣子：縮到邊緣、露出一截活內容）。
-// 寬 112、高 216，上下疊著排，間距 8。
+// 寬 112、高 242，上下疊著排，間距 8。
 #define GHLSS_DOCK_PEEK_W 112.0
-#define GHLSS_DOCK_PEEK_H 216.0
+#define GHLSS_DOCK_PEEK_H 242.0
 #define GHLSS_DOCK_PEEK_GAP 8.0
 // v41：貼邊 peek 的尺寸在上面（GHLSS_DOCK_PEEK_W/H/GAP）；v40 的
 // 68x76 小卡窗已刪（peek 就是宿主窗本身縮到邊緣，不另建卡窗）。
@@ -2282,7 +2293,7 @@ return (w <= screenSize.width * 0.55 && h >= screenSize.height * 0.9);
 
 // v42.3：每 App 的小窗（peek）尺寸——存 prefs（鍵 geo<前綴>PeekW/PeekH，
 // 跟記位置一樣 per-App，GHLSSGeoKeyForIndex 同一個做法）。沒存過就回預設
-// 112x216；夾在 [112, 屏寬-4] x [216, 屏高-4]（收成 peek 時讀，拖完記）。
+// 112x242；夾在 [112, 屏寬-4] x [242, 屏高-4]（收成 peek 時讀，拖完記）。
 static void GHLSSPeekSizeForIndex(int idx, CGFloat *outW, CGFloat *outH) {
 CGFloat w = GHLSS_DOCK_PEEK_W;
 CGFloat h = GHLSS_DOCK_PEEK_H;
@@ -2358,6 +2369,38 @@ cleared++;
 if (cleared > 0) {
 char buf[128];
 snprintf(buf, sizeof(buf), "v57 stored geometry healed, cleared %d", cleared);
+GHLSSLogLine(buf);
+}
+}
+
+// v69：啟動時自愈一次——清掉已存的小窗（peek）尺寸（皇上 2026-11-16 20:47：
+// 已經開大過的 App 也要取消）。預設改 112×242 後，沒存過的直接走新預設，
+// 存的高 < 242 的讀時也會回 242；但存過且寬高都 ≥ 新下限的（拖大過的）
+// 讀時會保留、寬高比不對就還有黑條，所以一次清掉全部已存的 PeekW/PeekH
+// （寫 0＝沒存過），全部回到 112×242；以後想改大再拖。照 v53 自愈的寫法。
+static void GHLSSResetStoredPeekSizesOnce(void) {
+static BOOL reset = NO;
+if (reset) return;
+reset = YES;
+int cleared = 0;
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+char key[64];
+double w = 0, h = 0;
+GHLSSGeoKeyForIndex(i, "PeekW", key, sizeof(key));
+w = GHLSSReadPrefsDouble(key, 0);
+GHLSSGeoKeyForIndex(i, "PeekH", key, sizeof(key));
+h = GHLSSReadPrefsDouble(key, 0);
+if (w > 0 || h > 0) {
+GHLSSGeoKeyForIndex(i, "PeekW", key, sizeof(key));
+GHLSSWritePrefsDouble(key, 0);
+GHLSSGeoKeyForIndex(i, "PeekH", key, sizeof(key));
+GHLSSWritePrefsDouble(key, 0);
+cleared++;
+}
+}
+if (cleared > 0) {
+char buf[128];
+snprintf(buf, sizeof(buf), "v69 stored peek sizes reset, cleared %d", cleared);
 GHLSSLogLine(buf);
 }
 }
@@ -2835,7 +2878,7 @@ GHLSSFrontOrder[0] = idx;
 // v42.3：一次只有一個大浮窗（皇上 2026-11-14 18:19：主浮窗開著再點
 // 副浮窗，兩個大窗疊著，他不要；要 FV 那樣——點副浮窗時主浮窗自動縮
 // 成小的浮窗，點小的換回來，可以來回切）。任何窗被帶到最前時，其他
-// 看得見的大浮窗自動縮成 v41 peek（112x216 活內容小窗、貼邊疊著、
+// 看得見的大浮窗自動縮成 v41 peek（112x242 活內容小窗、貼邊疊著、
 // scene 保活絕不銷毀；收起前先存位置/大小、scene 推回後台，跟手動最
 // 小化同一套）。收在帶到最前的中心路徑裡（下面 GHLSSBringWindowToFront
 // 結尾調），所有切換路徑（ARC 點 App、任務欄、點 peek、雙擊哆啦A夢輪切、
@@ -2904,7 +2947,7 @@ return 44.0;
 
 // v41：貼邊 peek 重新排布——收著的窗縮到邊緣、上下疊著排（圖 1 的樣子：
 // 右邊緣上下疊著收起的浮窗，只露出一截活內容）。peek 就是宿主窗本身
-//（112x216），不是另外的小卡窗。有 peek 增減時調（最小化、恢復、
+//（112x242），不是另外的小卡窗。有 peek 增減時調（最小化、恢復、
 // 關窗、從 peek 關掉）。順序按前後順序表（主窗在最上面）。
 // v54：A 修法——(1) 只算沒藏起來的窗：關掉的窗 hidden=YES、CacheMinimized 卻還是
 // YES（見 §134 A）；關窗後 Minimized 不清是刻意的：重開走 restore 路要認它
@@ -2989,7 +3032,7 @@ if (n == 0) {
 GHLSSRestoreDoraemonButtonPosition();
 return;
 }
-// v42.3：小窗尺寸每 App 各記各的（預設 112x216，拖調尺寸後記住）——
+// v42.3：小窗尺寸每 App 各記各的（預設 112x242，拖調尺寸後記住）——
 // 總高跟著各窗高加總，x 跟著各窗寬走。
 CGFloat totalH = 0;
 for (int k = 0; k < n; k++) {
@@ -3033,12 +3076,12 @@ snprintf(buf, sizeof(buf), "v57 dock layout n=%d startY=%d shrink=%d%%", n, (int
 GHLSSLogLine(buf);
 }
 
-// v41：把第 idx 個窗收成貼邊 peek——窗本身縮到邊緣（112x216，露出一截
+// v41：把第 idx 個窗收成貼邊 peek——窗本身縮到邊緣（112x242，露出一截
 // 活內容，上下疊著排；圖 1 的樣子），不是另外建小卡窗。窗上蓋一層透明
 // 點按層（點整截恢復窗；往下滑取消，v64）。scene 活著
 // （只縮窗 + 推後台，不銷毀；v35 規則）。收起前的位置/大小由
 // minimizeHostedWindow 在縮窗之前存過（GHLSSSaveGeometryForIndex）。
-// v42.3：小窗尺寸每 App 各記各的（預設 112x216，拖調尺寸後記住的尺寸）。
+// v42.3：小窗尺寸每 App 各記各的（預設 112x242，拖調尺寸後記住的尺寸）。
 // v53：把第 idx 個窗的 scene 推到 peek 尺寸（收成 peek 時調）：容器／
 // 內容區先縮到 peek 尺寸（它們沒有 autoresizing、不跟著窗縮，以前只縮
 // 窗、scene 沒動，peek 裡只剩左上切片）；presenter 路把 presenterView
@@ -3072,7 +3115,7 @@ layerHostView.bounds = CGRectMake(0, 0, screenSize.width, screenSize.height);
 layerHostView.layer.anchorPoint = CGPointMake(0, 0);
 layerHostView.layer.position = CGPointMake(0, 0);
 // v55：peek 一律整體貼合——不管窗的縮放比（ratio>1 時內容寬＝peekW×ratio、
-// 右邊被屏幕緣切掉；ratio=1 時 896 高的內容也比 216 高的窗高）。
+// 右邊被屏幕緣切掉；ratio=1 時 896 高的內容也比 242 高的窗高）。
 // 寬高取最小貼合比，雙向置中（position 要先除以縮放比）。
 CGFloat fitW = (screenSize.width > 0) ? peekW / screenSize.width : 1.0;
 CGFloat fitH = (screenSize.height > 0) ? peekH / screenSize.height : 1.0;
@@ -5687,7 +5730,7 @@ GHLSSLogLine("v57 window minimized");
 // scene 停止合成，peek 就是黑的（v41 改成活內容 peek 卻留著推後台，
 // v42.3 自動 peek 讓黑小窗到處出現）。鎖屏安全不受影響：鎖屏回調
 // 本來就會把全部 scene 推後台，且 peek 窗層級在鎖屏之下，不攔密碼觸摸。
-// v41：最小化改成貼邊 peek（圖 1 的樣子）：窗本身縮到邊緣（112x216，
+// v41：最小化改成貼邊 peek（圖 1 的樣子）：窗本身縮到邊緣（112x242，
 // 露出一截活內容，上下疊著排），點那截恢復窗；scene 活著（只縮窗、
 // 不推後台、不銷毀，peek 保持前景才有活內容）。收起前的位置/大小先存
 // （縮窗之後再存會存成 peek 的尺寸），側窗旗標清掉（收起後再叫回來是普通浮窗）。
@@ -6567,7 +6610,7 @@ GHLSSSetActiveToWindow(resizeWindow);
 }
 if (!GHLSSHostedWindow || !GHLSSHostedContainer || !GHLSSHostedContentView) return;
 // v42.3：小窗（peek）也在右下角拖著調尺寸——走下面那條分支（最小
-// 112x216、最大滿窗；放手超過滿窗 80% 就升為大窗、剛才的大窗縮成 peek）。
+// 112x242、最大滿窗；放手超過滿窗 80% 就升為大窗、剛才的大窗縮成 peek）。
 if (GHLSSHostedMinimized) {
 [self handlePeekResizeDrag:recognizer];
 return;
@@ -6613,7 +6656,7 @@ GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 
 // v42.3：拖小窗（peek）右下角手柄調尺寸（皇上 2026-11-14 18:22：小的浮窗
 // 也要能縮大縮小，跟 FV 一樣）。中心不動（貼邊小窗往外拖會出屏，左右貼邊
-// 都一樣處理）；尺寸夾在 [112x216, 滿窗]（滿窗 = 存過的位置/大小，沒存過
+// 都一樣處理）；尺寸夾在 [112x242, 滿窗]（滿窗 = 存過的位置/大小，沒存過
 // 走預設 350x757／計算器 320x693）。拖動時只改窗與視圖（跟大窗一樣 live）；
 // 松手時才調 scene（resizeHostedSceneToContentSize，現成的 sublayerTransform／
 // scale 機制，不動 scene frame 的邏輯本身）。放手時寬高都超過滿窗 80% →
@@ -7515,6 +7558,8 @@ GHLSSLogLine(dbuf);
 }
 // v53：啟動時自愈一次——清掉已存幾何裡的側窗尺寸（207x827／124x827 這類）。
 GHLSSHealStoredGeometryOnce();
+// v69：啟動時自愈一次——清掉已存的小窗尺寸（拖大過的 App 也回到 112×242）。
+GHLSSResetStoredPeekSizesOnce();
 // v41：自選 App 槽位從 prefs 讀進來（ARC 第一次打開就看得到）；
 // 已安裝 App 清單在後台列舉、寫緩存檔（不堵主線程），設定頁/ARC 只讀緩存。
 GHLSSLoadCustomApps();
