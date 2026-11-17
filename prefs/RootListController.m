@@ -1005,9 +1005,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.70");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.71");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.70。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.71。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，請去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -3361,8 +3361,31 @@ static NSString *GHLSSGestureActionName(const char *value) {
         char buf2[128];
         snprintf(buf2, sizeof(buf2), "v57 prefs-search plistpage exit count %lu", (unsigned long)[_specifiers count]);
         GHLSSPrefsLogLine(buf2);
+        // v71：頁面載入時記一行 plist 名＋item 數量——下次日誌直接證明
+        // 載的是新版還是舊版（1.0.70 兩行看不到，靠這行定位）。
+        {
+            char pbuf[256];
+            snprintf(pbuf, sizeof(pbuf), "v71 prefs-page %s items %lu", cname ? cname : "(nil)", (unsigned long)[_specifiers count]);
+            GHLSSPrefsLogLine(pbuf);
+        }
     }
     return _specifiers;
+}
+
+// v71：子頁每次出現都清快取重組（學手勢總覽頁 v54——只讀快取頁回來看見的
+// 必須是新值，舊 specifiers 會 stale；1.0.70 的新行在手機上看不到，
+// 每頁快取就是頭號嫌疑）。
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    @try {
+        _specifiers = nil;
+        [self reloadSpecifiers];
+    } @catch (NSException *e) {
+        const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v71 prefs-plistpage viewWillAppear EXCEPTION %s", reason);
+        GHLSSPrefsLogLine(buf);
+    }
 }
 
 @end
@@ -3443,7 +3466,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("開") : GHLSSRuntimeString("關");
-    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.70\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.71\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("診斷信息已複製到剪貼板。")];
@@ -3474,28 +3497,25 @@ static NSString *GHLSSGestureActionName(const char *value) {
 
 - (void)ghlssOpenTelegramGroup:(PSSpecifier *)specifier {
     (void)specifier;
-    // v70：系統狀態頁 Telegram 群行——點了進群。先試打開邀請連結，
-    // 打不開（v54 越獄源那行就是打不開）就退回複製連結＋提示框。
-    // 注意：openURL: 已廢棄（-Werror 會報錯），用 openURL:options:completionHandler:；
-    // 結果在回調裡回來（異步），所以複製退路也寫在回調裡（回主隊列再彈框）。
-    NSURL *url = [NSURL URLWithString:GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1")];
-    if (!url) {
-        [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
-        GHLSSPrefsLogLine("v70 prefs-status telegram copied");
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("Telegram 群連結已複製到剪貼板，去 Telegram／瀏覽器貼上進群。")];
-        return;
+    // v71：Telegram 行改成複製為主——23.log 證明點按每次都派發、openURL
+    // 每次都回 success（34 次全是 opened），手機上卻什麼都沒跳出來；
+    // 設定頁進程裡 openURL 就是不可見的失敗（v54 越獄源行「打不開也閃退過」
+    // 同一類問題）。做法：先順手試 tg:// 深鏈（能打開最好，純添頭），
+    // 不管成不成都複製 https 邀請連結＋彈「已複製」，保證一定有可見回饋、
+    // 連結一定到手。注意：openURL: 已廢棄（-Werror 會報錯），用
+    // openURL:options:completionHandler:（異步，結果在回調裡回來）。
+    NSURL *tgURL = [NSURL URLWithString:GHLSSRuntimeString("tg://join?invite=UaeIYedetWtiZGQ1")];
+    if (tgURL) {
+        [[UIApplication sharedApplication] openURL:tgURL options:[NSDictionary dictionary] completionHandler:^(BOOL success) {
+            (void)success;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                GHLSSPrefsLogLine("v71 prefs-status telegram tg attempted");
+            });
+        }];
     }
-    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (success) {
-                GHLSSPrefsLogLine("v70 prefs-status telegram opened");
-            } else {
-                [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
-                GHLSSPrefsLogLine("v70 prefs-status telegram copied");
-                [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("Telegram 群連結已複製到剪貼板，去 Telegram／瀏覽器貼上進群。")];
-            }
-        });
-    }];
+    [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
+    GHLSSPrefsLogLine("v71 prefs-status telegram copied");
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("Telegram 群連結已複製到剪貼板，去 Telegram 貼上進群。")];
 }
 
 @end

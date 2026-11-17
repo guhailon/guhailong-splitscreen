@@ -1,4 +1,21 @@
-// GuHaiLongSplitScreen v1.0.70 (v42.28) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.71 (v42.29) — 顾海龙集团原创分屏插件（实验版）
+//
+// ── v42.29 (1.0.71)：只修 1.0.70 真機測出來的三件事（皇上 2026-11-17 11:06）──
+// (1) Telegram 行：23.log 證明點按每次都派發、openURL 每次都回 success，
+// 手機上卻什麼都沒跳出來——設定頁進程裡 openURL 就是不可見的失敗
+// （v54 越獄源行「打不開也閃退過」同一類問題）。改成複製為主：先順手試
+// tg://join?invite= 深鏈（能開最好），不管成不成都複製 https 邀請連結＋
+// 彈「已複製」，保證一定有可見回饋、連結一定到手。
+// (2) 兩行設定看不到（浮窗退出動畫、啟動器樣式）：出貨包裡兩行結構完整，
+// 手機端設定 App 的每頁快取嫌疑最大。三重保險：兩行複製一份到 Root 主頁
+// （同一 key）；GHLSSPlistPageController 學手勢總覽頁，viewWillAppear
+// 清 _specifiers 快取重組；頁面載入時記一行 plist 名＋item 數量，下次日誌
+// 直接證明載的是新版還是舊版。
+// (3) 小浮窗切回主窗閃黑邊：恢復那一下 scene 還在準備（contentState=1），
+// 窗已經顯示了。改：恢復先藏窗，等 scene 就緒（contentState==2）再淡入；
+// 約 2.5 秒還沒就緒也顯示（超時兜底，窗永不卡死隱藏）。收起路徑、鎖屏、
+// 看門狗都不動。
+// v43 第一步順延到 1.0.72。
 //
 // ── v42.28 (1.0.70)：改名＋Telegram 行＋影片 5 項全做（皇上 2026-11-17 10:22「全部」）──
 // (1) 改名 SeaDragon Split：插件內（設定入口 label、Root.plist 標題、
@@ -1059,6 +1076,7 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)closeHostedWindowWithShatter:(UIWindow *)closingWin startFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha;
 - (void)minimizeHostedWindow;
 - (void)restoreHostedWindow;
+- (void)showGatedRestoredWindowTick;
 - (void)handleScaleSlider:(UISlider *)sender;
 - (void)handleScaleSliderEnded:(UISlider *)sender;
 - (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer;
@@ -1173,6 +1191,10 @@ static char GHLSSHostedBundleID[128] = {0};
 static int GHLSSHostedPid = 0;
 static BOOL GHLSSHostedMinimized = NO;
 static BOOL GHLSSHostedLaunching = NO;
+static BOOL GHLSSRestoreGateActive = NO; // v71：恢复门控进行中（窗藏着等 scene 就绪）。
+static NSTimeInterval GHLSSRestoreGateDeadline = 0; // v71：门控超时时间（就绪或超时都显示）。
+static FBScene *GHLSSRestoreGateScene = nil; // v71：门控盯着的 scene（换了就取消门控）。
+static CGFloat GHLSSRestoreGateTargetAlpha = 1.0; // v71：淡入要回到的 alpha（游戏模式会调淡）。
 
 // v38：每窗一个 scaleRatio（反向耦合缩放，见文件头 v38 节）。
 // 活动窗的 scale 存在这里；切走时存缓存、切回来时读缓存。
@@ -5791,6 +5813,9 @@ GHLSSLogLine("v57 window failed exception");
 // 不再回来——卡没了、窗藏着，下次从启动器重开直接复用缓存里的 scene）。
 - (void)closeHostedWindow {
 if (!GHLSSHostedWindow) return;
+// v71：關窗就取消恢復門控（門控進行中關窗時，tick 看到旗標沒了就回，
+// 不會把已關的窗又顯示出來；關窗本身不動）。
+GHLSSRestoreGateActive = NO;
 int idx = GHLSSActiveAppIndex;
 BOOL wasSideDock = GHLSSHostedIsSideDock;
 BOOL wasMinimized = GHLSSHostedMinimized;
@@ -6047,9 +6072,57 @@ GHLSSSaveRestoreList();
 GHLSSUpdateTaskbar();
 }
 
+// v71：恢复门控 tick——窗藏着等 scene 就绪，每 0.5 秒看一次。
+// 就绪（contentState==2）就淡入显示；超过 deadline 也显示（超时兜底）。
+// 以下情况直接取消门控、不显示：窗已经被别人显示了（例如解锁回調）、
+// 恢复中又被收起（Minimized 又变回 YES——这时把窗放出来，让 peek 看得见）、
+// scene 换了／没了。门控只管显示，不管 resize（resize 还是走 v65 的延后链）。
+- (void)showGatedRestoredWindowTick {
+if (!GHLSSRestoreGateActive) return;
+if (!GHLSSHostedWindow) { GHLSSRestoreGateActive = NO; return; }
+if (!GHLSSHostedWindow.hidden) { GHLSSRestoreGateActive = NO; return; }
+if (GHLSSHostedMinimized) {
+GHLSSRestoreGateActive = NO;
+GHLSSHostedWindow.hidden = NO;
+return;
+}
+if (!GHLSSHostedScene || GHLSSHostedScene != GHLSSRestoreGateScene) { GHLSSRestoreGateActive = NO; return; }
+NSUInteger cs = 2;
+@try { cs = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; cs = 2; }
+NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+if (cs == 2 || now >= GHLSSRestoreGateDeadline) {
+GHLSSRestoreGateActive = NO;
+BOOL timedOut = (cs != 2);
+CGFloat targetAlpha = GHLSSRestoreGateTargetAlpha;
+if (targetAlpha <= 0.01) targetAlpha = 1.0;
+GHLSSHostedWindow.alpha = 0.0;
+GHLSSHostedWindow.hidden = NO;
+[UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+GHLSSHostedWindow.alpha = targetAlpha;
+} completion:nil];
+GHLSSUpdateDimOverlay();
+if (timedOut) GHLSSLogLine("v71 restore shown after timeout");
+else GHLSSLogLine("v71 restore shown after ready");
+} else {
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self showGatedRestoredWindowTick];
+});
+}
+}
+
 - (void)restoreHostedWindow {
 if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
+// v71：恢复门控——之前恢复（见下面）先把上一次没跑完的门控取消
+//（新恢复自己重新设门；旧 tick 看到旗標没了就直接回，不会乱显示）。
+GHLSSRestoreGateActive = NO;
 int idx = GHLSSActiveAppIndex;
+// v71：恢复门控——恢复先把窗藏起来（小卡点一下就消失，正常）；
+// frame 照旧长到目标尺寸、前景照旧推，等 scene 就绪再淡入显示
+//（见下面门控判断）。目标 alpha 先记下来（游戏模式会把窗调淡，
+// 淡入要回到原来的值，不是 1.0）。
+GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
+if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
+GHLSSHostedWindow.hidden = YES;
 // v41：從 peek 恢復——先把窗的尺寸從存過的位置/大小還原（收起時縮
 // 成了 112x216；存的是窗中心 + 尺寸 + scale），再把容器/內容區的
 // 尺寸也還原（系統可能在縮窗時改了容器尺寸），點按層藏起來，
@@ -6152,7 +6225,6 @@ GHLSSLogLine(gbuf);
 if (GHLSSHostedSideDivider) GHLSSHostedSideDivider.hidden = YES;
 GHLSSHostedIsSideDock = NO;
 }
-GHLSSHostedWindow.hidden = NO;
 GHLSSHostedMinimized = NO;
 GHLSSBringWindowToFront(GHLSSHostedWindow);
 GHLSSLogLine("v57 window restored from peek");
@@ -6177,6 +6249,34 @@ GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
 GHLSSLogLine("v57 foreground push on restore failed");
+}
+// v71：恢复门控判断——前景刚推完，读一次 contentState：就绪（2）直接
+// 淡入显示；还没就绪先藏着，每 0.5 秒看一次（showGatedRestoredWindowTick），
+// 2.5 秒超时也显示。窗的 hidden 状态由 tick 管，这里的 SaveActiveToCache
+// 只同步 Minimized 旗標（hidden 是窗对象自己的属性，dim overlay 读它，
+// 门控期间不显示遮罩；tick 显示时再调一次 GHLSSUpdateDimOverlay）。
+{
+NSUInteger gateCS = 2;
+if (GHLSSHostedScene) {
+@try { gateCS = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; gateCS = 2; }
+}
+if (gateCS == 2) {
+CGFloat showAlpha = GHLSSRestoreGateTargetAlpha;
+GHLSSHostedWindow.alpha = 0.0;
+GHLSSHostedWindow.hidden = NO;
+[UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+GHLSSHostedWindow.alpha = showAlpha;
+} completion:nil];
+GHLSSLogLine("v71 restore shown after ready");
+} else {
+GHLSSRestoreGateActive = YES;
+GHLSSRestoreGateScene = GHLSSHostedScene;
+GHLSSRestoreGateDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.5;
+GHLSSLogLine("v71 restore gated until ready");
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self showGatedRestoredWindowTick];
+});
+}
 }
 // v40：恢复完把状态存回缓存、更新阴影背景（窗又看得见了）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT) {
