@@ -6305,7 +6305,41 @@ GHLSSSaveRestoreList();
 GHLSSUpdateTaskbar();
 }
 
-// v72：载入占位——深灰底＋转圈＋App 名，绝不是全黑。盖在 container 最上面
+// v74：靜態佔位內容——App 圖標＋App 名（不轉圈）。圖標拿不到就畫灰色圓角方塊代替（不崩）。
+// parent 是已定好尺寸的佔位 view；圖標 64pt 置中偏上、名字在圖標下方。
+static void GHLSSAddStaticAppIconAndName(UIView *parent, const char *bundleID, const char *name) {
+if (!parent) return;
+CGSize bs = parent.bounds.size;
+CGFloat iconSize = 64.0;
+CGFloat iconY = bs.height / 2.0 - 44.0;
+UIImage *icon = nil;
+if (bundleID && bundleID[0] != '\0') icon = GHLSSAppIcon(bundleID);
+if (icon) {
+UIImageView *iv = [[UIImageView alloc] initWithImage:icon];
+iv.frame = CGRectMake((bs.width - iconSize) / 2.0, iconY, iconSize, iconSize);
+iv.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+iv.layer.cornerRadius = 14.0;
+iv.layer.masksToBounds = YES;
+[parent addSubview:iv];
+} else {
+UIView *box = [[UIView alloc] initWithFrame:CGRectMake((bs.width - iconSize) / 2.0, iconY, iconSize, iconSize)];
+box.backgroundColor = [UIColor colorWithWhite:0.35 alpha:1.0];
+box.layer.cornerRadius = 14.0;
+box.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+[parent addSubview:box];
+}
+if (name && name[0] != '\0') {
+UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, bs.height / 2.0 + 30.0, bs.width, 20)];
+label.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+label.text = [NSString stringWithCString:name encoding:NSUTF8StringEncoding];
+label.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
+label.font = [UIFont systemFontOfSize:13];
+label.textAlignment = NSTextAlignmentCenter;
+[parent addSubview:label];
+}
+}
+
+// v72：载入占位——深灰底＋靜態 App 圖標＋App 名（v74 起不再轉圈），绝不是全黑。盖在 container 最上面
 //（内容区之上；点按层／调尺寸手柄提到它上面，点按拖动不受影响；
 // userInteractionEnabled=NO，细条拖动与内容点按照常穿过）。
 // 每窗一个，存在 GHLSSGatePlaceholders 数组里（跟窗一起缩放／移动；
@@ -6326,27 +6360,13 @@ ph.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexib
 ph.userInteractionEnabled = NO;
 // 深灰（0.16），不是黑——一眼能看出「在载入」而不是黑窗。
 ph.backgroundColor = [UIColor colorWithRed:0.16 green:0.16 blue:0.18 alpha:1.0];
-UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-spinner.color = [UIColor whiteColor];
-spinner.center = CGPointMake(container.bounds.size.width / 2.0, container.bounds.size.height / 2.0 - 12.0);
-spinner.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-[spinner startAnimating];
-[ph addSubview:spinner];
-const char *nm = GHLSSAppNames[idx];
-if (nm && nm[0] != '\0') {
-UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, container.bounds.size.height / 2.0 + 14.0, container.bounds.size.width, 20)];
-label.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-label.text = [NSString stringWithCString:nm encoding:NSUTF8StringEncoding];
-label.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
-label.font = [UIFont systemFontOfSize:13];
-label.textAlignment = NSTextAlignmentCenter;
-[ph addSubview:label];
-}
+// v74：冷啟動等著時不再轉圈——靜態 App 圖標＋App 名（看起來像 App 在開）。
+GHLSSAddStaticAppIconAndName(ph, GHLSSCacheBundleIDs[idx], GHLSSAppNames[idx]);
 [container addSubview:ph];
 if (GHLSSPeekTapOverlays[idx]) [container bringSubviewToFront:GHLSSPeekTapOverlays[idx]];
 if (GHLSSCacheResizeHandles[idx]) [container bringSubviewToFront:GHLSSCacheResizeHandles[idx]];
 GHLSSGatePlaceholders[idx] = ph;
-GHLSSLogLine("v72 placeholder shown");
+GHLSSLogLine("v74 static placeholder shown");
 }
 
 // v72：拿掉占位（0.2 秒淡出；没有占位就直接回，不重复淡）。
@@ -6612,15 +6632,15 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 }
 
 - (void)animateRestoreSnapshotFromFrame:(CGRect)fromFrame toFrame:(CGRect)toFrame ready:(BOOL)ready completion:(void (^)(void))completion {
-    // v72：丝滑化——恢复先播快照动画（活内容就绪时是真快照，没就绪时是深灰占位块），
+    // v72：丝滑化——恢复先播快照动画（活内容就绪时是真快照；v74：没就绪也先试真快照，
+    // 上次快照是靜態圖、不會黑——scene 在小卡裡本來就活著，layer 裡有最後一幀；拍不到才播靜態佔位）。
     // 活窗尺寸一次定好（restore 里已设好），动画只动快照的 center＋transform
-    //（GPU 合成，不触发布局／scene 重排），播完换回真窗。0.25 秒，跟原来窗框动画同长。
+    //（GPU 合成，不触发布局／scene 重排），播完换回真窗。
     UIWindow *hosted = GHLSSHostedWindow;
     if (!hosted) { if (completion) completion(); return; }
     UIView *snap = nil;
-    if (ready) {
-        @try { snap = [hosted snapshotViewAfterScreenUpdates:NO]; } @catch (NSException *e) { (void)e; snap = nil; }
-    }
+    @try { snap = [hosted snapshotViewAfterScreenUpdates:NO]; } @catch (NSException *e) { (void)e; snap = nil; }
+    if (!ready && snap) GHLSSLogLine("v74 restore snapshot used");
     UIWindowScene *ws = GHLSSActiveWindowScene();
     UIWindow *overlay = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     overlay.windowLevel = GHLSS_HOSTED_FRONT_LEVEL;
@@ -6631,24 +6651,14 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
     overlay.rootViewController = vc;
     UIView *animView = snap;
     if (!animView) {
-        // 没活内容可拍——播一个深灰占位块（转圈＋App 名），绝不播黑块。
+        // 没活内容可拍——播一个深灰靜態块（App 圖標＋App 名，不轉圈），绝不播黑块。
         // 布局按目标框（toFrame）算，transform 会把它压回小卡尺寸。
         animView = [[UIView alloc] initWithFrame:toFrame];
         animView.backgroundColor = [UIColor colorWithRed:0.16 green:0.16 blue:0.18 alpha:1.0];
-        UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-        spinner.color = [UIColor whiteColor];
-        spinner.center = CGPointMake(toFrame.size.width / 2.0, toFrame.size.height / 2.0 - 12.0);
-        [spinner startAnimating];
-        [animView addSubview:spinner];
+        const char *fbBid = (GHLSSHostedBundleID[0] != '\0') ? GHLSSHostedBundleID : NULL;
         const char *nm = (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) ? GHLSSAppNames[GHLSSActiveAppIndex] : NULL;
-        if (nm && nm[0] != '\0') {
-            UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, toFrame.size.height / 2.0 + 14.0, toFrame.size.width, 20)];
-            label.text = [NSString stringWithCString:nm encoding:NSUTF8StringEncoding];
-            label.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
-            label.font = [UIFont systemFontOfSize:13];
-            label.textAlignment = NSTextAlignmentCenter;
-            [animView addSubview:label];
-        }
+        GHLSSAddStaticAppIconAndName(animView, fbBid, nm);
+        GHLSSLogLine("v74 restore snapshot missing, placeholder");
     }
     animView.layer.cornerRadius = GHLSSReadCornerRadius();
     animView.layer.masksToBounds = YES;
@@ -6881,7 +6891,7 @@ GHLSSLogLine("v57 foreground push on restore failed");
 }
 }
 // v72：恢复门控判断——前景刚推完，读一次 contentState：
-// 先播 0.25 秒快照动画（就绪播真快照、没就绪播深灰占位块），播完跑门控决策
+// 先播 0.7 秒快照动画（就绪播真快照；v74：没就绪也试真快照，拍不到才播靜態佔位），播完跑门控决策
 //（runRestoreGateDecision：就绪 80ms 后淡入显示；没就绪显示窗＋盖占位＋设门等）。
 // 没有目标框（idx 无效）时不播动画，直接跑门控决策。
 {
@@ -6890,7 +6900,7 @@ if (GHLSSHostedScene) {
 @try { gateCS = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; gateCS = 2; }
 }
 if (restoreHasTargetFrame) {
-[self animateRestoreSnapshotFromFrame:restoreFromFrame toFrame:restoreTargetFrame ready:(gateCS == 2 && GHLSSHostedSceneSizeMatchesWindow()) completion:^{ // v73：尺寸還沒對上也播佔位塊（真快照會是小內容＋黑邊）。
+[self animateRestoreSnapshotFromFrame:restoreFromFrame toFrame:restoreTargetFrame ready:(gateCS == 2 && GHLSSHostedSceneSizeMatchesWindow()) completion:^{ // v74：尺寸還沒對上也試真快照（上次快照是靜態圖，不會黑）；拍不到才播靜態佔位。
 [self runRestoreGateDecision];
 }];
 } else {
