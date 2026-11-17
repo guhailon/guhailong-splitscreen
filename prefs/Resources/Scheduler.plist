@@ -12,7 +12,7 @@
 			<key>detail</key>
 			<string>GHLSSGesturesListController</string>
 			<key>label</key>
-			<string>手勢總覽</string>
+			<string>手势总览</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -128,19 +128,19 @@
 			<key>key</key>
 			<string>doraemonDoubleTapEnabled</string>
 			<key>label</key>
-			<string>哆啦A夢双击轮切</string>
+			<string>哆啦A梦双击轮切</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗拖动关了，浮窗不能拖；侧边小窗手势关了，三屏分隔线不能拖；哆啦A夢双击轮切关了，双击哆啦A夢不轮切，只剩单击开 ARC。</string>
+			<string>浮窗拖动关了，浮窗不能拖；侧边小窗手势关了，三屏分隔线不能拖；哆啦A梦双击轮切关了，双击哆啦A梦不轮切，只剩单击开 ARC。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>长按哆啦A夢</string>
+			<string>长按哆啦A梦</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

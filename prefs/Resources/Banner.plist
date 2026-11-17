@@ -38,7 +38,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>點插件自己的通知橫幅可以把浮窗叫回來；系統通知橫幅出現時為那個 App 開浮窗（探針：沒有可靠 hook 點，輪詢認 App）。預設關。</string>
+			<string>点插件自己的通知横幅可以把浮窗叫回来；系统通知横幅出现时为那个 App 开浮窗（探针：没有可靠 hook 点，轮询认 App）。预设关。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

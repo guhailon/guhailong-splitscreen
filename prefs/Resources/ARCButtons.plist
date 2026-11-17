@@ -30,9 +30,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗裡 App 圖標排幾圈同心弧，1–5 層，預設 2 層；改了下次開 ARC 生效。圖標少於層數時不留空層。</string>
+			<string>浮窗里 App 图标排几圈同心弧，1–5 层，预设 2 层；改了下次开 ARC 生效。图标少于层数时不留空层。</string>
 			<key>label</key>
-			<string>ARC 層數</string>
+			<string>ARC 层数</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -46,14 +46,14 @@
 			<key>key</key>
 			<string>arcLayerCount</string>
 			<key>label</key>
-			<string>ARC 層數</string>
+			<string>ARC 层数</string>
 			<key>validTitles</key>
 			<array>
-				<string>1 層</string>
-				<string>2 層</string>
-				<string>3 層</string>
-				<string>4 層</string>
-				<string>5 層</string>
+				<string>1 层</string>
+				<string>2 层</string>
+				<string>3 层</string>
+				<string>4 层</string>
+				<string>5 层</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -126,7 +126,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>啟動器 App 圖標從左／右側邊緣扇形滑出，弧心錨在邊緣（哆啦A夢鈕或滑動手指的位置）；改了下次開啟動器生效。跟浮窗滑出方向是兩個設定，各管各的。</string>
+			<string>启动器 App 图标从左／右侧边缘扇形滑出，弧心锚在边缘（哆啦A梦钮或滑动手指的位置）；改了下次开启动器生效。跟浮窗滑出方向是两个设定，各管各的。</string>
 		</dict>
 	</array>
 	<key>title</key>

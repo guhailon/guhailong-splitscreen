@@ -60,7 +60,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>启动器从哪边滑出、贴边 peek 贴在哪边、哆啦A夢鈕和 ARC 图标列默认在哪边，都跟着这个选。</string>
+			<string>启动器从哪边滑出、贴边 peek 贴在哪边、哆啦A梦钮和 ARC 图标列默认在哪边，都跟着这个选。</string>
 			<key>label</key>
 			<string>三屏小窗显示位置</string>
 		</dict>
@@ -114,7 +114,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>開側窗時的寬度：窄 25%、中 30%、寬 40% 屏寬（iPhone 11 屏寬 414pt）；拖分隔線後以拖的為準。下面滑桿有值時以滑桿為準（20–50%），沒動過滑桿就走上面預設。</string>
+			<string>开侧窗时的宽度：窄 25%、中 30%、宽 40% 屏宽（iPhone 11 屏宽 414pt）；拖分隔线后以拖的为准。下面滑杆有值时以滑杆为准（20–50%），没动过滑杆就走上面预设。</string>
 			<key>label</key>
 			<string>侧窗宽度预设</string>
 		</dict>
@@ -176,13 +176,13 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>點進去看上次的三屏組合（顯示 App 名字，點一下成對開）和存的 3 對常用組合；設定 App 看不到現在開著的窗，「存目前這對」存的是上次開過的那對。</string>
+			<string>点进去看上次的三屏组合（显示 App 名字，点一下成对开）和存的 3 对常用组合；设定 App 看不到现在开著的窗，「存目前这对」存的是上次开过的那对。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>分隔線粗細預設 16pt；顏色預設金色（跟現有的分隔線顏色一樣）。</string>
+			<string>分隔线粗细预设 16pt；颜色预设金色（跟现有的分隔线颜色一样）。</string>
 			<key>label</key>
 			<string>分隔线样式</string>
 		</dict>
@@ -256,13 +256,13 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>開著時，邊緣滑動（照調度設置的次數／邊）直接開三屏（用上次的組合，沒有就用最近的 App 當側窗），不再開 ARC；關著時邊緣滑動照舊開 ARC。兩個觸發不打架：這個開關只改邊緣滑動的目的地，ARC 還能從哆啦A夢鈕叫出來。</string>
+			<string>开著时，边缘滑动（照调度设置的次数／边）直接开三屏（用上次的组合，没有就用最近的 App 当侧窗），不再开 ARC；关著时边缘滑动照旧开 ARC。两个触发不打架：这个开关只改边缘滑动的目的地，ARC 还能从哆啦A梦钮叫出来。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>側窗圓角預設 35、陰影預設開，只作用在側窗上；浮窗走浮窗設置裡原來的設定。</string>
+			<string>侧窗圆角预设 35、阴影预设开，只作用在侧窗上；浮窗走浮窗设置里原来的设定。</string>
 			<key>label</key>
 			<string>侧窗圆角和阴影（跟浮窗分开调）</string>
 		</dict>

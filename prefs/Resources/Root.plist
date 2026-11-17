@@ -10,13 +10,13 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.74（实验版 v74）</string>
+			<string>SeaDragon Split v1.0.75（实验版 v75）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>壁紙</string>
+			<string>壁纸</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -24,7 +24,7 @@
 			<key>detail</key>
 			<string>GHLSSCardBgCarouselListController</string>
 			<key>label</key>
-			<string>壁紙</string>
+			<string>壁纸</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -120,9 +120,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>遊戲模式開著時，進選好的遊戲 App 自動開：浮窗變淡到 0.5、縮到邊上成小窗、不吃觸摸（只剩哆啦A夢鈕可點）；出遊戲自動恢復原樣。哆啦A夢鈕點一下叫回浮窗。橫屏自動用橫屏尺寸。亮度音量按每款遊戲記住（音量是探針，真機未證實）；勿擾聯動是探針。</string>
+			<string>游戏模式开著时，进选好的游戏 App 自动开：浮窗变淡到 0.5、缩到边上成小窗、不吃触摸（只剩哆啦A梦钮可点）；出游戏自动恢复原样。哆啦A梦钮点一下叫回浮窗。横屏自动用横屏尺寸。亮度音量按每款游戏记住（音量是探针，真机未证实）；勿扰联动是探针。</string>
 			<key>label</key>
-			<string>遊戲模式自動觸發</string>
+			<string>游戏模式自动触发</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -132,7 +132,7 @@
 			<key>ghlssPickerMode</key>
 			<string>game</string>
 			<key>label</key>
-			<string>選擇遊戲 App</string>
+			<string>选择游戏 App</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -146,7 +146,7 @@
 			<key>key</key>
 			<string>gameRememberBrightnessVolume</string>
 			<key>label</key>
-			<string>進遊戲記住亮度音量</string>
+			<string>进游戏记住亮度音量</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -160,7 +160,7 @@
 			<key>key</key>
 			<string>gameClearBackground</string>
 			<key>label</key>
-			<string>進遊戲自動清後台</string>
+			<string>进游戏自动清后台</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -174,7 +174,7 @@
 			<key>key</key>
 			<string>gameDoubleTapSwitchWeChat</string>
 			<key>label</key>
-			<string>雙擊哆啦A夢切遊戲／微信</string>
+			<string>双击哆啦A梦切游戏／微信</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -188,7 +188,7 @@
 			<key>key</key>
 			<string>gameMinimalAnimations</string>
 			<key>label</key>
-			<string>遊戲時浮窗動畫減到最少</string>
+			<string>游戏时浮窗动画减到最少</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -202,7 +202,7 @@
 			<key>key</key>
 			<string>gameDNDProbe</string>
 			<key>label</key>
-			<string>進遊戲開勿擾（探針）</string>
+			<string>进游戏开勿扰（探针）</string>
 		</dict>
 		<dict>
 			<key>action</key>
@@ -210,7 +210,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>清除已記的遊戲浮窗位置</string>
+			<string>清除已记的游戏浮窗位置</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -288,7 +288,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>檢查更新</string>
+			<string>检查更新</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -296,7 +296,7 @@
 			<key>detail</key>
 			<string>GHLSSStatusListController</string>
 			<key>label</key>
-			<string>狀態</string>
+			<string>状态</string>
 		</dict>
 		<dict>
 			<key>cell</key>

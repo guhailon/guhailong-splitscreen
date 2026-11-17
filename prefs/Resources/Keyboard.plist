@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>鍵盤彈出時浮窗自動上移：收到鍵盤通知就按鍵盤高度把浮窗上移，鍵盤收起回原位。探針：鍵盤通知由被托管 App 行程發，可能到不了 SpringBoard，收不到就不動，需真機驗證。</string>
+			<string>键盘弹出时浮窗自动上移：收到键盘通知就按键盘高度把浮窗上移，键盘收起回原位。探针：键盘通知由被托管 App 行程发，可能到不了 SpringBoard，收不到就不动，需真机验证。</string>
 			<key>label</key>
 			<string>浮窗键盘设置</string>
 		</dict>
@@ -32,13 +32,13 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>探針：鍵盤通知由 App 行程發，可能到不了 SpringBoard；收到了窗才上移、收起回原位，收不到就不動。</string>
+			<string>探针：键盘通知由 App 行程发，可能到不了 SpringBoard；收到了窗才上移、收起回原位，收不到就不动。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>內彈出＝鍵盤出現在浮窗內、浮窗為它上移；外彈出＝鍵盤出現在浮窗外、浮窗不動。兩種都走鍵盤通知監聽，通知到不了 SpringBoard 就不動（探針）。</string>
+			<string>内弹出＝键盘出现在浮窗内、浮窗为它上移；外弹出＝键盘出现在浮窗外、浮窗不动。两种都走键盘通知监听，通知到不了 SpringBoard 就不动（探针）。</string>
 			<key>label</key>
 			<string>浮窗键盘弹出方式</string>
 		</dict>
@@ -84,7 +84,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>只在外弹出模式下生效；鍵盤收起時活動浮窗一起關掉。橫屏＋外彈出時，外置鍵盤可以拖動移位置（探針：SpringBoard 側能不能動到鍵盤視窗未證實）。</string>
+			<string>只在外弹出模式下生效；键盘收起时活动浮窗一起关掉。横屏＋外弹出时，外置键盘可以拖动移位置（探针：SpringBoard 侧能不能动到键盘视窗未证实）。</string>
 		</dict>
 	</array>
 	<key>title</key>

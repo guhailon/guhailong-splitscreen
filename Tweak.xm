@@ -1,3 +1,4 @@
+// v42.33 (1.0.75)：繁体文案转简体中文（设定页／浮窗／提示全部简体）；含 1.0.74 的转圈修复。
 // GuHaiLongSplitScreen v1.0.73 (v42.31) — 顾海龙集团原创分屏插件（实验版）
 //
 // ── v42.31 (1.0.73)：只修黑半邊（皇上 2026-11-17 15:37：主修就是主浮窗跟小浮窗的問題，
@@ -4035,7 +4036,7 @@ snprintf(buf, sizeof(buf), "v57 low battery %d%% docked %d windows", (int)pct, d
 GHLSSLogLine(buf);
 if (GHLSSLauncherShared && docked > 0) {
 char msg[192];
-snprintf(msg, sizeof(msg), "電量低於 %d%%，浮窗已收成貼邊小卡", (int)threshold);
+snprintf(msg, sizeof(msg), "电量低于 %d%%，浮窗已收成贴边小卡", (int)threshold);
 [GHLSSLauncherShared showNotificationBannerWithText:msg];
 }
 } else if (pct >= threshold + 5.0) {
@@ -4043,7 +4044,7 @@ snprintf(msg, sizeof(msg), "電量低於 %d%%，浮窗已收成貼邊小卡", (i
 // 才彈橫幅提示。橫幅本身不支援點按（只是顯示幾秒的提示條），所以不做
 // 點橫幅彈回——文字直接寫點貼邊小卡恢復，窗照樣點小卡叫回來。
 if (GHLSSLowBatteryDocked && GHLSSLowBatteryDockedCount > 0) {
-if (GHLSSLauncherShared) [GHLSSLauncherShared showNotificationBannerWithText:"電量恢復，點貼邊小卡彈回浮窗"];
+if (GHLSSLauncherShared) [GHLSSLauncherShared showNotificationBannerWithText:"电量恢复，点贴边小卡弹回浮窗"];
 char buf[192];
 snprintf(buf, sizeof(buf), "v57 low battery recovered %d%%, %d windows were docked", (int)pct, GHLSSLowBatteryDockedCount);
 GHLSSLogLine(buf);
@@ -8000,7 +8001,7 @@ CGFloat y = startY;
 // 1. 回遊戲（大行，金底黑字；副標是當前遊戲名）。
 char gameName[128];
 GHLSSAppNameForBundleID(GHLSSGameActiveBid, gameName, sizeof(gameName));
-NSString *gameTitle = [NSString stringWithCString:"回遊戲" encoding:NSUTF8StringEncoding];
+NSString *gameTitle = [NSString stringWithCString:"回游戏" encoding:NSUTF8StringEncoding];
 NSString *gameSub = nil;
 if (gameName[0] != '\0') gameSub = [NSString stringWithCString:gameName encoding:NSUTF8StringEncoding];
 UIButton *backBtn = [self gameToolboxRowWithTitle:gameTitle subtitle:gameSub icon:nil frame:CGRectMake(rowX, y, rowW, 68.0) tag:1000 action:@selector(handleGameToolboxReturnToGame:) highlighted:YES];
@@ -8025,14 +8026,14 @@ UIButton *appBtn = [self gameToolboxRowWithTitle:title subtitle:nil icon:icon fr
 y += rowH + gap;
 }
 // 4. 清後台。
-NSString *clearTitle = [NSString stringWithCString:"清後台" encoding:NSUTF8StringEncoding];
-NSString *clearSub = [NSString stringWithCString:"關掉其他非釘選浮窗" encoding:NSUTF8StringEncoding];
+NSString *clearTitle = [NSString stringWithCString:"清后台" encoding:NSUTF8StringEncoding];
+NSString *clearSub = [NSString stringWithCString:"关掉其他非钉选浮窗" encoding:NSUTF8StringEncoding];
 UIButton *clearBtn = [self gameToolboxRowWithTitle:clearTitle subtitle:clearSub icon:nil frame:CGRectMake(rowX, y, rowW, rowH) tag:1003 action:@selector(handleGameToolboxClearBackground:) highlighted:NO];
 [GHLSSLauncherContentView addSubview:clearBtn];
 y += rowH + gap;
 // 5. 錄屏（探針：打開控制中心，不是直接開錄——見 handleGameToolboxRecord:）。
-NSString *recTitle = [NSString stringWithCString:"錄屏" encoding:NSUTF8StringEncoding];
-NSString *recSub = [NSString stringWithCString:"打開控制中心，手點錄屏" encoding:NSUTF8StringEncoding];
+NSString *recTitle = [NSString stringWithCString:"录屏" encoding:NSUTF8StringEncoding];
+NSString *recSub = [NSString stringWithCString:"打开控制中心，手点录屏" encoding:NSUTF8StringEncoding];
 UIButton *recBtn = [self gameToolboxRowWithTitle:recTitle subtitle:recSub icon:nil frame:CGRectMake(rowX, y, rowW, rowH) tag:1004 action:@selector(handleGameToolboxRecord:) highlighted:NO];
 [GHLSSLauncherContentView addSubview:recBtn];
 GHLSSLogLine("v68 game toolbox built");
@@ -8547,12 +8548,12 @@ UIView *root = [[UIView alloc] initWithFrame:screenBounds];
 root.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
 vc.view = root;
 UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, 44, screenBounds.size.width - 32, 30)];
-title.text = [NSString stringWithCString:"選擇應用" encoding:NSUTF8StringEncoding];
+title.text = [NSString stringWithCString:"选择应用" encoding:NSUTF8StringEncoding];
 title.textColor = [UIColor whiteColor];
 title.font = [UIFont boldSystemFontOfSize:20];
 [root addSubview:title];
 UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(16, 76, screenBounds.size.width - 32, 20)];
-sub.text = [NSString stringWithCString:"開了就出現在啟動器裡（最多 12 個）" encoding:NSUTF8StringEncoding];
+sub.text = [NSString stringWithCString:"开了就出现在启动器里（最多 12 个）" encoding:NSUTF8StringEncoding];
 sub.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
 sub.font = [UIFont systemFontOfSize:13];
 [root addSubview:sub];
@@ -8578,7 +8579,7 @@ CGFloat rowH = 52.0;
 GHLSSAppPickerCount = 0;
 if (!installed || [installed count] == 0) {
 UILabel *empty = [[UILabel alloc] initWithFrame:CGRectMake(16, 8, screenBounds.size.width - 32, 40)];
-empty.text = [NSString stringWithCString:"還沒有已安裝 App 清單（後台列舉中，稍後再開）" encoding:NSUTF8StringEncoding];
+empty.text = [NSString stringWithCString:"还没有已安装 App 清单（后台列举中，稍后再开）" encoding:NSUTF8StringEncoding];
 empty.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
 empty.font = [UIFont systemFontOfSize:13];
 empty.numberOfLines = 2;

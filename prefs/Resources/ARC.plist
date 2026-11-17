@@ -10,9 +10,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>在這裡選要出現在啟動器裡的 App，最多 12 個（固定 5 個＋自選 7 個）。</string>
+			<string>在这里选要出现在启动器里的 App，最多 12 个（固定 5 个＋自选 7 个）。</string>
 			<key>label</key>
-			<string>啟動器 App</string>
+			<string>启动器 App</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -26,7 +26,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>邊緣滑動、哆啦A夢鈕都能叫出 ARC；浮窗也能從三屏設置里開。</string>
+			<string>边缘滑动、哆啦A梦钮都能叫出 ARC；浮窗也能从三屏设置里开。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -46,7 +46,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>录屏开始时藏 ARC；截图藏不了——截图完成的通知在截图之后才到，藏了也进不了那一张。哆啦A夢鈕不藏。</string>
+			<string>录屏开始时藏 ARC；截图藏不了——截图完成的通知在截图之后才到，藏了也进不了那一张。哆啦A梦钮不藏。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -68,7 +68,7 @@
 			<key>detail</key>
 			<string>GHLSSGesturesListController</string>
 			<key>label</key>
-			<string>手勢總覽</string>
+			<string>手势总览</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -136,7 +136,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>「全屏打开」是探針：系統不一定放行，打不開時自動退回浮窗；浮窗和三屏是確定的。</string>
+			<string>「全屏打开」是探针：系统不一定放行，打不开时自动退回浮窗；浮窗和三屏是确定的。</string>
 		</dict>
 		<dict>
 			<key>cell</key>

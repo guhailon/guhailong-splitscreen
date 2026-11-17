@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>SeaDragon Split v1.0.74（实验版 v74）</string>
+			<string>SeaDragon Split v1.0.75（实验版 v75）</string>
 			<key>label</key>
 			<string>版本</string>
 		</dict>
@@ -18,11 +18,11 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>（讀取中）</string>
+			<string>（读取中）</string>
 			<key>key</key>
 			<string>statusEnabledState</string>
 			<key>label</key>
-			<string>插件開關</string>
+			<string>插件开关</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -30,7 +30,7 @@
 			<key>detail</key>
 			<string>GHLSSLogViewerListController</string>
 			<key>label</key>
-			<string>查看完整日誌</string>
+			<string>查看完整日志</string>
 		</dict>
 		<dict>
 			<key>action</key>
@@ -38,13 +38,13 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>複製診斷信息</string>
+			<string>复制诊断信息</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>聯繫與源</string>
+			<string>联系与源</string>
 		</dict>
 		<dict>
 			<key>action</key>
@@ -52,7 +52,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>QQ：2309103548（點一下複製）</string>
+			<string>QQ：2309103548（点一下复制）</string>
 		</dict>
 		<dict>
 			<key>action</key>
@@ -60,7 +60,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>QQ交流群：1130823454（點一下複製）</string>
+			<string>QQ交流群：1130823454（点一下复制）</string>
 		</dict>
 		<dict>
 			<key>action</key>
@@ -68,7 +68,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>Telegram 交流群（點一下進群）</string>
+			<string>Telegram 交流群（点一下进群）</string>
 		</dict>
 		<dict>
 			<key>action</key>
@@ -76,7 +76,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>顧海龍集團越獄源（點一下複製）</string>
+			<string>顾海龙集团越狱源（点一下复制）</string>
 		</dict>
 	</array>
 </dict>

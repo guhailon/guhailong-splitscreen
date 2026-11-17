@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>開窗時從這邊滑進來，收起的貼邊小窗也貼這邊；預設右邊。</string>
+			<string>开窗时从这边滑进来，收起的贴边小窗也贴这边；预设右边。</string>
 			<key>label</key>
 			<string>浮窗滑出方向</string>
 		</dict>
@@ -56,7 +56,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>屏幕底下一條任務欄，開著的窗都在上面（圖標＋綠點），點一下切到那個窗；開了 2 秒內建好，不用 respring。</string>
+			<string>屏幕底下一条任务栏，开著的窗都在上面（图标＋绿点），点一下切到那个窗；开了 2 秒内建好，不用 respring。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -82,7 +82,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>調全部浮窗的透明度（0.5–1.0）；以前單獨調過的窗仍用舊值。</string>
+			<string>调全部浮窗的透明度（0.5–1.0）；以前单独调过的窗仍用旧值。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -102,7 +102,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>記住關機／重啟前開著的 App 和位置，SpringBoard 重啟後自動重新打開。注意：scene 撐不過重啟，恢復是重建 scene 重新開 App，不是接續舊 scene；只恢復看得見的浮窗，收起的 peek 不恢復。</string>
+			<string>记住关机／重启前开著的 App 和位置，SpringBoard 重启后自动重新打开。注意：scene 撑不过重启，恢复是重建 scene 重新开 App，不是接续旧 scene；只恢复看得见的浮窗，收起的 peek 不恢复。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -142,7 +142,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>電量低於閾值（10–30%，預設 20%）時自動把看得見的浮窗都收成貼邊小卡，並彈通知橫幅提示；電量回到閾值＋5% 以上才重新待命。</string>
+			<string>电量低于阈值（10–30%，预设 20%）时自动把看得见的浮窗都收成贴边小卡，并弹通知横幅提示；电量回到阈值＋5% 以上才重新待命。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -162,7 +162,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>開啟此開關，屏幕轉向發生改變或拖拽全屏打開應用後，都不記錄位置，固定為屏幕中心。關著時記住每個 App 上次的位置／大小（v40 的做法）。注意：這一項跟「記住位置」互斥——開了固定中心就不記住位置，關了才記住；兩邊是同一份行為，不要兩頭都指望。</string>
+			<string>开启此开关，屏幕转向发生改变或拖拽全屏打开应用后，都不记录位置，固定为屏幕中心。关著时记住每个 App 上次的位置／大小（v40 的做法）。注意：这一项跟「记住位置」互斥——开了固定中心就不记住位置，关了才记住；两边是同一份行为，不要两头都指望。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -214,7 +214,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗大小，100 是現在的 346×749；調小就等比縮小（寬高一起縮，寬高比鎖住，不會出黑邊）。計算器保持自己的 320×693。</string>
+			<string>浮窗大小，100 是现在的 346×749；调小就等比缩小（宽高一起缩，宽高比锁住，不会出黑边）。计算器保持自己的 320×693。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -281,7 +281,7 @@
 			<array>
 				<string>关闭浮窗</string>
 				<string>侧边</string>
-				<string>懸掛</string>
+				<string>悬挂</string>
 			</array>
 			<key>validValues</key>
 			<array>

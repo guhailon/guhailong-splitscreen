@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>拖动哆啦A夢鈕改位置：直接在主屏上拖它，上下左右都能放，松手就记住；左右边只決定從沒拖過時的落點。</string>
+			<string>拖动哆啦A梦钮改位置：直接在主屏上拖它，上下左右都能放，松手就记住；左右边只决定从没拖过时的落点。</string>
 			<key>label</key>
 			<string>悬浮图标设置</string>
 		</dict>
@@ -26,7 +26,7 @@
 			<key>key</key>
 			<string>doraemonIconSize</string>
 			<key>label</key>
-			<string>哆啦A夢鈕大小</string>
+			<string>哆啦A梦钮大小</string>
 			<key>max</key>
 			<real>72.0</real>
 			<key>min</key>
@@ -44,7 +44,7 @@
 			<key>key</key>
 			<string>doraemonSide</string>
 			<key>label</key>
-			<string>哆啦A夢鈕在哪边</string>
+			<string>哆啦A梦钮在哪边</string>
 			<key>validTitles</key>
 			<array>
 				<string>主屏左侧</string>
@@ -74,7 +74,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>哆啦A夢鈕的圖片可以自己換：相冊選圖、居中裁方形；長按或點恢復回默認哆啦A夢圖。鈕大小改完 2 秒內生效，不用重啟。</string>
+			<string>哆啦A梦钮的图片可以自己换：相册选图、居中裁方形；长按或点恢复回默认哆啦A梦图。钮大小改完 2 秒内生效，不用重启。</string>
 		</dict>
 	</array>
 	<key>title</key>

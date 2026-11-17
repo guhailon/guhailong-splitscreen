@@ -253,7 +253,7 @@ static NSString *GHLSSLogTailNewestFirst(void) {
     NSData *data = [NSData dataWithContentsOfFile:GHLSSLogFilePath()];
     if (!data || [data length] == 0) {
         GHLSSLogTailLinesRead = 0;
-        return GHLSSRuntimeString("還沒有日誌（檔案不存在或讀不到）。");
+        return GHLSSRuntimeString("还没有日志（档案不存在或读不到）。");
     }
     if ([data length] > 262144) {
         data = [data subdataWithRange:NSMakeRange([data length] - 262144, 262144)];
@@ -262,7 +262,7 @@ static NSString *GHLSSLogTailNewestFirst(void) {
     if (!content) content = [NSString stringWithContentsOfFile:GHLSSLogFilePath() encoding:NSUTF8StringEncoding error:nil];
     if (!content) {
         GHLSSLogTailLinesRead = 0;
-        return GHLSSRuntimeString("還沒有日誌（檔案不存在或讀不到）。");
+        return GHLSSRuntimeString("还没有日志（档案不存在或读不到）。");
     }
     NSArray *lines = [content componentsSeparatedByString:GHLSSRuntimeString("\n")];
     NSMutableArray *last = [NSMutableArray array];
@@ -473,7 +473,7 @@ static void GHLSSCardBgMigrateV62(NSBundle *bundle) {
     for (int i = 0; i < n; i++) if (kind[i] >= 0 && kind[i] <= 2) hasVideo = YES;
     if (!hasVideo) { GHLSSWritePrefsCString("cardBgV62Migrated", "1"); return; }
     static const char *kRes[4] = {"ghlss-bg-pink", "ghlss-bg-white", "ghlss-bg-green", NULL};
-    static const char *kColor[4] = {"粉", "白", "綠", NULL};
+    static const char *kColor[4] = {"粉", "白", "绿", NULL};
     int order[6];
     int m = 0;
     int want[3] = {1, 0, 2};
@@ -750,7 +750,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         snprintf(buf, sizeof(buf), "v57 prefs-config tap EXCEPTION %s", why);
         GHLSSPrefsLogLine(buf);
         @try {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("點按失敗") message:GHLSSRuntimeString("這個按鈕點下去出錯了（已記進日誌），先回上一頁再試。") preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("点按失败") message:GHLSSRuntimeString("这个按钮点下去出错了（已记进日志），先回上一页再试。") preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
             [controller presentViewController:alert animated:YES completion:nil];
         } @catch (NSException *e2) {
@@ -810,7 +810,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             [iv addGestureRecognizer:tap];
             UIButton *restoreBtn = [UIButton buttonWithType:UIButtonTypeSystem];
             restoreBtn.frame = CGRectMake(w - 92, 158, 84, 28);
-            [restoreBtn setTitle:GHLSSRuntimeString("恢復默認") forState:UIControlStateNormal];
+            [restoreBtn setTitle:GHLSSRuntimeString("恢复默认") forState:UIControlStateNormal];
             restoreBtn.titleLabel.font = [UIFont systemFontOfSize:13];
             restoreBtn.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
             restoreBtn.layer.cornerRadius = 6.0;
@@ -955,7 +955,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     [self ghlssRefreshBannerPreview];
     [self ghlssStopBgTimer];
     GHLSSPrefsLogLine("v59 bg restored default");
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已恢復默認白卡") message:GHLSSRuntimeString("浮窗設定卡片回到默認白卡。") preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已恢复默认白卡") message:GHLSSRuntimeString("浮窗设定卡片回到默认白卡。") preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -984,7 +984,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("主頁組裝出錯（已記進日誌），先回設定再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("主页组装出错（已记进日志），先回设定再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -1004,17 +1004,17 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         if (!strongSelf) return;
         if (error || !latest) {
             GHLSSPrefsLogLine("v57 prefs-update: fetch failed");
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("檢查失敗") message:GHLSSRuntimeString("檢查失敗，請檢查網絡。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("检查失败") message:GHLSSRuntimeString("检查失败，请检查网络。")];
             return;
         }
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.74");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.75");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.74。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.75。")];
         } else {
-            NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，請去 Sileo 更新。")];
+            NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
         }
     });
@@ -1167,10 +1167,10 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[128];
         snprintf(buf, sizeof(buf), "v68 prefs-config clear game window positions: removed %d keys", removed);
         GHLSSPrefsLogLine(buf);
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已清除") message:GHLSSRuntimeString("已記的遊戲浮窗位置都清掉了，下次進遊戲浮窗回到預設位置。")];
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已清除") message:GHLSSRuntimeString("已记的游戏浮窗位置都清掉了，下次进游戏浮窗回到预设位置。")];
     } else {
         GHLSSPrefsLogLine("v68 prefs-config clear game window positions: none saved");
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("沒有已記的位置") message:GHLSSRuntimeString("還沒有記過任何遊戲浮窗位置，不用清。")];
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有已记的位置") message:GHLSSRuntimeString("还没有记过任何游戏浮窗位置，不用清。")];
     }
 }
 
@@ -1430,14 +1430,14 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
             NSString *footerKey = GHLSSRuntimeString("footerText");
             // v56：遊戲模式復用同一頁——頁腳改說遊戲清單，開關只管遊戲清單。
             if ([self ghlssIsGamePicker]) {
-                [group setProperty:GHLSSRuntimeString("選哪些 App 算遊戲：進這些 App 自動開遊戲模式（浮窗變淡、縮邊、防誤觸；出來自動恢復）。開關只管遊戲清單，不影響啟動器。") forKey:footerKey];
+                [group setProperty:GHLSSRuntimeString("选哪些 App 算游戏：进这些 App 自动开游戏模式（浮窗变淡、缩边、防误触；出来自动恢复）。开关只管游戏清单，不影响启动器。") forKey:footerKey];
             } else {
-                [group setProperty:GHLSSRuntimeString("开的 App 出现在启动器/ARC 里（最多 12 个，自选 7 个）。清单在后台列举、缓存起来；刚装的 App 可能要等一会儿才出现，缺 App 時點下面「重新掃描」。") forKey:footerKey];
+                [group setProperty:GHLSSRuntimeString("开的 App 出现在启动器/ARC 里（最多 12 个，自选 7 个）。清单在后台列举、缓存起来；刚装的 App 可能要等一会儿才出现，缺 App 时点下面「重新扫描」。") forKey:footerKey];
             }
             [specs addObject:group];
             // v50：重新掃描（清單是後台列舉的緩存，舊了會缺 App；點一下請
             // dylib 2 秒內重建緩存，下次開這頁就看到新的）。
-            PSSpecifier *rescan = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("重新掃描") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+            PSSpecifier *rescan = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("重新扫描") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
             [rescan setProperty:GHLSSRuntimeString("ghlssRescanApps") forKey:GHLSSRuntimeString("action")];
             [specs addObject:rescan];
             // 固定 5 個。
@@ -1490,7 +1490,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("選擇器頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("选择器页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -1503,7 +1503,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
     (void)specifier;
     GHLSSWritePrefsBool("rescanAppsRequested", YES);
     GHLSSPrefsLogLine("v57 prefs-apppicker rescan requested");
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("正在重新掃描") message:GHLSSRuntimeString("已請後台重新列舉已安裝 App，稍後再開這一頁就看到新的清單。") preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("正在重新扫描") message:GHLSSRuntimeString("已请后台重新列举已安装 App，稍后再开这一页就看到新的清单。") preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -1762,7 +1762,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("排序頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("排序页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -1897,7 +1897,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
         @try {
             NSMutableArray *specs = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("最新的在最上面（預設最後 200 行）；清空是把檔案截斷，新的日誌會繼續寫進來。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("最新的在最上面（预设最后 200 行）；清空是把档案截断，新的日志会继续写进来。") forKey:GHLSSRuntimeString("footerText")];
             [specs addObject:group];
             NSArray *buttons = [NSArray arrayWithObjects:GHLSSRuntimeString("刷新"), GHLSSRuntimeString("清空"), GHLSSRuntimeString("分享"), nil];
             NSArray *actions = [NSArray arrayWithObjects:GHLSSRuntimeString("ghlssLogRefresh"), GHLSSRuntimeString("ghlssLogClear"), GHLSSRuntimeString("ghlssLogShare"), nil];
@@ -1914,7 +1914,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("日誌頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("日志页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -1937,11 +1937,11 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     BOOL ok = [[NSData data] writeToFile:GHLSSLogFilePath() options:NSDataWritingAtomic error:&err];
     if (ok) {
         if (self.logView) self.logView.text = GHLSSLogTailNewestFirst();
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("日誌已清空") message:GHLSSRuntimeString("日誌檔案已截斷，新的日誌會繼續寫進來。") preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("日志已清空") message:GHLSSRuntimeString("日志档案已截断，新的日志会继续写进来。") preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
     } else {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("清空失敗") message:GHLSSRuntimeString("日誌檔案寫不動（權限問題），請用 Filza 手動清。") preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("清空失败") message:GHLSSRuntimeString("日志档案写不动（权限问题），请用 Filza 手动清。") preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
     }
@@ -1991,7 +1991,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
         @try {
             NSMutableArray *specs = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("點一對就成對開（主 App 浮窗 + 另一個側窗），2 秒內開，不用 respring；最多存 3 對。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("点一对就成对开（主 App 浮窗 + 另一个侧窗），2 秒内开，不用 respring；最多存 3 对。") forKey:GHLSSRuntimeString("footerText")];
             [specs addObject:group];
             char *lastPair = GHLSSPrefsCString("lastThreeScreenPair");
             if (lastPair) {
@@ -1999,7 +1999,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
                 if (GHLSSPrefsSplitPair(lastPair, a, sizeof(a), b, sizeof(b))) {
                     NSString *nameA = GHLSSPrefsAppNameForBundleID(a);
                     NSString *nameB = GHLSSPrefsAppNameForBundleID(b);
-                    NSString *label = [[GHLSSRuntimeString("上次組合：") stringByAppendingString:nameA] stringByAppendingString:[[GHLSSRuntimeString(" + ") stringByAppendingString:nameB] stringByAppendingString:GHLSSRuntimeString("（點一下成對開）")]];
+                    NSString *label = [[GHLSSRuntimeString("上次组合：") stringByAppendingString:nameA] stringByAppendingString:[[GHLSSRuntimeString(" + ") stringByAppendingString:nameB] stringByAppendingString:GHLSSRuntimeString("（点一下成对开）")]];
                     PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:label target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
                     [spec setProperty:GHLSSRuntimeString("ghlssOpenPair") forKey:GHLSSRuntimeString("action")];
                     char pairBuf[256];
@@ -2010,7 +2010,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
                 free(lastPair);
             } else {
                 PSSpecifier *emptyGroup = [PSSpecifier emptyGroupSpecifier];
-                [emptyGroup setProperty:GHLSSRuntimeString("還沒有上次的三屏組合（開一次三屏就有了）。") forKey:GHLSSRuntimeString("footerText")];
+                [emptyGroup setProperty:GHLSSRuntimeString("还没有上次的三屏组合（开一次三屏就有了）。") forKey:GHLSSRuntimeString("footerText")];
                 [specs addObject:emptyGroup];
             }
             for (int s = 1; s <= 3; s++) {
@@ -2022,14 +2022,14 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
                 if (GHLSSPrefsSplitPair(pair, a, sizeof(a), b, sizeof(b))) {
                     NSString *nameA = GHLSSPrefsAppNameForBundleID(a);
                     NSString *nameB = GHLSSPrefsAppNameForBundleID(b);
-                    NSString *label = [[[[GHLSSRuntimeString("組合 ") stringByAppendingString:[NSString stringWithFormat:GHLSSRuntimeString("%d"), s]] stringByAppendingString:GHLSSRuntimeString("：")] stringByAppendingString:nameA] stringByAppendingString:[[GHLSSRuntimeString(" + ") stringByAppendingString:nameB] stringByAppendingString:GHLSSRuntimeString("（點一下成對開）")]];
+                    NSString *label = [[[[GHLSSRuntimeString("组合 ") stringByAppendingString:[NSString stringWithFormat:GHLSSRuntimeString("%d"), s]] stringByAppendingString:GHLSSRuntimeString("：")] stringByAppendingString:nameA] stringByAppendingString:[[GHLSSRuntimeString(" + ") stringByAppendingString:nameB] stringByAppendingString:GHLSSRuntimeString("（点一下成对开）")]];
                     PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:label target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
                     [spec setProperty:GHLSSRuntimeString("ghlssOpenPair") forKey:GHLSSRuntimeString("action")];
                     char pairBuf[256];
                     snprintf(pairBuf, sizeof(pairBuf), "%s|%s", a, b);
                     [spec setProperty:[NSString stringWithCString:pairBuf encoding:NSUTF8StringEncoding] forKey:GHLSSRuntimeString("pairValue")];
                     [specs addObject:spec];
-                    NSString *delLabel = [GHLSSRuntimeString("刪除組合 ") stringByAppendingString:[NSString stringWithFormat:GHLSSRuntimeString("%d"), s]];
+                    NSString *delLabel = [GHLSSRuntimeString("删除组合 ") stringByAppendingString:[NSString stringWithFormat:GHLSSRuntimeString("%d"), s]];
                     PSSpecifier *del = [PSSpecifier preferenceSpecifierNamed:delLabel target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
                     [del setProperty:GHLSSRuntimeString("ghlssDeletePair") forKey:GHLSSRuntimeString("action")];
                     [del setProperty:@(s) forKey:GHLSSRuntimeString("pairSlot")];
@@ -2037,11 +2037,11 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
                 }
                 free(pair);
             }
-            PSSpecifier *save = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("存目前這對（上次開過的組合）") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+            PSSpecifier *save = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("存目前这对（上次开过的组合）") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
             [save setProperty:GHLSSRuntimeString("ghlssSaveCurrentPair") forKey:GHLSSRuntimeString("action")];
             [specs addObject:save];
             PSSpecifier *note = [PSSpecifier emptyGroupSpecifier];
-            [note setProperty:GHLSSRuntimeString("設定 App 看不到現在開著的窗，這裡存的是上次開過的三屏組合；要存現在這對，請在浮窗設定卡片裡點「存目前這對」。") forKey:GHLSSRuntimeString("footerText")];
+            [note setProperty:GHLSSRuntimeString("设定 App 看不到现在开著的窗，这里存的是上次开过的三屏组合；要存现在这对，请在浮窗设定卡片里点「存目前这对」。") forKey:GHLSSRuntimeString("footerText")];
             [specs addObject:note];
             _specifiers = specs;
     
@@ -2052,7 +2052,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("三屏組合頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("三屏组合页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -2065,7 +2065,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     NSString *pair = specifier.properties[GHLSSRuntimeString("pairValue")];
     if (!pair || [pair length] == 0) return;
     GHLSSWritePrefsCString("openThreeScreenPair", [pair UTF8String]);
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已通知主插件") message:GHLSSRuntimeString("2 秒內成對開（主 App 浮窗 + 另一個側窗），不用 respring。") preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已通知主插件") message:GHLSSRuntimeString("2 秒内成对开（主 App 浮窗 + 另一个侧窗），不用 respring。") preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -2074,7 +2074,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     (void)specifier;
     char *lastPair = GHLSSPrefsCString("lastThreeScreenPair");
     if (!lastPair) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("沒有上次的組合") message:GHLSSRuntimeString("先開一次三屏，再來存。") preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("没有上次的组合") message:GHLSSRuntimeString("先开一次三屏，再来存。") preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         return;
@@ -2094,8 +2094,8 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     GHLSSWritePrefsCString(key, lastPair);
     free(lastPair);
     [self reloadSpecifiers];
-    NSString *msg = [[GHLSSRuntimeString("已存成組合 ") stringByAppendingString:[NSString stringWithFormat:GHLSSRuntimeString("%d"), slot]] stringByAppendingString:GHLSSRuntimeString("。")];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已存目前這對") message:msg preferredStyle:UIAlertControllerStyleAlert];
+    NSString *msg = [[GHLSSRuntimeString("已存成组合 ") stringByAppendingString:[NSString stringWithFormat:GHLSSRuntimeString("%d"), slot]] stringByAppendingString:GHLSSRuntimeString("。")];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已存目前这对") message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -2207,12 +2207,12 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
         PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-        [group setProperty:GHLSSRuntimeString("上面那張圓圖是現在的悬浮图标；從相冊選一張、居中裁成方形存起來，哆啦A夢鈕 2 秒內就換成它。") forKey:GHLSSRuntimeString("footerText")];
+        [group setProperty:GHLSSRuntimeString("上面那张圆图是现在的悬浮图标；从相册选一张、居中裁成方形存起来，哆啦A梦钮 2 秒内就换成它。") forKey:GHLSSRuntimeString("footerText")];
         [specs addObject:group];
-        PSSpecifier *pick = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("從相冊選圖（換鈕圖片）") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        PSSpecifier *pick = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("从相册选图（换钮图片）") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         [pick setProperty:GHLSSRuntimeString("ghlssPickDoraemonIcon") forKey:GHLSSRuntimeString("action")];
         [specs addObject:pick];
-        PSSpecifier *restore = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("恢復默認哆啦A夢圖") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        PSSpecifier *restore = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("恢复默认哆啦A梦图") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         [restore setProperty:GHLSSRuntimeString("ghlssRestoreDoraemonIcon") forKey:GHLSSRuntimeString("action")];
         [specs addObject:restore];
         _specifiers = specs;
@@ -2235,7 +2235,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     [[NSFileManager defaultManager] removeItemAtPath:GHLSSDoraemonIconPath() error:nil];
     GHLSSWritePrefsBool("doraemonIconCustom", NO);
     [self ghlssRefreshDoraemonPreview];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已恢復默認哆啦A夢圖") message:GHLSSRuntimeString("哆啦A夢鈕回到默認圖。") preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("已恢复默认哆啦A梦图") message:GHLSSRuntimeString("哆啦A梦钮回到默认图。") preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -2257,11 +2257,11 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             if (ok) {
                 GHLSSWritePrefsBool("doraemonIconCustom", YES);
                 [self ghlssRefreshDoraemonPreview];
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("鈕圖片已換好") message:GHLSSRuntimeString("哆啦A夢鈕 2 秒內就換成這張。") preferredStyle:UIAlertControllerStyleAlert];
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("钮图片已换好") message:GHLSSRuntimeString("哆啦A梦钮 2 秒内就换成这张。") preferredStyle:UIAlertControllerStyleAlert];
                 [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:alert animated:YES completion:nil];
             } else {
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("保存鈕圖片失敗") message:GHLSSRuntimeString("圖片寫不進設定目錄。") preferredStyle:UIAlertControllerStyleAlert];
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("保存钮图片失败") message:GHLSSRuntimeString("图片写不进设定目录。") preferredStyle:UIAlertControllerStyleAlert];
                 [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:alert animated:YES completion:nil];
             }
@@ -2306,7 +2306,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
         GHLSSPrefsLogLine("v61 prefs-bgcarousel: super viewDidLoad EXCEPTION");
     }
     GHLSSPrefsLogLine("v61 prefs-page: CardBgCarousel");
-    self.title = GHLSSRuntimeString("壁紙");
+    self.title = GHLSSRuntimeString("壁纸");
     @try {
         [self ghlssBuildWallpaperPage];
     } @catch (NSException *e) {
@@ -2362,12 +2362,12 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
 
     // 選擇照片＋說明。
     UILabel *secLb = [[UILabel alloc] initWithFrame:CGRectMake(16, 16, w - 32, 22)];
-    secLb.text = GHLSSRuntimeString("選擇照片");
+    secLb.text = GHLSSRuntimeString("选择照片");
     secLb.font = [UIFont boldSystemFontOfSize:16];
     secLb.textColor = [UIColor blackColor];
     [container addSubview:secLb];
     UILabel *helpLb = [[UILabel alloc] initWithFrame:CGRectMake(16, 44, w - 32, 40)];
-    helpLb.text = GHLSSRuntimeString("點一張卡片選中它，再選圖或調整；一次能選多張，按順序填進空卡（滿了就從當前卡往後替換）；有兩張以上時 3 秒自動換一張。");
+    helpLb.text = GHLSSRuntimeString("点一张卡片选中它，再选图或调整；一次能选多张，按顺序填进空卡（满了就从当前卡往后替换）；有两张以上时 3 秒自动换一张。");
     helpLb.font = [UIFont systemFontOfSize:12];
     helpLb.textColor = [UIColor colorWithWhite:0.45 alpha:1.0];
     helpLb.numberOfLines = 0;
@@ -2406,7 +2406,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     replaceBtn.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];
     replaceBtn.layer.cornerRadius = 12.0;
     replaceBtn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    [replaceBtn setTitle:GHLSSRuntimeString("🖼 更換圖片") forState:UIControlStateNormal];
+    [replaceBtn setTitle:GHLSSRuntimeString("🖼 更换图片") forState:UIControlStateNormal];
     [replaceBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     [replaceBtn addTarget:self action:@selector(ghlssReplaceWallpaperImages:) forControlEvents:UIControlEventTouchUpInside];
     [container addSubview:replaceBtn];
@@ -2415,7 +2415,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     adjustBtn.backgroundColor = [UIColor colorWithWhite:0.93 alpha:1.0];
     adjustBtn.layer.cornerRadius = 12.0;
     adjustBtn.titleLabel.font = [UIFont systemFontOfSize:15];
-    [adjustBtn setTitle:GHLSSRuntimeString("調整") forState:UIControlStateNormal];
+    [adjustBtn setTitle:GHLSSRuntimeString("调整") forState:UIControlStateNormal];
     [adjustBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
     [adjustBtn addTarget:self action:@selector(ghlssAdjustCurrentWallpaper:) forControlEvents:UIControlEventTouchUpInside];
     [container addSubview:adjustBtn];
@@ -2432,12 +2432,12 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
 
     // 內置壁紙區：標題＋橫排小縮圖（點一張直接用）。
     UILabel *builtinTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 504, 120, 20)];
-    builtinTitle.text = GHLSSRuntimeString("內置壁紙");
+    builtinTitle.text = GHLSSRuntimeString("内置壁纸");
     builtinTitle.font = [UIFont boldSystemFontOfSize:15];
     builtinTitle.textColor = [UIColor blackColor];
     [container addSubview:builtinTitle];
     UILabel *builtinHint = [[UILabel alloc] initWithFrame:CGRectMake(w - 140, 504, 124, 20)];
-    builtinHint.text = GHLSSRuntimeString("點一張直接用");
+    builtinHint.text = GHLSSRuntimeString("点一张直接用");
     builtinHint.font = [UIFont systemFontOfSize:12];
     builtinHint.textColor = [UIColor colorWithWhite:0.45 alpha:1.0];
     builtinHint.textAlignment = NSTextAlignmentRight;
@@ -2523,7 +2523,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     int cur = GHLSSCardBgIndexValue();
     if (self.wallStatusLabel) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "已選 %d/6 張", n);
+        snprintf(buf, sizeof(buf), "已选 %d/6 张", n);
         self.wallStatusLabel.text = GHLSSRuntimeString(buf);
     }
     if (self.wallOutputLabel) {
@@ -2531,13 +2531,13 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             UIImage *img = [UIImage imageWithContentsOfFile:GHLSSCardBgSlotPath(cur)];
             if (img) {
                 char buf[64];
-                snprintf(buf, sizeof(buf), "輸出 %d × %d", (int)img.size.width, (int)img.size.height);
+                snprintf(buf, sizeof(buf), "输出 %d × %d", (int)img.size.width, (int)img.size.height);
                 self.wallOutputLabel.text = GHLSSRuntimeString(buf);
             } else {
-                self.wallOutputLabel.text = GHLSSRuntimeString("輸出 —");
+                self.wallOutputLabel.text = GHLSSRuntimeString("输出 —");
             }
         } else {
-            self.wallOutputLabel.text = GHLSSRuntimeString("尚未選圖");
+            self.wallOutputLabel.text = GHLSSRuntimeString("尚未选图");
         }
     }
     if (self.wallDeleteButton) {
@@ -2565,7 +2565,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             ph.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
             ph.layer.cornerRadius = 14.0;
             UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, cardH / 2.0 - 12, cardW, 24)];
-            lb.text = GHLSSRuntimeString("還沒有壁紙，點「更換圖片」加入");
+            lb.text = GHLSSRuntimeString("还没有壁纸，点「更换图片」加入");
             lb.font = [UIFont systemFontOfSize:15];
             lb.textColor = [UIColor grayColor];
             lb.textAlignment = NSTextAlignmentCenter;
@@ -2625,11 +2625,11 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
         NSString *labelText = nil;
         if (color && color[0] != '\0') {
             char buf[64];
-            snprintf(buf, sizeof(buf), "第 %d 張 · %s", slot + 1, color);
+            snprintf(buf, sizeof(buf), "第 %d 张 · %s", slot + 1, color);
             labelText = GHLSSRuntimeString(buf);
         } else {
             char buf[64];
-            snprintf(buf, sizeof(buf), "第 %d 張", slot + 1);
+            snprintf(buf, sizeof(buf), "第 %d 张", slot + 1);
             labelText = GHLSSRuntimeString(buf);
         }
         if (color) free(color);
@@ -2673,9 +2673,9 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
         PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-        [group setProperty:GHLSSRuntimeString("點卡片換當前背景；有兩張以上時每 3 秒自動換一張。內置壁紙點一張直接用。") forKey:GHLSSRuntimeString("footerText")];
+        [group setProperty:GHLSSRuntimeString("点卡片换当前背景；有两张以上时每 3 秒自动换一张。内置壁纸点一张直接用。") forKey:GHLSSRuntimeString("footerText")];
         [specs addObject:group];
-        PSSpecifier *rot = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("自動輪播（3 秒換一張）") target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
+        PSSpecifier *rot = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("自动轮播（3 秒换一张）") target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
         [rot setProperty:GHLSSRuntimeString("cardBgRotate") forKey:GHLSSRuntimeString("key")];
         [rot setProperty:GHLSSRuntimeString("com.guhailong.splitscreen") forKey:GHLSSRuntimeString("defaults")];
         [rot setProperty:@(YES) forKey:GHLSSRuntimeString("default")];
@@ -2853,7 +2853,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
         char buf[128];
         snprintf(buf, sizeof(buf), "v59 bg picked %d", saved);
         GHLSSPrefsLogLine(buf);
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("背景圖已換好") message:GHLSSRuntimeString("點卡片可以換當前那張；兩張以上每 3 秒自動換。") preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("背景图已换好") message:GHLSSRuntimeString("点卡片可以换当前那张；两张以上每 3 秒自动换。") preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
     });
@@ -2880,8 +2880,8 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
     if (tag) {
         if (strcmp(tag, "ghlss-bg-pink") == 0) color = "粉";
         else if (strcmp(tag, "ghlss-bg-white") == 0) color = "白";
-        else if (strcmp(tag, "ghlss-bg-green") == 0) color = "綠";
-        else if (strcmp(tag, "ghlss-bg-reddress") == 0) color = "紅";
+        else if (strcmp(tag, "ghlss-bg-green") == 0) color = "绿";
+        else if (strcmp(tag, "ghlss-bg-reddress") == 0) color = "红";
     }
     GHLSSCardBgWriteColor(slot, color);
     GHLSSCardBgSetCurrent(slot);
@@ -3017,11 +3017,11 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
 // v42：手勢總覽——一頁列出全部手勢跟目前的設定值（只讀，
 // 改去調度設置／手勢自定義那頁）。
 static NSString *GHLSSGestureActionName(const char *value) {
-    if (!value) return GHLSSRuntimeString("未設定");
-    if (strcmp(value, "pin") == 0) return GHLSSRuntimeString("釘選置頂");
-    if (strcmp(value, "dock") == 0) return GHLSSRuntimeString("收起貼邊");
-    if (strcmp(value, "close") == 0) return GHLSSRuntimeString("關掉");
-    if (strcmp(value, "cycle") == 0) return GHLSSRuntimeString("輪切主窗");
+    if (!value) return GHLSSRuntimeString("未设定");
+    if (strcmp(value, "pin") == 0) return GHLSSRuntimeString("钉选置顶");
+    if (strcmp(value, "dock") == 0) return GHLSSRuntimeString("收起贴边");
+    if (strcmp(value, "close") == 0) return GHLSSRuntimeString("关掉");
+    if (strcmp(value, "cycle") == 0) return GHLSSRuntimeString("轮切主窗");
     if (strcmp(value, "maximize") == 0) return GHLSSRuntimeString("放大全屏");
     return [NSString stringWithCString:value encoding:NSUTF8StringEncoding];
 }
@@ -3125,7 +3125,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
         @try {
             NSMutableArray *specs = [NSMutableArray array];
             PSSpecifier *intro = [PSSpecifier emptyGroupSpecifier];
-            [intro setProperty:GHLSSRuntimeString("全部手勢跟目前的設定值。點下面一行去改（邊緣滑動／哆啦A夢鈕／手勢綁定／拖窗與點窗外）。") forKey:GHLSSRuntimeString("footerText")];
+            [intro setProperty:GHLSSRuntimeString("全部手势跟目前的设定值。点下面一行去改（边缘滑动／哆啦A梦钮／手势绑定／拖窗与点窗外）。") forKey:GHLSSRuntimeString("footerText")];
             [specs addObject:intro];
             // 邊緣滑動。
             {
@@ -3135,14 +3135,14 @@ static NSString *GHLSSGestureActionName(const char *value) {
                 if (sideStr[0] == '\0') sideStr = "right";
                 BOOL direct = GHLSSPrefsBool("edgeSwipeOpensThreeScreen", NO);
                 char buf[256];
-                snprintf(buf, sizeof(buf), "從%s邊滑 %d 次，%s", (strcmp(sideStr, "left") == 0) ? "左" : "右", count, direct ? "直接開三屏（上次組合）" : "開 ARC");
+                snprintf(buf, sizeof(buf), "从%s边滑 %d 次，%s", (strcmp(sideStr, "left") == 0) ? "左" : "右", count, direct ? "直接开三屏（上次组合）" : "开 ARC");
                 if (side) free(side);
                 PSSpecifier *g = [PSSpecifier emptyGroupSpecifier];
-                [g setProperty:GHLSSRuntimeString("邊緣滑動") forKey:GHLSSRuntimeString("label")];
+                [g setProperty:GHLSSRuntimeString("边缘滑动") forKey:GHLSSRuntimeString("label")];
                 [g setProperty:[NSString stringWithCString:buf encoding:NSUTF8StringEncoding] forKey:GHLSSRuntimeString("footerText")];
                 [specs addObject:g];
                 // v56：總覽每行點按跳到可改的設定頁（§141-6：總覽本身不改成可編輯頁）。
-                PSSpecifier *edgeRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改邊緣滑動") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
+                PSSpecifier *edgeRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改边缘滑动") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
                 [edgeRow setProperty:GHLSSRuntimeString("Scheduler") forKey:GHLSSRuntimeString("detail")];
                 [specs addObject:edgeRow];
             }
@@ -3151,12 +3151,12 @@ static NSString *GHLSSGestureActionName(const char *value) {
                 double lp = GHLSSPrefsDouble("longPressDuration", 0.5);
                 BOOL dbl = GHLSSPrefsBool("doraemonDoubleTapEnabled", YES);
                 char buf[256];
-                snprintf(buf, sizeof(buf), "單擊開 ARC；%s；長按 %.1f 秒關全部浮窗；直接拖鈕改高度。", dbl ? "雙擊輪切主窗" : "雙擊輪切已關", lp);
+                snprintf(buf, sizeof(buf), "单击开 ARC；%s；长按 %.1f 秒关全部浮窗；直接拖钮改高度。", dbl ? "双击轮切主窗" : "双击轮切已关", lp);
                 PSSpecifier *g = [PSSpecifier emptyGroupSpecifier];
-                [g setProperty:GHLSSRuntimeString("哆啦A夢鈕") forKey:GHLSSRuntimeString("label")];
+                [g setProperty:GHLSSRuntimeString("哆啦A梦钮") forKey:GHLSSRuntimeString("label")];
                 [g setProperty:[NSString stringWithCString:buf encoding:NSUTF8StringEncoding] forKey:GHLSSRuntimeString("footerText")];
                 [specs addObject:g];
-                PSSpecifier *doraRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改哆啦A夢鈕") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
+                PSSpecifier *doraRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改哆啦A梦钮") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
                 [doraRow setProperty:GHLSSRuntimeString("FloatingIcon") forKey:GHLSSRuntimeString("detail")];
                 [specs addObject:doraRow];
             }
@@ -3166,23 +3166,23 @@ static NSString *GHLSSGestureActionName(const char *value) {
                 char *v = GHLSSPrefsCString("gestureSwipeV");
                 char *h = GHLSSPrefsCString("gestureSwipeH");
                 char *f = GHLSSPrefsCString("gestureTwoFingerTap");
-                NSMutableString *line = [NSMutableString stringWithString:GHLSSRuntimeString("三擊浮窗：")];
+                NSMutableString *line = [NSMutableString stringWithString:GHLSSRuntimeString("三击浮窗：")];
                 [line appendString:GHLSSGestureActionName(t ? t : "pin")];
                 [line appendString:GHLSSRuntimeString("；上下滑：")];
                 [line appendString:GHLSSGestureActionName(v ? v : "dock")];
                 [line appendString:GHLSSRuntimeString("；左右滑：")];
                 [line appendString:GHLSSGestureActionName(h ? h : "close")];
-                [line appendString:GHLSSRuntimeString("；雙指點：")];
+                [line appendString:GHLSSRuntimeString("；双指点：")];
                 [line appendString:GHLSSGestureActionName(f ? f : "maximize")];
                 if (t) free(t);
                 if (v) free(v);
                 if (h) free(h);
                 if (f) free(f);
                 PSSpecifier *g = [PSSpecifier emptyGroupSpecifier];
-                [g setProperty:GHLSSRuntimeString("浮窗手勢（頂上 24pt 手柄，綁在手柄上、不是內容區）") forKey:GHLSSRuntimeString("label")];
+                [g setProperty:GHLSSRuntimeString("浮窗手势（顶上 24pt 手柄，绑在手柄上、不是内容区）") forKey:GHLSSRuntimeString("label")];
                 [g setProperty:line forKey:GHLSSRuntimeString("footerText")];
                 [specs addObject:g];
-                PSSpecifier *gestRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改手勢綁定") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
+                PSSpecifier *gestRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改手势绑定") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
                 [gestRow setProperty:GHLSSRuntimeString("GestureCustom") forKey:GHLSSRuntimeString("detail")];
                 [specs addObject:gestRow];
             }
@@ -3192,15 +3192,15 @@ static NSString *GHLSSGestureActionName(const char *value) {
                 BOOL sideGest = GHLSSPrefsBool("sideWindowGestures", YES);
                 BOOL tapOut = GHLSSPrefsBool("tapOutsideEnabled", YES);
                 char *tapAction = GHLSSPrefsCString("tapOutsideAction");
-                const char *tapStr = (tapAction && strcmp(tapAction, "close") == 0) ? "關掉浮窗" : "收起貼邊";
+                const char *tapStr = (tapAction && strcmp(tapAction, "close") == 0) ? "关掉浮窗" : "收起贴边";
                 if (tapAction) free(tapAction);
                 char buf[320];
-                snprintf(buf, sizeof(buf), "拖窗：%s；分隔線拖動：%s（拖到頂放大、拖到邊吸住留 8pt，放手才吸）；點窗外：%s（%s）。", drag ? "開" : "關", sideGest ? "開" : "關", tapOut ? "開" : "關", tapStr);
+                snprintf(buf, sizeof(buf), "拖窗：%s；分隔线拖动：%s（拖到顶放大、拖到边吸住留 8pt，放手才吸）；点窗外：%s（%s）。", drag ? "开" : "关", sideGest ? "开" : "关", tapOut ? "开" : "关", tapStr);
                 PSSpecifier *g = [PSSpecifier emptyGroupSpecifier];
-                [g setProperty:GHLSSRuntimeString("拖窗／分隔線／點窗外") forKey:GHLSSRuntimeString("label")];
+                [g setProperty:GHLSSRuntimeString("拖窗／分隔线／点窗外") forKey:GHLSSRuntimeString("label")];
                 [g setProperty:[NSString stringWithCString:buf encoding:NSUTF8StringEncoding] forKey:GHLSSRuntimeString("footerText")];
                 [specs addObject:g];
-                PSSpecifier *dragRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改拖窗與點窗外") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
+                PSSpecifier *dragRow = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("改拖窗与点窗外") target:self set:nil get:nil detail:nil cell:PSLinkCell edit:nil];
                 [dragRow setProperty:GHLSSRuntimeString("Window") forKey:GHLSSRuntimeString("detail")];
                 [specs addObject:dragRow];
             }
@@ -3214,7 +3214,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("手勢總覽頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("手势总览页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -3257,7 +3257,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
         @try {
             NSMutableArray *specs = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("存幾套配置，點一下整套切換（跟備份／導出是兩回事：備份是單檔，方案是多套並存）。套用後要重新啟動 SpringBoard 生效。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("存几套配置，点一下整套切换（跟备份／导出是两回事：备份是单档，方案是多套并存）。套用后要重新启动 SpringBoard 生效。") forKey:GHLSSRuntimeString("footerText")];
             [specs addObject:group];
             PSSpecifier *save = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("把目前配置存成方案…") target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
             [save setProperty:GHLSSRuntimeString("ghlssSaveProfile") forKey:GHLSSRuntimeString("action")];
@@ -3265,16 +3265,16 @@ static NSString *GHLSSGestureActionName(const char *value) {
             NSArray *names = GHLSSListProfileNames();
             if ([names count] == 0) {
                 PSSpecifier *emptyGroup = [PSSpecifier emptyGroupSpecifier];
-                [emptyGroup setProperty:GHLSSRuntimeString("還沒有方案（先點上面存一個，例如「日常」「遊戲」）。") forKey:GHLSSRuntimeString("footerText")];
+                [emptyGroup setProperty:GHLSSRuntimeString("还没有方案（先点上面存一个，例如「日常」「游戏」）。") forKey:GHLSSRuntimeString("footerText")];
                 [specs addObject:emptyGroup];
             }
             for (NSString *name in names) {
-                NSString *applyLabel = [[GHLSSRuntimeString("套用方案：") stringByAppendingString:name] stringByAppendingString:GHLSSRuntimeString("（點一下整套切換）")];
+                NSString *applyLabel = [[GHLSSRuntimeString("套用方案：") stringByAppendingString:name] stringByAppendingString:GHLSSRuntimeString("（点一下整套切换）")];
                 PSSpecifier *apply = [PSSpecifier preferenceSpecifierNamed:applyLabel target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
                 [apply setProperty:GHLSSRuntimeString("ghlssApplyProfile") forKey:GHLSSRuntimeString("action")];
                 [apply setProperty:name forKey:GHLSSRuntimeString("profileName")];
                 [specs addObject:apply];
-                NSString *delLabel = [GHLSSRuntimeString("刪除方案：") stringByAppendingString:name];
+                NSString *delLabel = [GHLSSRuntimeString("删除方案：") stringByAppendingString:name];
                 PSSpecifier *del = [PSSpecifier preferenceSpecifierNamed:delLabel target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
                 [del setProperty:GHLSSRuntimeString("ghlssDeleteProfile") forKey:GHLSSRuntimeString("action")];
                 [del setProperty:name forKey:GHLSSRuntimeString("profileName")];
@@ -3289,7 +3289,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("配置方案頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("配置方案页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -3300,7 +3300,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
 
 - (void)ghlssSaveProfile:(PSSpecifier *)specifier {
     (void)specifier;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("存成方案") message:GHLSSRuntimeString("給這套配置起個名字（例如：日常、遊戲）。") preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("存成方案") message:GHLSSRuntimeString("给这套配置起个名字（例如：日常、游戏）。") preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
         textField.placeholder = GHLSSRuntimeString("方案名字");
     }];
@@ -3314,14 +3314,14 @@ static NSString *GHLSSGestureActionName(const char *value) {
         NSString *src = GHLSSPrefsFilePath();
         NSString *dst = GHLSSProfileFilePathForName(name);
         if (![fm fileExistsAtPath:src]) {
-            UIAlertController *noFile = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("沒有配置文件可存") message:GHLSSRuntimeString("先改一個設置，配置文件才會生成。") preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *noFile = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("没有配置文件可存") message:GHLSSRuntimeString("先改一个设置，配置文件才会生成。") preferredStyle:UIAlertControllerStyleAlert];
             [noFile addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:noFile animated:YES completion:nil];
             return;
         }
         NSArray *existing = GHLSSListProfileNames();
         if ([existing count] >= 5 && ![existing containsObject:name]) {
-            UIAlertController *full = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("方案已滿") message:GHLSSRuntimeString("最多存 5 套方案，先刪一個再存。") preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *full = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("方案已满") message:GHLSSRuntimeString("最多存 5 套方案，先删一个再存。") preferredStyle:UIAlertControllerStyleAlert];
             [full addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:full animated:YES completion:nil];
             return;
@@ -3330,8 +3330,8 @@ static NSString *GHLSSGestureActionName(const char *value) {
         NSError *err = nil;
         BOOL ok = [fm copyItemAtPath:src toPath:dst error:&err];
         [self reloadSpecifiers];
-        NSString *title = ok ? GHLSSRuntimeString("已存成方案") : GHLSSRuntimeString("保存失敗");
-        NSString *msg = ok ? [[GHLSSRuntimeString("方案「") stringByAppendingString:name] stringByAppendingString:GHLSSRuntimeString("」已存好，點它就整套切換。")] : GHLSSRuntimeString("複製配置文件時出錯。");
+        NSString *title = ok ? GHLSSRuntimeString("已存成方案") : GHLSSRuntimeString("保存失败");
+        NSString *msg = ok ? [[GHLSSRuntimeString("方案「") stringByAppendingString:name] stringByAppendingString:GHLSSRuntimeString("」已存好，点它就整套切换。")] : GHLSSRuntimeString("复制配置文件时出错。");
         UIAlertController *done = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
         [done addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:done animated:YES completion:nil];
@@ -3359,8 +3359,8 @@ static NSString *GHLSSGestureActionName(const char *value) {
         }
         [self reloadSpecifiers];
     }
-    NSString *msg = ok ? [[GHLSSRuntimeString("方案「") stringByAppendingString:name] stringByAppendingString:GHLSSRuntimeString("」已套用，請重新啟動 SpringBoard 生效。")] : GHLSSRuntimeString("複製配置文件時出錯。");
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:ok ? GHLSSRuntimeString("已套用方案") : GHLSSRuntimeString("套用失敗") message:msg preferredStyle:UIAlertControllerStyleAlert];
+    NSString *msg = ok ? [[GHLSSRuntimeString("方案「") stringByAppendingString:name] stringByAppendingString:GHLSSRuntimeString("」已套用，请重新启动 SpringBoard 生效。")] : GHLSSRuntimeString("复制配置文件时出错。");
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:ok ? GHLSSRuntimeString("已套用方案") : GHLSSRuntimeString("套用失败") message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -3398,7 +3398,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
                 GHLSSPrefsLogLine(ebuf);
                 NSMutableArray *safe = [NSMutableArray array];
                 PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-                [group setProperty:GHLSSRuntimeString("這一頁打不開（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+                [group setProperty:GHLSSRuntimeString("这一页打不开（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
                 [safe addObject:group];
                 _specifiers = safe;
             }
@@ -3407,7 +3407,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
             GHLSSPrefsLogLine("v57 prefs-search plistpage REJECTED unknown plist");
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("這一頁打不開（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("这一页打不开（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -3477,7 +3477,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
         } else {
             // values 讀不到——不推空白頁，顯示一行說明（下次日誌能看到）。
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("選項讀不到，先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("选项读不到，先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [specs addObject:group];
             GHLSSPrefsLogLine("v72 prefs-linklist no values at build");
         }
@@ -3567,7 +3567,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
                 NSString *k = spec.properties[GHLSSRuntimeString("key")];
                 if ([k isKindOfClass:[NSString class]] && [k isEqualToString:GHLSSRuntimeString("statusEnabledState")]) {
                     BOOL on = GHLSSPrefsBool("enabled", NO);
-                    NSString *txt = on ? GHLSSRuntimeString("啟用分屏開關：開（這是系統設定裡的開關狀態，不是即時載入狀態）") : GHLSSRuntimeString("啟用分屏開關：關（這是系統設定裡的開關狀態，不是即時載入狀態）");
+                    NSString *txt = on ? GHLSSRuntimeString("启用分屏开关：开（这是系统设定里的开关状态，不是即时载入状态）") : GHLSSRuntimeString("启用分屏开关：关（这是系统设定里的开关状态，不是即时载入状态）");
                     [spec setProperty:txt forKey:GHLSSRuntimeString("footerText")];
                 }
             }
@@ -3579,7 +3579,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
             GHLSSPrefsLogLine(buf);
             NSMutableArray *safe = [NSMutableArray array];
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-            [group setProperty:GHLSSRuntimeString("狀態頁組裝出錯（已記進日誌），先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [group setProperty:GHLSSRuntimeString("状态页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
             [safe addObject:group];
             _specifiers = safe;
         }
@@ -3593,25 +3593,25 @@ static NSString *GHLSSGestureActionName(const char *value) {
     BOOL on = GHLSSPrefsBool("enabled", NO);
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
-    NSString *onOff = on ? GHLSSRuntimeString("開") : GHLSSRuntimeString("關");
-    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.74\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
+    NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.75\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("診斷信息已複製到剪貼板。")];
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("诊断信息已复制到剪贴板。")];
 }
 
 - (void)ghlssCopyQQ:(PSSpecifier *)specifier {
     (void)specifier;
     [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("2309103548");
     GHLSSPrefsLogLine("v57 prefs-status QQ copied");
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("QQ 2309103548 已複製到剪貼板。")];
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("QQ 2309103548 已复制到剪贴板。")];
 }
 
 - (void)ghlssCopyQQGroup:(PSSpecifier *)specifier {
     (void)specifier;
     [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("1130823454");
     GHLSSPrefsLogLine("v57 prefs-status QQ group copied");
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("QQ交流群 1130823454 已複製到剪貼板。")];
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("QQ交流群 1130823454 已复制到剪贴板。")];
 }
 
 - (void)ghlssOpenRepoSource:(PSSpecifier *)specifier {
@@ -3620,7 +3620,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     // 複製最穩；閃退靠派發修法，不靠這一改）。
     [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://guhailong-repo.pages.dev");
     GHLSSPrefsLogLine("v57 prefs-status repo copied");
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("越獄源地址已複製到剪貼板，去 Sileo／Zebra 貼上加入。")];
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("越狱源地址已复制到剪贴板，去 Sileo／Zebra 贴上加入。")];
 }
 
 - (void)ghlssOpenTelegramGroup:(PSSpecifier *)specifier {
@@ -3643,7 +3643,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     }
     [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
     GHLSSPrefsLogLine("v71 prefs-status telegram copied");
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("Telegram 群連結已複製到剪貼板，去 Telegram 貼上進群。")];
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("Telegram 群链接已复制到剪贴板，去 Telegram 贴上进群。")];
 }
 
 @end
