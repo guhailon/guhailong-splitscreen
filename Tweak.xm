@@ -3223,7 +3223,7 @@ peekFrames[k] = targetFrame;
 // 目標 frame（值拷貝），不抓 stack 上的 docked 陣列（塊是異步跑的，
 // 函數返回後 stack 陣列就沒了，抓了會野指針）。
 // v56：遊戲模式開著時動畫減到最少（0.01 秒直接到位，省電）。
-NSTimeInterval peekAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+NSTimeInterval peekAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.6;
 [UIView animateWithDuration:peekAnimDur delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
 peekWin.frame = targetFrame;
 } completion:nil];
@@ -5827,7 +5827,7 @@ slideWin.frame = CGRectMake(startX, finalFrame.origin.y, finalFrame.size.width, 
 GHLSSHostedWindow.hidden = NO;
 if (doSlideIn) {
 // v56：遊戲模式開著時動畫減到最少（0.01 秒直接到位，省電）。
-NSTimeInterval openAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+NSTimeInterval openAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
 [UIView animateWithDuration:openAnimDur delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
 slideWin.frame = finalFrame;
 } completion:nil];
@@ -6049,13 +6049,13 @@ CGRect screenBounds = [UIScreen mainScreen].bounds;
 if (exitAnim == 0) {
 BOOL slideLeft = GHLSSIsFloatingWindowSlideLeft();
 CGFloat offX = slideLeft ? (-startFrame.size.width - 20.0) : (screenBounds.size.width + 20.0);
-NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.4;
+NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
 [UIView animateWithDuration:closeAnimDur delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
 closingWin.frame = CGRectMake(offX, startFrame.origin.y, startFrame.size.width, startFrame.size.height);
 closingWin.alpha = 0.0;
 } completion:closeCompletion];
 } else {
-NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
 CGRect endFrame = startFrame;
 CGAffineTransform endTransform = CGAffineTransformIdentity;
 if (exitAnim == 1) {
@@ -6090,7 +6090,7 @@ if (!closingWin) return;
 UIView *snap = [closingWin snapshotViewAfterScreenUpdates:YES];
 if (!snap) {
 // 快照失敗：退回縮小淡出（關窗不能卡住）。
-NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
 [UIView animateWithDuration:dur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
 closingWin.transform = CGAffineTransformMakeScale(0.1, 0.1);
 closingWin.alpha = 0.0;
@@ -6109,7 +6109,7 @@ BOOL rendered = [snap drawViewHierarchyInRect:snap.bounds afterScreenUpdates:YES
 UIImage *snapImage = rendered ? UIGraphicsGetImageFromCurrentImageContext() : nil;
 UIGraphicsEndImageContext();
 if (!snapImage) {
-NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
 [UIView animateWithDuration:dur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
 closingWin.transform = CGAffineTransformMakeScale(0.1, 0.1);
 closingWin.alpha = 0.0;
@@ -6355,7 +6355,7 @@ if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 UIView *ph = GHLSSGatePlaceholders[idx];
 if (!ph) return;
 GHLSSGatePlaceholders[idx] = nil;
-[UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+[UIView animateWithDuration:0.35 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
 ph.alpha = 0.0;
 } completion:^(BOOL finished) {
 (void)finished;
@@ -6508,7 +6508,7 @@ if (readyMode == 0) {
 if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSHidePlaceholderForIndex(idx);
 readyWindow.alpha = 0.0;
 readyWindow.hidden = NO;
-[UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+[UIView animateWithDuration:0.4 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
 readyWindow.alpha = targetAlpha;
 } completion:nil];
 GHLSSLogLine("v72 restore shown after ready");
@@ -6662,7 +6662,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
     [vc.view addSubview:animView];
     overlay.hidden = NO;
     GHLSSSnapshotAnimWindow = overlay;
-    [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    [UIView animateWithDuration:0.7 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
         animView.transform = CGAffineTransformIdentity;
         animView.center = CGPointMake(CGRectGetMidX(toFrame), CGRectGetMidY(toFrame));
     } completion:^(BOOL finished) {
