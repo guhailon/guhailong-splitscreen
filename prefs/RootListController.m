@@ -1005,9 +1005,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.69");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.70");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.68。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.70。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，請去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -3443,7 +3443,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("開") : GHLSSRuntimeString("關");
-    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.68\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.70\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("診斷信息已複製到剪貼板。")];
@@ -3470,6 +3470,32 @@ static NSString *GHLSSGestureActionName(const char *value) {
     [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://guhailong-repo.pages.dev");
     GHLSSPrefsLogLine("v57 prefs-status repo copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("越獄源地址已複製到剪貼板，去 Sileo／Zebra 貼上加入。")];
+}
+
+- (void)ghlssOpenTelegramGroup:(PSSpecifier *)specifier {
+    (void)specifier;
+    // v70：系統狀態頁 Telegram 群行——點了進群。先試打開邀請連結，
+    // 打不開（v54 越獄源那行就是打不開）就退回複製連結＋提示框。
+    // 注意：openURL: 已廢棄（-Werror 會報錯），用 openURL:options:completionHandler:；
+    // 結果在回調裡回來（異步），所以複製退路也寫在回調裡（回主隊列再彈框）。
+    NSURL *url = [NSURL URLWithString:GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1")];
+    if (!url) {
+        [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
+        GHLSSPrefsLogLine("v70 prefs-status telegram copied");
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("Telegram 群連結已複製到剪貼板，去 Telegram／瀏覽器貼上進群。")];
+        return;
+    }
+    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                GHLSSPrefsLogLine("v70 prefs-status telegram opened");
+            } else {
+                [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
+                GHLSSPrefsLogLine("v70 prefs-status telegram copied");
+                [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("Telegram 群連結已複製到剪貼板，去 Telegram／瀏覽器貼上進群。")];
+            }
+        });
+    }];
 }
 
 @end

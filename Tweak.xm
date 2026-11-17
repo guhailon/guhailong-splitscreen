@@ -1,4 +1,18 @@
-// GuHaiLongSplitScreen v1.0.69 (v42.27) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.70 (v42.28) — 顾海龙集团原创分屏插件（实验版）
+//
+// ── v42.28 (1.0.70)：改名＋Telegram 行＋影片 5 項全做（皇上 2026-11-17 10:22「全部」）──
+// (1) 改名 SeaDragon Split：插件內（設定入口 label、Root.plist 標題、
+// Status.plist 頁腳）改 SeaDragon Split；Sileo 列表名改混合名
+// 「SeaDragon Split（顧海龍分屏）」；包名 com.guhailong.splitscreen 不動。
+// (2) 系統狀態頁「聯繫與源」加 Telegram 交流群行，點了進群
+// （https://t.me/+UaeIYedetWtiZGQ1；打不開就複製連結＋提示，v54 教訓）。
+// (3) 浮窗退出動畫（設定頁選）：靈動島（默認＝現有的彈簧滑出＋淡出）、
+// 縮小淡出、向右滑散、下沉淡出、方块拼散（快照切片＋CAAnimation）。
+// 影片另外 11 種不在這版。(4) 環形啟動器：ARC 圖標排成圓環（設定頁選，
+// 預設格狀弧圈不動）。(5) 點窗外多一個「懸掛」：窗掛到最近的邊、只露
+// 30pt，點那截恢復。(6) 浮窗大小滑桿 50–100%，預設 100%＝346×749；
+// 寬高一起縮、寬高比鎖住，黑邊不會回來；計算器保持 320×693。
+// (7) 拖窗軌跡：拖浮窗時手指後面跟一條虛線，放手後淡出。
 //
 // ── v42.27 (1.0.69)：皇上 2026-11-16 20:45 挑 A ──
 // 小浮窗（peek）黑邊：小窗 112×216 寬高比 0.519，屏幕 414×896 是 0.462；
@@ -1042,11 +1056,15 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name;
 - (void)buildHostedWindowForBundleID:(const char *)bundleID name:(const char *)name scene:(FBScene *)scene presenter:(_UIScenePresenter *)presenter layerHostView:(UIView *)layerHostView sceneID:(NSString *)sceneID pid:(int)pid;
 - (void)closeHostedWindow;
+- (void)closeHostedWindowWithShatter:(UIWindow *)closingWin startFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha;
 - (void)minimizeHostedWindow;
 - (void)restoreHostedWindow;
 - (void)handleScaleSlider:(UISlider *)sender;
 - (void)handleScaleSliderEnded:(UISlider *)sender;
 - (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer;
+- (void)dragTrailBeginAtPoint:(CGPoint)point;
+- (void)dragTrailAddPoint:(CGPoint)point;
+- (void)dragTrailEnd;
 - (void)handleTopStripTap:(UITapGestureRecognizer *)recognizer;
 - (void)handleResizeDrag:(UIPanGestureRecognizer *)recognizer;
 // v42.3：小窗（peek）右下角手柄拖調尺寸（見下面 handleResizeDrag 的分支）。
@@ -1054,6 +1072,7 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)resizeHostedSceneToContentSize:(CGSize)size;
 // v41：贴边 peek 的点按（恢复窗）与往下滑（彻底关掉，v64；打叉已拿掉）、阴影背景的点按。
 - (void)handleDockPeekTap:(UIButton *)sender;
+- (void)handleHangTap:(UIButton *)sender;
 - (void)handleDockPeekPan:(UIPanGestureRecognizer *)recognizer;
 - (void)handleDimOverlayTap:(UITapGestureRecognizer *)recognizer;
 // v41：哆啦A夢鈕單擊（開 ARC）/雙擊（輪切主窗）、升主窗、輪切主窗。
@@ -1079,6 +1098,7 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)handleGameToolboxClearBackground:(UIButton *)sender;
 - (void)handleGameToolboxRecord:(UIButton *)sender;
 - (CGFloat)addARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
+- (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
 - (UIButton *)arcIconButtonForBundleID:(const char *)bid name:(const char *)name tag:(NSInteger)tag action:(SEL)action atCenter:(CGPoint)center size:(CGFloat)size withName:(BOOL)withName;
 - (UIButton *)arcThreeScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size;
 - (void)handleARCThreeScreenToolButton:(UIButton *)sender;
@@ -1198,6 +1218,11 @@ static UIView *GHLSSCacheTopStrips[GHLSS_APP_COUNT];
 // 起來，不另建小卡窗——peek 就是宿主窗本身縮到邊緣）。三屏側窗旗標 +
 // 分隔線視圖（與其他平行數組同做法）。
 static UIButton *GHLSSPeekTapOverlays[GHLSS_APP_COUNT];
+// v70：懸掛（點窗外「懸掛」）：窗掛到最近的邊、只露 30pt，點那截恢復。
+// 跟 peek 點按層同一套做法：每 App 一個點按層＋記住掛起前的 frame。
+static UIButton *GHLSSHangTapOverlays[GHLSS_APP_COUNT];
+static BOOL GHLSSCacheHung[GHLSS_APP_COUNT];
+static CGRect GHLSSHangSavedFrames[GHLSS_APP_COUNT];
 static BOOL GHLSSCacheIsSideDock[GHLSS_APP_COUNT];
 static UIView *GHLSSCacheSideDividers[GHLSS_APP_COUNT];
 // v41：選 App 頁的窗（ARC 裡「＋」開的已安裝 App 清單；層級 Alert - 1）。
@@ -1208,6 +1233,9 @@ static UIWindow *GHLSSDimOverlayWindow; // v40：点窗外事件的阴影背景�
 static BOOL GHLSSDragDockLeft = NO; // v40：这次拖动贴边收起往哪边（Began 时读一次位置设定，拖动中不变——每动一下都读 prefs 太费）。
 static CGFloat GHLSSDragSafeDistance = 50.0; // v40：这次拖动的安全距离（Began 时读一次，同上）。
 static BOOL GHLSSDragDisabled = NO; // v41：這次拖動被調度設定關掉了（Began 時讀一次浮窗拖動手勢開關）。
+static UIWindow *GHLSSDragTrailWindow = nil; // v70：拖窗軌跡窗（全屏透明，只畫虛線，不吃觸摸）
+static CAShapeLayer *GHLSSDragTrailLayer = nil;
+static UIBezierPath *GHLSSDragTrailPath = nil;
 static BOOL GHLSSDoraemonLongPressed = NO; // v40：哆啦A夢鈕刚被长按过（长按关全部窗；点按处理里看到它就 suppress 启动器、清掉；拖动钮时也清掉——长按后拖出按钮外、TouchUpInside 不触发时的兜底）。
 static UIView *GHLSSCacheContainers[GHLSS_APP_COUNT];
 static UIView *GHLSSCacheContentViews[GHLSS_APP_COUNT];
@@ -1258,6 +1286,13 @@ static void GHLSSSaveRestoreList(void);
 static BOOL GHLSSIsWindowPinned(const char *bundleID);
 static NSArray *GHLSSReadIDList(const char *key);
 static void GHLSSWriteIDList(const char *key, NSArray *ids);
+// v70：先声明（下面定义；各处要用，先声明）。
+static int GHLSSReadExitAnimation(void);
+static BOOL GHLSSReadLauncherStyleRadial(void);
+static CGFloat GHLSSReadWindowSizePercent(void);
+static void GHLSSHangWindowForIndex(int idx);
+static void GHLSSRestoreHungWindowForIndex(int idx);
+static void GHLSSClearHungStateForIndex(int idx);
 static BOOL GHLSSListContainsBid(NSArray *ids, const char *bundleID);
 // v53：先声明（下面定义；GHLSSPresetSizeForBundleID 与
 // GHLSSRefreshDoraemonButtonImageIfNeeded 要用，先声明）。
@@ -1567,6 +1602,7 @@ static BOOL GHLSSGameSavedPosValid[GHLSS_APP_COUNT];
 // 讀 windowSizePreset（設定頁那行已藏起來）。例外：計算器永遠自己的
 // 320×693（內容就是窗）；三屏側窗不走這裡（自己算寬）。橫屏：寬高對調
 // 再夾進屏幕（沿用 v56 遊戲模式的橫屏邏輯，現在不分遊戲模式都適用）。
+// v70：浮窗大小滑桿——100% 就是 346×749，調小等比縮（寬高比鎖住）。
 static void GHLSSPresetSizeForBundleID(const char *bundleID, CGFloat *outW, CGFloat *outH) {
 CGFloat w = GHLSS_FIXED_WINDOW_W;
 CGFloat h = GHLSS_FIXED_WINDOW_H;
@@ -1574,6 +1610,11 @@ if (bundleID && strcmp(bundleID, "com.apple.calculator") == 0) {
 CGSize content = GHLSSHostedContentSizeForBundleID(bundleID);
 w = content.width;
 h = content.height;
+} else {
+// v70：浮窗大小滑桿（50–100%）：寬高一起縮、寬高比鎖住，黑邊不會回來。
+CGFloat pct = GHLSSReadWindowSizePercent() / 100.0;
+w *= pct;
+h *= pct;
 }
 CGSize screen = [UIScreen mainScreen].bounds.size;
 if (screen.width > screen.height && h > w) {
@@ -2105,6 +2146,34 @@ free(v);
 if (n < 1) n = 1;
 if (n > 5) n = 5;
 return n;
+}
+// v70：浮窗退出動畫（exitAnimation 字串：island／shrink／slide／sink／
+// shatter，預設 island＝現有的彈簧滑出＋淡出）。
+static int GHLSSReadExitAnimation(void) {
+char *v = GHLSSReadPrefsCString("exitAnimation");
+int a = 0;
+if (v) {
+if (strcmp(v, "shrink") == 0) a = 1;
+else if (strcmp(v, "slide") == 0) a = 2;
+else if (strcmp(v, "sink") == 0) a = 3;
+else if (strcmp(v, "shatter") == 0) a = 4;
+free(v);
+}
+return a;
+}
+// v70：啟動器樣式（launcherStyle 字串：grid／radial，預設 grid 格狀弧圈）。
+static BOOL GHLSSReadLauncherStyleRadial(void) {
+char *v = GHLSSReadPrefsCString("launcherStyle");
+BOOL r = (v && strcmp(v, "radial") == 0);
+if (v) free(v);
+return r;
+}
+// v70：浮窗大小百分比（windowSizePercent 50–100，預設 100；夾住）。
+static CGFloat GHLSSReadWindowSizePercent(void) {
+double v = GHLSSReadPrefsDouble("windowSizePercent", 100.0);
+if (v < 50.0) v = 50.0;
+if (v > 100.0) v = 100.0;
+return (CGFloat)v;
 }
 static BOOL GHLSSReadARCShowOpenDots(void) {
 return GHLSSReadPrefsBool("arcShowOpenDots", YES);
@@ -2929,6 +2998,13 @@ GHLSSCacheWindows[i].windowLevel = GHLSS_GAME_FRONT_LEVEL;
 }
 }
 GHLSSSetActiveToWindow(window);
+// v70：帶到最前的窗如果掛著，先恢復（掛著的窗是半截出屏的，帶到最前就要回來）。
+{
+int fidx = GHLSSAppIndexForWindow(window);
+if (fidx >= 0 && fidx < GHLSS_APP_COUNT && GHLSSCacheHung[fidx]) {
+GHLSSRestoreHungWindowForIndex(fidx);
+}
+}
 GHLSSMarkWindowFront(GHLSSAppIndexForWindow(window));
 // v42.3：一次一個大窗——其他大窗自動縮成 peek（見上面）。
 GHLSSAutoPeekOtherWindows(window);
@@ -3303,7 +3379,8 @@ GHLSSLayoutDockPeeks();
 }
 
 // v40：阴影背景（点窗外事件）的显示/隐藏——开关开着、且至少有一个
-// 看得见的悬浮窗时显示；否则藏起来。层级 Alert - 4.5（1995.5）：
+// 看得见的悬浮窗时显示；否则藏起来。v70：掛著的窗不算（掛著時陰影要藏，
+// 不然點窗外又會觸發一次；點露出的那截恢復）。层级 Alert - 4.5（1995.5）：
 // 在主屏之上、感应带/哆啦A夢鈕（1996）之下、悬浮窗（1998）之下——
 // 点浮窗本身不受影响（浮窗在 overlay 之上），点哆啦A夢鈕/感应带
 // 也不受影响（它们在 overlay 之上），只有点浮窗外的空白才落到
@@ -3313,7 +3390,7 @@ static void GHLSSUpdateDimOverlay(void) {
 BOOL shouldShow = NO;
 if (GHLSSReadTapOutsideEnabled()) {
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
-if (GHLSSCacheWindows[i] && !GHLSSCacheWindows[i].hidden && !GHLSSCacheMinimized[i]) {
+if (GHLSSCacheWindows[i] && !GHLSSCacheWindows[i].hidden && !GHLSSCacheMinimized[i] && !GHLSSCacheHung[i]) {
 shouldShow = YES;
 break;
 }
@@ -3341,6 +3418,54 @@ GHLSSDimOverlayWindow.rootViewController = overlayVC;
 GHLSSLogLine("v57 dim overlay created");
 }
 GHLSSDimOverlayWindow.hidden = NO;
+}
+
+// v70：懸掛——把第 idx 個窗掛到最近的邊、只露 30pt，點那截恢復。
+// 做法：記住掛起前的 frame，窗移到邊外（只露 30pt），蓋一層透明點按層
+// （跟 peek 點按層同一套：UIButton 蓋滿容器，點了恢復；scene 不動，
+// 內容還活著，不推後台）。陰影背景重算（掛著的窗不算，陰影藏起來）。
+static void GHLSSHangWindowForIndex(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+UIWindow *w = GHLSSCacheWindows[idx];
+if (!w || !GHLSSCacheContainers[idx] || GHLSSCacheHung[idx]) return;
+GHLSSHangSavedFrames[idx] = w.frame;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat sliver = 30.0;
+CGFloat x = (w.center.x < screenBounds.size.width / 2.0) ? (-w.frame.size.width + sliver) : (screenBounds.size.width - sliver);
+w.frame = CGRectMake(x, w.frame.origin.y, w.frame.size.width, w.frame.size.height);
+if (!GHLSSHangTapOverlays[idx]) {
+UIButton *tapOverlay = [UIButton buttonWithType:UIButtonTypeCustom];
+tapOverlay.tag = idx;
+[tapOverlay addTarget:GHLSSLauncherShared action:@selector(handleHangTap:) forControlEvents:UIControlEventTouchUpInside];
+[GHLSSCacheContainers[idx] addSubview:tapOverlay];
+GHLSSHangTapOverlays[idx] = tapOverlay;
+}
+GHLSSHangTapOverlays[idx].frame = GHLSSCacheContainers[idx].bounds;
+[GHLSSCacheContainers[idx] bringSubviewToFront:GHLSSHangTapOverlays[idx]];
+GHLSSHangTapOverlays[idx].hidden = NO;
+GHLSSCacheHung[idx] = YES;
+GHLSSLogLine("v70 window hung");
+GHLSSUpdateDimOverlay();
+}
+
+// v70：把掛著的第 idx 個窗恢復回來（frame 還原、點按層藏起來）。
+static void GHLSSRestoreHungWindowForIndex(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheHung[idx]) return;
+UIWindow *w = GHLSSCacheWindows[idx];
+if (w) w.frame = GHLSSHangSavedFrames[idx];
+if (GHLSSHangTapOverlays[idx]) GHLSSHangTapOverlays[idx].hidden = YES;
+GHLSSCacheHung[idx] = NO;
+GHLSSLogLine("v70 hung window restored");
+GHLSSUpdateDimOverlay();
+}
+
+// v70：只清懸掛狀態（點按層藏起來、旗標清掉），不動 frame——最小化／
+// 關窗前調（它們接著就自己改 frame／藏窗，不用先還原）。
+static void GHLSSClearHungStateForIndex(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (GHLSSHangTapOverlays[idx]) GHLSSHangTapOverlays[idx].hidden = YES;
+GHLSSCacheHung[idx] = NO;
 }
 
 // ── v41：置頂 / 最近 / 遊戲模式 ──
@@ -4432,6 +4557,19 @@ GHLSSLogLine("v57 docked peek tapped");
 [self promoteWindowToMainIndex:(int)idx];
 }
 
+// v70：點掛著的窗露出的那截——把這個 App 的窗恢復回來（先叫回主窗，
+// promoteWindowToMainIndex 裡面會走 GHLSSBringWindowToFront，那裡已經
+// 會先恢復懸掛；這裡再補一次恢復是 no-op，雙保險）。
+- (void)handleHangTap:(UIButton *)sender {
+NSInteger idx = sender.tag;
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheWindows[idx]) return;
+GHLSSLogLine("v70 hung window tapped");
+GHLSSLoadCacheToActive((int)idx);
+GHLSSRestoreHungWindowForIndex((int)idx);
+[self promoteWindowToMainIndex:(int)idx];
+}
+
 // v64：小浮窗往下滑取消（皇上 2026-11-16，FV 式；打叉已拿掉）：點按層上
 // 的往下滑手勢觸發，徹底關掉這個窗（不再回來）。窗藏起來、peek 收掉、
 // scene 留著不銷毀（v35 規則）；別的窗不受影響。下次從啟動器重開這個
@@ -4518,14 +4656,21 @@ return;
 }
 GHLSSLoadCacheToActive(idx);
 char *action = GHLSSReadPrefsCString("tapOutsideAction");
-int isSide = !(action && strcmp(action, "close") == 0);
-if (action) free(action);
-if (isSide) {
-GHLSSLogLine("v57 tap outside docked");
-[self minimizeHostedWindow];
-} else {
+int tapMode = 1; // v70：0 關閉、1 側邊（預設）、2 懸掛
+if (action) {
+if (strcmp(action, "close") == 0) tapMode = 0;
+else if (strcmp(action, "hang") == 0) tapMode = 2;
+free(action);
+}
+if (tapMode == 0) {
 GHLSSLogLine("v57 tap outside closed");
 [self closeHostedWindow];
+} else if (tapMode == 2) {
+GHLSSLogLine("v70 tap outside hung");
+GHLSSHangWindowForIndex(idx);
+} else {
+GHLSSLogLine("v57 tap outside docked");
+[self minimizeHostedWindow];
 }
 }
 
@@ -5649,6 +5794,10 @@ if (!GHLSSHostedWindow) return;
 int idx = GHLSSActiveAppIndex;
 BOOL wasSideDock = GHLSSHostedIsSideDock;
 BOOL wasMinimized = GHLSSHostedMinimized;
+// v70：關窗前先把掛著的窗恢復回來（退出動畫要在看得見的窗上播，掛著是半截出屏的）。
+if (idx >= 0 && idx < GHLSS_APP_COUNT && GHLSSCacheHung[idx]) {
+GHLSSRestoreHungWindowForIndex(idx);
+}
 // v54：關窗彈性動畫——先把要存的幾何存好（動畫會改 frame，存完再動；
 // SaveGeometryForIndex 讀的是 w.center／bounds），再用彈簧（damping 0.7）
 // 把窗往滑出方向滑出屏幕、淡出，動畫完才藏窗並把 frame／alpha 還原
@@ -5686,22 +5835,172 @@ GHLSSUpdateDimOverlay();
 // v42：重啟恢復清單 + 任務欄跟著關窗更新。
 GHLSSSaveRestoreList();
 GHLSSUpdateTaskbar();
+// v70：退出動畫——設定 exitAnimation（預設 island＝現有的彈簧滑出＋淡出）。
+// 1 縮小淡出／2 向右滑散／3 下沉淡出是普通 UIView 動畫（0.35 秒）；
+// 4 方块拼散走下面的 closeHostedWindowWithShatter（快照切片＋CAAnimation）。
 // v54：彈簧滑出——往滑出方向（左／右，跟開窗同一邊）滑出屏幕＋淡出，
-// 0.4 秒；動畫完才藏窗、還原 frame／alpha（下次恢復不受影響）。
+// 0.4 秒；動畫完才藏窗、還原 frame／alpha／transform（下次恢復不受影響）。
 // v56：遊戲模式開著時動畫減到最少（0.01 秒直接到位，省電）。
+int exitAnim = GHLSSReadExitAnimation();
+if (exitAnim == 4 && !GHLSSGameMinimalAnimationsActive()) {
+[self closeHostedWindowWithShatter:closingWin startFrame:startFrame startAlpha:startAlpha];
+return;
+}
+void (^closeCompletion)(BOOL) = ^(BOOL finished) {
+(void)finished;
+closingWin.hidden = YES;
+closingWin.frame = startFrame;
+closingWin.transform = CGAffineTransformIdentity;
+closingWin.alpha = startAlpha;
+};
 CGRect screenBounds = [UIScreen mainScreen].bounds;
+if (exitAnim == 0) {
 BOOL slideLeft = GHLSSIsFloatingWindowSlideLeft();
 CGFloat offX = slideLeft ? (-startFrame.size.width - 20.0) : (screenBounds.size.width + 20.0);
 NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.4;
 [UIView animateWithDuration:closeAnimDur delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
 closingWin.frame = CGRectMake(offX, startFrame.origin.y, startFrame.size.width, startFrame.size.height);
 closingWin.alpha = 0.0;
+} completion:closeCompletion];
+} else {
+NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+CGRect endFrame = startFrame;
+CGAffineTransform endTransform = CGAffineTransformIdentity;
+if (exitAnim == 1) {
+// v70：縮小淡出——縮到 1/10＋淡出（錨點是窗中心，視覺上往中心縮）。
+endTransform = CGAffineTransformMakeScale(0.1, 0.1);
+} else if (exitAnim == 2) {
+// v70：向右滑散——不管開窗是哪邊，統一往右滑出屏幕＋淡出。
+endFrame = CGRectMake(screenBounds.size.width + 20.0, startFrame.origin.y, startFrame.size.width, startFrame.size.height);
+} else {
+// v70：下沉淡出——往下沉出屏幕＋淡出。
+endFrame = CGRectMake(startFrame.origin.x, screenBounds.size.height + 20.0, startFrame.size.width, startFrame.size.height);
+}
+[UIView animateWithDuration:closeAnimDur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+closingWin.frame = endFrame;
+closingWin.transform = endTransform;
+closingWin.alpha = 0.0;
+} completion:closeCompletion];
+}
+}
+
+// v70：方块拼散——浮窗退出動畫第 5 種：把窗快照下來切成小方塊，往外散＋
+// 旋轉＋淡出（0.55 秒，依離中心距離錯開 0.15 秒），再藏窗。做法是原創：
+// snapshotViewAfterScreenUpdates 抓快照 → render 成 UIImage → 按 58pt
+// 方格 CGImageCreateWithImageInRect 切塊 → 全屏透明 overlay 窗放方塊，
+// 每塊一個 CABasicAnimation（position＋rotation＋opacity）。快照失敗就
+// 退回縮小淡出（關窗不能卡住）；0.8 秒後藏 overlay 窗。
+// 注意：這裡不能用 @""／@()／@[] 字面量——會產生 __cfstring 段（Linux 交叉
+// 工具鏈下會壞，v13 教訓），一律用 [NSString stringWithCString:encoding:]／
+// [NSNumber numberWith…]／[NSArray arrayWithObjects:]。
+- (void)closeHostedWindowWithShatter:(UIWindow *)closingWin startFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha {
+if (!closingWin) return;
+UIView *snap = [closingWin snapshotViewAfterScreenUpdates:YES];
+if (!snap) {
+// 快照失敗：退回縮小淡出（關窗不能卡住）。
+NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+[UIView animateWithDuration:dur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+closingWin.transform = CGAffineTransformMakeScale(0.1, 0.1);
+closingWin.alpha = 0.0;
 } completion:^(BOOL finished) {
 (void)finished;
 closingWin.hidden = YES;
 closingWin.frame = startFrame;
+closingWin.transform = CGAffineTransformIdentity;
 closingWin.alpha = startAlpha;
 }];
+return;
+}
+UIGraphicsBeginImageContextWithOptions(snap.bounds.size, NO, 0.0);
+BOOL rendered = [snap drawViewHierarchyInRect:snap.bounds afterScreenUpdates:YES];
+UIImage *snapImage = rendered ? UIGraphicsGetImageFromCurrentImageContext() : nil;
+UIGraphicsEndImageContext();
+if (!snapImage) {
+NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+[UIView animateWithDuration:dur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+closingWin.transform = CGAffineTransformMakeScale(0.1, 0.1);
+closingWin.alpha = 0.0;
+} completion:^(BOOL finished) {
+(void)finished;
+closingWin.hidden = YES;
+closingWin.frame = startFrame;
+closingWin.transform = CGAffineTransformIdentity;
+closingWin.alpha = startAlpha;
+}];
+return;
+}
+UIWindowScene *ws = GHLSSActiveWindowScene();
+UIWindow *overlayWin = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+overlayWin.windowScene = ws;
+overlayWin.windowLevel = UIWindowLevelAlert - 1.0;
+overlayWin.backgroundColor = [UIColor clearColor];
+overlayWin.userInteractionEnabled = NO;
+overlayWin.hidden = NO;
+CGFloat tile = 58.0;
+CGFloat scale = snapImage.scale;
+NSInteger cols = (NSInteger)ceil(startFrame.size.width / tile);
+NSInteger rows = (NSInteger)ceil(startFrame.size.height / tile);
+CGFloat maxDist = hypot(startFrame.size.width / 2.0, startFrame.size.height / 2.0);
+if (maxDist < 1.0) maxDist = 1.0;
+for (NSInteger r = 0; r < rows; r++) {
+for (NSInteger c = 0; c < cols; c++) {
+CGFloat tx = c * tile;
+CGFloat ty = r * tile;
+CGFloat tw = MIN(tile, startFrame.size.width - tx);
+CGFloat th = MIN(tile, startFrame.size.height - ty);
+if (tw <= 0 || th <= 0) continue;
+CGRect pixelRect = CGRectMake(tx * scale, ty * scale, tw * scale, th * scale);
+CGImageRef piece = CGImageCreateWithImageInRect(snapImage.CGImage, pixelRect);
+if (!piece) continue;
+UIImageView *pieceView = [[UIImageView alloc] initWithImage:[UIImage imageWithCGImage:piece]];
+CGImageRelease(piece);
+pieceView.frame = CGRectMake(startFrame.origin.x + tx, startFrame.origin.y + ty, tw, th);
+[overlayWin addSubview:pieceView];
+CGPoint pieceCenter = pieceView.center;
+CGPoint winCenter = CGPointMake(CGRectGetMidX(startFrame), CGRectGetMidY(startFrame));
+CGFloat dx = pieceCenter.x - winCenter.x;
+CGFloat dy = pieceCenter.y - winCenter.y;
+CGFloat len = hypot(dx, dy);
+if (len < 1.0) { dx = 0; dy = -1; len = 1.0; }
+CGFloat dist = len / maxDist;
+CGFloat push = 110.0 + (CGFloat)arc4random_uniform(140);
+CGPoint endCenter = CGPointMake(pieceCenter.x + dx / len * push, pieceCenter.y + dy / len * push);
+CGFloat rot = ((CGFloat)arc4random_uniform(240) - 120.0) / 100.0;
+NSTimeInterval delay = 0.15 * dist;
+NSTimeInterval dur = 0.55;
+CABasicAnimation *posAnim = [CABasicAnimation animationWithKeyPath:[NSString stringWithCString:"position" encoding:NSUTF8StringEncoding]];
+posAnim.fromValue = [NSValue valueWithCGPoint:pieceCenter];
+posAnim.toValue = [NSValue valueWithCGPoint:endCenter];
+posAnim.duration = dur;
+posAnim.beginTime = CACurrentMediaTime() + delay;
+posAnim.fillMode = kCAFillModeForwards;
+posAnim.removedOnCompletion = NO;
+[pieceView.layer addAnimation:posAnim forKey:[NSString stringWithCString:"shatterPos" encoding:NSUTF8StringEncoding]];
+CABasicAnimation *rotAnim = [CABasicAnimation animationWithKeyPath:[NSString stringWithCString:"transform.rotation.z" encoding:NSUTF8StringEncoding]];
+rotAnim.fromValue = [NSNumber numberWithDouble:0.0];
+rotAnim.toValue = [NSNumber numberWithDouble:(double)rot];
+rotAnim.duration = dur;
+rotAnim.beginTime = CACurrentMediaTime() + delay;
+rotAnim.fillMode = kCAFillModeForwards;
+rotAnim.removedOnCompletion = NO;
+[pieceView.layer addAnimation:rotAnim forKey:[NSString stringWithCString:"shatterRot" encoding:NSUTF8StringEncoding]];
+CABasicAnimation *fadeAnim = [CABasicAnimation animationWithKeyPath:[NSString stringWithCString:"opacity" encoding:NSUTF8StringEncoding]];
+fadeAnim.fromValue = [NSNumber numberWithDouble:1.0];
+fadeAnim.toValue = [NSNumber numberWithDouble:0.0];
+fadeAnim.duration = dur;
+fadeAnim.beginTime = CACurrentMediaTime() + delay;
+fadeAnim.fillMode = kCAFillModeForwards;
+fadeAnim.removedOnCompletion = NO;
+[pieceView.layer addAnimation:fadeAnim forKey:[NSString stringWithCString:"shatterFade" encoding:NSUTF8StringEncoding]];
+}
+}
+closingWin.hidden = YES;
+closingWin.frame = startFrame;
+closingWin.transform = CGAffineTransformIdentity;
+closingWin.alpha = startAlpha;
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+overlayWin.hidden = YES;
+});
 }
 
 // v35：destroyHostedScene 已删——会话内永不销毁 scene（见文件头 v35
@@ -5714,6 +6013,8 @@ closingWin.alpha = startAlpha;
 - (void)minimizeHostedWindow {
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 int idx = GHLSSActiveAppIndex;
+// v70：收起前先清懸掛狀態（點按層拿掉、旗標清掉；窗接著就縮成 peek，不用還原 frame）。
+if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSClearHungStateForIndex(idx);
 GHLSSHostedMinimized = YES;
 // v50：收成小卡時震一下（ARC 震動反饋開關，預設開；自動 peek 切窗
 // 不走這裡，不會每次切窗都震）。
@@ -5938,6 +6239,50 @@ GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 // 安全距离（设定页，默认 50）：拖窗时窗顶离刘海（屏幕顶缘）不到这个
 // 值就自动回弹（夹住位置，让窗顶至少离顶缘这个距离；旧 minY=100 是
 // 夹中心，顶缘能出屏——v40 改成夹窗顶）。
+// v70：拖窗軌跡——拖主浮窗時，手指後面跟一條白色虛線弧線（純裝飾）。
+// 做法是原創：全屏透明窗（level 在浮窗之下、陰影之上，不吃觸摸）＋一條
+// CAShapeLayer（白色 0.7、線寬 3、虛線 pattern、圓頭），手指移到哪、
+// path 加到哪；放手／取消後 0.5 秒淡出、藏窗、清 path。只跟主浮窗（peek
+// 窗不拖，handleTitleDrag 開頭的 peek early return 在前面，照舊）。
+- (void)dragTrailBeginAtPoint:(CGPoint)point {
+if (!GHLSSDragTrailWindow) {
+GHLSSDragTrailWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+GHLSSDragTrailWindow.windowScene = GHLSSActiveWindowScene();
+GHLSSDragTrailWindow.windowLevel = UIWindowLevelAlert - 2.5;
+GHLSSDragTrailWindow.backgroundColor = [UIColor clearColor];
+GHLSSDragTrailWindow.userInteractionEnabled = NO;
+CAShapeLayer *layer = [CAShapeLayer layer];
+layer.strokeColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7].CGColor;
+layer.fillColor = [UIColor clearColor].CGColor;
+layer.lineWidth = 3.0;
+layer.lineDashPattern = [NSArray arrayWithObjects:[NSNumber numberWithInt:2], [NSNumber numberWithInt:6], nil];
+layer.lineCap = kCALineCapRound;
+layer.lineJoin = kCALineJoinRound;
+[GHLSSDragTrailWindow.layer addSublayer:layer];
+GHLSSDragTrailLayer = layer;
+}
+GHLSSDragTrailPath = [UIBezierPath bezierPath];
+[GHLSSDragTrailPath moveToPoint:point];
+GHLSSDragTrailLayer.path = GHLSSDragTrailPath.CGPath;
+GHLSSDragTrailLayer.opacity = 1.0;
+GHLSSDragTrailWindow.hidden = NO;
+}
+- (void)dragTrailAddPoint:(CGPoint)point {
+if (!GHLSSDragTrailPath || !GHLSSDragTrailLayer) return;
+[GHLSSDragTrailPath addLineToPoint:point];
+GHLSSDragTrailLayer.path = GHLSSDragTrailPath.CGPath;
+}
+- (void)dragTrailEnd {
+if (!GHLSSDragTrailWindow || !GHLSSDragTrailLayer) return;
+// 0.5 秒淡出再藏窗（UIView 動畫塊裡改 layer 透明度會跟著動畫走）。
+[UIView animateWithDuration:0.5 animations:^{
+GHLSSDragTrailLayer.opacity = 0.0;
+} completion:^(BOOL finished) {
+(void)finished;
+GHLSSDragTrailWindow.hidden = YES;
+GHLSSDragTrailPath = nil;
+}];
+}
 - (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer {
 UIWindow *dragWindow = GHLSSWindowForView(recognizer.view);
 if (!dragWindow) dragWindow = GHLSSHostedWindow;
@@ -5960,8 +6305,19 @@ return;
 GHLSSDragDockLeft = GHLSSIsWindowPositionLeft();
 GHLSSDragSafeDistance = GHLSSReadSafeDistance();
 GHLSSLogLine("v57 window dragged");
+// v70：拖窗軌跡——手指落點開始畫虛線（屏幕座標＝窗原點＋窗內落點）。
+{
+CGPoint locInWindow = [recognizer locationInView:dragWindow];
+CGPoint screenPoint = CGPointMake(dragWindow.frame.origin.x + locInWindow.x, dragWindow.frame.origin.y + locInWindow.y);
+[self dragTrailBeginAtPoint:screenPoint];
+}
 }
 if (GHLSSDragDisabled) return;
+if (recognizer.state == UIGestureRecognizerStateCancelled || recognizer.state == UIGestureRecognizerStateFailed) {
+// v70：拖動取消／失敗，軌跡淡出、不動窗。
+[self dragTrailEnd];
+return;
+}
 BOOL dockLeft = GHLSSDragDockLeft;
 CGFloat safeDistance = GHLSSDragSafeDistance;
 // v68：跟手修法——translation 不能量在會動的浮窗上（同款毛病）。
@@ -5989,7 +6345,15 @@ if (newX > maxX) newX = maxX;
 if (newY < minY) newY = minY;
 if (newY > maxY) newY = maxY;
 dragWindow.center = CGPointMake(newX, newY);
+// v70：拖窗軌跡——手指移到哪、虛線跟到哪（屏幕座標＝窗原點＋窗內落點）。
+{
+CGPoint locInWindow = [recognizer locationInView:dragWindow];
+CGPoint screenPoint = CGPointMake(dragWindow.frame.origin.x + locInWindow.x, dragWindow.frame.origin.y + locInWindow.y);
+[self dragTrailAddPoint:screenPoint];
+}
 if (recognizer.state == UIGestureRecognizerStateEnded) {
+// v70：拖窗軌跡——放手，軌跡 0.5 秒淡出（要在貼邊收起的 early return 之前）。
+[self dragTrailEnd];
 // 放手：窗中心进了贴边那侧的缘 60pt 内——贴边收起（主关掉路徑，
 // 像影片一樣）。右側：中心进右缘 60pt 内；左側：中心进左缘 60pt 内。
 BOOL shouldDock = dockLeft ? (newX <= GHLSS_DOCK_DRAG_THRESHOLD) : (screenBounds.size.width - newX <= GHLSS_DOCK_DRAG_THRESHOLD);
@@ -6910,7 +7274,13 @@ return;
 // v56：扇形末尾加一顆三屏工具圖標（跟 App 圖標一樣沿弧排布；
 // 不是 1.0.55 刪掉的四行——那四行不恢復）。
 [ordered addObject:[NSString stringWithCString:"GHLSS_THREE_SCREEN_TOOL" encoding:NSUTF8StringEncoding]];
+// v70：啟動器樣式——radial 時圖標排成圓環（見下面 addRadialARCIconsForBids），
+// 否則走原來的格狀弧圈（addARCIconsForBids）。
+if (GHLSSReadLauncherStyleRadial()) {
+[self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+} else {
 [self addARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+}
 GHLSSLogLine("v57 launcher icons only");
 }
 
@@ -7213,6 +7583,75 @@ char buf[192];
 snprintf(buf, sizeof(buf), "v58 arc layers=%d icons=%d effLayers=%d side=%s anchorY=%d raw=%s", L, (int)N, E, slideLeft ? "left" : "right", (int)cy, rawLayer ? rawLayer : "none");
 if (rawLayer) free(rawLayer);
 GHLSSLogLine(buf);
+return maxBottom + 12.0;
+}
+
+// v70：環形啟動器——跟格狀版同一套輸入（ordered 陣列、層數／權重分配、
+// 同一兩個放圖標 helper），只換位置：圓心屏幕中心，環半徑等分（Rmax＝
+// min(屏寬,屏高)/2 − iconSize/2 − 12；E＝1 時一環 Rmax，E＝2 時 Rmax/2、
+// Rmax），每環圖標均分 360°、從頂部（−90°）開始。「GHLSS_THREE_SCREEN_TOOL」
+// 特殊項照舊走 arcThreeScreenToolButtonAtCenter。三屏工具鈕跟 ARC 標題
+// 照舊（在 rebuildARCContent 裡，不動）。
+- (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
+if (!bids || bids.count == 0) return 0;
+NSInteger total = bids.count;
+int L = GHLSSReadARCLayerCount();
+int E = MIN(L, (int)total);
+if (E < 1) E = 1;
+if (E > 5) E = 5;
+int weights[5] = {1, 2, 3, 4, 5};
+int totalWeight = 0;
+for (int r = 0; r < E; r++) totalWeight += weights[r];
+int ringCount[5] = {0, 0, 0, 0, 0};
+int assigned = 0;
+for (int r = 0; r < E; r++) {
+ringCount[r] = (int)lround((double)total * weights[r] / (double)totalWeight);
+assigned += ringCount[r];
+}
+while (assigned > total) {
+for (int r = E - 1; r >= 0 && assigned > total; r--) {
+if (ringCount[r] > 0) { ringCount[r]--; assigned--; }
+}
+}
+while (assigned < total) {
+ringCount[E - 1]++;
+assigned++;
+}
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat Rmax = MIN(screenBounds.size.width, screenBounds.size.height) / 2.0 - size / 2.0 - 12.0;
+if (Rmax < 40.0) Rmax = 40.0;
+CGPoint center = CGPointMake(screenBounds.size.width / 2.0, screenBounds.size.height / 2.0);
+CGFloat maxBottom = 0;
+NSInteger idx = 0;
+for (int ring = 0; ring < E; ring++) {
+CGFloat radius = (E == 1) ? Rmax : (Rmax * (ring + 1) / (double)E);
+int count = ringCount[ring];
+for (int j = 0; j < count; j++) {
+if (idx >= total) break;
+id item = [bids objectAtIndex:idx++];
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+if (!bid || bid[0] == '\0') continue;
+CGFloat angle = -M_PI_2 + 2.0 * M_PI * (count == 1 ? 0.0 : (double)j / (double)count);
+CGPoint p = CGPointMake(center.x + radius * cos(angle), center.y + radius * sin(angle));
+if (strcmp(bid, "GHLSS_THREE_SCREEN_TOOL") == 0) {
+// v56：三屏工具圖標（跟格狀版同一顆，照舊）。
+UIButton *toolBtn = [self arcThreeScreenToolButtonAtCenter:p size:size];
+[GHLSSLauncherContentView addSubview:toolBtn];
+CGFloat toolBottom = p.y + size / 2.0;
+if (toolBottom > maxBottom) maxBottom = toolBottom;
+continue;
+}
+char name[128];
+GHLSSAppNameForBundleID(bid, name, sizeof(name));
+NSInteger tag = GHLSSAppIndexForBundleID(bid);
+if (tag < 0) continue;
+UIButton *btn = [self arcIconButtonForBundleID:bid name:name tag:tag action:action atCenter:p size:size withName:NO];
+[GHLSSLauncherContentView addSubview:btn];
+CGFloat bottom = p.y + size / 2.0;
+if (bottom > maxBottom) maxBottom = bottom;
+}
+}
 return maxBottom + 12.0;
 }
 

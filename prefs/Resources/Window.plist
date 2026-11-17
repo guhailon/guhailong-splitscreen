@@ -196,6 +196,62 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
+			<real>100.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>windowSizePercent</string>
+			<key>label</key>
+			<string>浮窗大小（%）</string>
+			<key>max</key>
+			<real>100.0</real>
+			<key>min</key>
+			<real>50.0</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>浮窗大小，100 是現在的 346×749；調小就等比縮小（寬高一起縮，寬高比鎖住，不會出黑邊）。計算器保持自己的 320×693。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>island</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>exitAnimation</string>
+			<key>label</key>
+			<string>浮窗退出動畫</string>
+			<key>validTitles</key>
+			<array>
+				<string>灵动岛（默认）</string>
+				<string>缩小淡出</string>
+				<string>向右滑散</string>
+				<string>下沉淡出</string>
+				<string>方块拼散</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>island</string>
+				<string>shrink</string>
+				<string>slide</string>
+				<string>sink</string>
+				<string>shatter</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
 			<real>50.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
@@ -255,11 +311,13 @@
 			<array>
 				<string>关闭浮窗</string>
 				<string>侧边</string>
+				<string>懸掛</string>
 			</array>
 			<key>validValues</key>
 			<array>
 				<string>close</string>
 				<string>side</string>
+				<string>hang</string>
 			</array>
 		</dict>
 	</array>
