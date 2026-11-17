@@ -1,4 +1,15 @@
-// GuHaiLongSplitScreen v1.0.72 (v42.30) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.73 (v42.31) — 顾海龙集团原创分屏插件（实验版）
+//
+// ── v42.31 (1.0.73)：只修黑半邊（皇上 2026-11-17 15:37：主修就是主浮窗跟小浮窗的問題，
+// 其他都先放著——圓環重排／退出動畫 16 種／FPS 顯示／視窗參數全部停掉，不進這版）──
+// 黑半邊修復：1.0.72 影片 f055／f057，設定從小卡恢復成大窗，內容只佔左邊約 55%，
+// 右邊約 45% 全黑約 2 秒。根因：門控只看 contentState==2，但 scene 是在舊尺寸（小卡寬）
+// 下就緒的，窗放大後 scene 還沒重畫到新尺寸，門就放行了。改：尺寸門——scene frame
+// 對上窗 frame（誤差 3pt 內）＋內容縮放對上＋contentState==2 才顯示，不然佔位繼續蓋著、
+// 每 0.5 秒重推一次 resize；卡滿 5 秒重建 scene（沿用 1.0.72 的重建路徑）。覆蓋 peek 恢復、
+// promote、新窗、拖調尺寸鬆手後（resizeActiveWindowToFrame）。看門狗在尺寸門控進行中
+// 不拿活動窗的佔位。快照動畫也一樣：尺寸沒對上就播佔位塊，不播小內容快照。
+// v43 第一步（真分屏多活窗）順延到 1.0.73 之後。
 //
 // ── v42.30 (1.0.72)：修 1.0.71 真機測「退出動畫＋啟動器樣式選了沒用」（皇上 2026-11-17 14:00）──
 // (1) 診斷日誌：closeHostedWindow 讀完 exitAnim 記一行「v72 exit anim N」；
@@ -1095,6 +1106,8 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)rebuildStuckHostedScene;
 - (void)animateRestoreSnapshotFromFrame:(CGRect)fromFrame toFrame:(CGRect)toFrame ready:(BOOL)ready completion:(void (^)(void))completion;
 - (void)runRestoreGateDecision;
+// v73：拖調尺寸鬆手後的尺寸門（見門控 tick 前面的實作）。
+- (void)armSizeGateForResize;
 - (void)handleScaleSlider:(UISlider *)sender;
 - (void)handleScaleSliderEnded:(UISlider *)sender;
 - (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer;
@@ -1222,10 +1235,25 @@ static UIView *GHLSSGatePlaceholders[GHLSS_APP_COUNT]; // v72：每窗一个载�
 static BOOL GHLSSSuppressSlideInOnce = NO; // v72：重建 scene 时下一次建窗不滑入（直接出现在原位）。
 static UIWindow *GHLSSSnapshotAnimWindow = nil; // v72：快照动画的临时窗（播完就收掉）.
 
+// v73：尺寸門——scene 內容尺寸對上窗 frame 才算就緒（黑半邊修復）。
+// 1.0.72 影片：設定從小卡恢復成大窗，內容只佔左邊約 55%，右邊全黑約 2 秒——
+// 門控只看 contentState==2，但 scene 是在舊尺寸（小卡寬）下就緒的，窗放大後
+// scene 還沒重畫到新尺寸。追蹤最後一次推給 scene 的 frame 尺寸（下面三處推
+// frame 的地方都更新它：建窗初始 settings、GHLSSApplyScaleToHostedWindow
+// 的防抖推、GHLSSPushPeekScaleForIndex 的推），跟現在窗該有的尺寸比（誤差 3pt），
+// 再比內容區 sublayerTransform 的縮放（誤差 0.03）——恢復時 transform 還停在
+// 小卡縮放（0.27）就是黑半邊的樣子。
+static CGSize GHLSSHostedSceneFrameSize = {0, 0}; // v73：最後一次推給 scene 的 frame 尺寸。
+static BOOL GHLSSHostedSceneFrameSizeValid = NO; // v73：上面那個尺寸有沒有推過。
+static BOOL GHLSSSizeGatePreMatched = NO; // v73：門控決策時尺寸已經對上（resize 在快照動畫前就推了）。
+static BOOL GHLSSSizeGateMatchedOnce = NO; // v73：尺寸在上一個 tick 已經對上一次（給 scene 半秒把新尺寸畫出來）。
+static BOOL GHLSSSizeGateWaitingLogged = NO; // v73：尺寸等候只記一行（不每 0.5 秒刷日誌）。
+
 // v72：载入占位 helper（定义在门控 tick 前面；看门狗／建窗路在它前面就呼叫，
 // 这里先给原型）。
 static void GHLSSShowPlaceholderForIndex(int idx);
 static void GHLSSHidePlaceholderForIndex(int idx);
+static BOOL GHLSSHostedSceneSizeMatchesWindow(void); // v73：尺寸門判斷（定義在門控 tick 前面）。
 
 // v38：每窗一个 scaleRatio（反向耦合缩放，见文件头 v38 节）。
 // 活动窗的 scale 存在这里；切走时存缓存、切回来时读缓存。
@@ -1782,6 +1810,8 @@ layerHostView.layer.position = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.anchorPoint = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.position = CGPointMake(0, 0);
 GHLSSHostedContentView.layer.sublayerTransform = CATransform3DMakeScale(displayScale, displayScale, 1.0);
+GHLSSHostedSceneFrameSize = screenSize; // v73：layer-host 路 scene frame 恆為屏幕尺寸（尺寸門用）。
+GHLSSHostedSceneFrameSizeValid = YES;
 char buf[128];
 snprintf(buf, sizeof(buf), "v57 layer host scaled %d%%", (int)(displayScale * 100.0));
 GHLSSLogLine(buf);
@@ -1824,6 +1854,8 @@ settings.deviceOrientation = UIDeviceOrientationPortrait;
 settings.peripheryInsets = UIEdgeInsetsZero;
 settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
 }];
+GHLSSHostedSceneFrameSize = curFrameSize; // v73：追蹤推給 scene 的 frame 尺寸（尺寸門用）。
+GHLSSHostedSceneFrameSizeValid = YES;
 char fbuf[128];
 snprintf(fbuf, sizeof(fbuf), "v57 scene frame updated %dx%d scale %d%%", (int)curFrameSize.width, (int)curFrameSize.height, (int)(curScale * 100.0));
 GHLSSLogLine(fbuf);
@@ -3321,6 +3353,10 @@ settings.backgrounded = NO;
 (void)e;
 GHLSSLogLine("v58 peek scene frame push failed");
 }
+if (scene == GHLSSHostedScene) { // v73：只有活動窗的 scene 尺寸才追蹤（別窗收小卡不要動它）。
+GHLSSHostedSceneFrameSize = frameSize;
+GHLSSHostedSceneFrameSizeValid = YES;
+}
 }
 char buf[256];
 snprintf(buf, sizeof(buf), "v58 peek scaled %s %s %dx%d scale=%.3f frame=%dx%d", bid ? bid : "?", peekPath, (int)peekW, (int)peekH, peekScale, (int)peekFrame.width, (int)peekFrame.height);
@@ -4297,7 +4333,11 @@ if (!scene || !w || w.hidden) continue;
 NSUInteger cs = [scene contentState];
 if (cs == 2) {
 // 就绪——把占位拿掉（之前盖过的）。
+// v73：尺寸門控進行中時不拿活動窗的佔位——門控 tick 會在尺寸對上＋就緒後自己淡出佔位；
+// 看門狗在這裡拿掉會讓黑半邊露出來。
+if (!(GHLSSRestoreGateActive && i == GHLSSActiveAppIndex)) {
 GHLSSHidePlaceholderForIndex(i);
+}
 } else if (cs == 0) {
 // v72：小卡 scene 卡在 0——盖占位，绝不让小卡露黑；不推前景
 //（24.log 证明推 0 没用：时针／计算器／电池小卡各推过一次，一直是 0）。
@@ -4507,6 +4547,9 @@ GHLSSRestoreGateStuckLogged = NO;
 GHLSSRestoreGateMode = 1; // 窗本来就看得见，只盖占位、就绪淡出占位。
 GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
 if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
+GHLSSSizeGatePreMatched = GHLSSHostedSceneSizeMatchesWindow(); // v73：promote 也要過尺寸門。
+GHLSSSizeGateMatchedOnce = NO;
+GHLSSSizeGateWaitingLogged = NO;
 GHLSSLogLine("v72 promote gated until ready");
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 [self showGatedRestoredWindowTick];
@@ -5193,6 +5236,8 @@ settings.interfaceOrientation = UIInterfaceOrientationPortrait;
 // presentationView w=... 会印证：计算器应是 414x896）。
 CGSize sceneFrameSize = GHLSSSceneFrameSizeForBundleID(bundleID);
 settings.frame = CGRectMake(0, 0, sceneFrameSize.width, sceneFrameSize.height);
+GHLSSHostedSceneFrameSize = sceneFrameSize; // v73：追蹤推給 scene 的 frame 尺寸（尺寸門用）。
+GHLSSHostedSceneFrameSizeValid = YES;
 settings.level = 1;
 settings.persistenceIdentifier = sceneID;
 settings.peripheryInsets = UIEdgeInsetsZero;
@@ -5900,6 +5945,9 @@ GHLSSRestoreGateStuckLogged = NO;
 GHLSSRestoreGateMode = 1;
 GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
 if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
+GHLSSSizeGatePreMatched = GHLSSHostedSceneSizeMatchesWindow(); // v73：新窗也要過尺寸門。
+GHLSSSizeGateMatchedOnce = NO;
+GHLSSSizeGateWaitingLogged = NO;
 GHLSSLogLine("v72 new window gated until ready");
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 [self showGatedRestoredWindowTick];
@@ -6315,6 +6363,65 @@ ph.alpha = 0.0;
 }];
 }
 
+// v73：尺寸門判斷——scene 內容尺寸對上窗 frame 才算就緒（黑半邊修復）。
+// 比兩樣：(a) 最後一次推給 scene 的 frame 尺寸 vs 現在窗該有的 frame 尺寸（誤差 3pt）；
+// (b) 內容區 sublayerTransform 的縮放 vs 該有的縮放（誤差 0.03）——恢復時 transform
+// 還停在小卡縮放（0.27）就是 1.0.72 影片裡黑半邊的樣子。layer-host 路 scene frame
+// 恆為屏幕尺寸，(a) 用屏幕尺寸比、(b) 用顯示 scale 比。沒推過 frame（Valid=NO）算不對上。
+static BOOL GHLSSHostedSceneSizeMatchesWindow(void) {
+if (!GHLSSHostedScene || !GHLSSHostedContentView) return YES;
+if (!GHLSSHostedSceneFrameSizeValid) return NO;
+CGSize contentSize = GHLSSHostedContentView.bounds.size;
+if (contentSize.width <= 0 || contentSize.height <= 0) return YES;
+CGSize screenSize = [UIScreen mainScreen].bounds.size;
+CGSize expectedFrame;
+CGFloat expectedScale;
+if (GHLSSHostedPresenter && GHLSSHostedPresenter.presentationView) {
+CGFloat scale = GHLSSHostedScaleRatio;
+if (scale < 0.5) scale = 0.5;
+if (scale > 2.0) scale = 2.0;
+expectedFrame = GHLSSSceneFrameSizeForContentSizeAndScale(contentSize, scale);
+expectedScale = scale;
+} else {
+expectedFrame = screenSize;
+expectedScale = GHLSSLayerHostDisplayScaleForContentSizeAndBundleID(contentSize, GHLSSHostedBundleID);
+}
+if (fabs(GHLSSHostedSceneFrameSize.width - expectedFrame.width) > 3.0) return NO;
+if (fabs(GHLSSHostedSceneFrameSize.height - expectedFrame.height) > 3.0) return NO;
+CGFloat actualScale = GHLSSHostedContentView.layer.sublayerTransform.m11;
+if (actualScale <= 0) actualScale = 1.0;
+if (fabs(actualScale - expectedScale) > 0.03) return NO;
+return YES;
+}
+
+// v73：拖調尺寸鬆手後——scene 還沒重畫到新尺寸之前，窗上蓋佔位等它（不然放大那一下
+// 右半邊是黑的）。只對看得見的主窗；小卡（已收起）不走這裡（peek 尺寸由 peek 縮放路管，
+// 內容永遠貼合）；門控已在跑時不重設（恢復／切換的門控優先）。
+- (void)armSizeGateForResize {
+if (GHLSSRestoreGateActive) return;
+if (!GHLSSHostedWindow || GHLSSHostedWindow.hidden || GHLSSHostedMinimized) return;
+if (!GHLSSHostedScene) return;
+int idx = GHLSSActiveAppIndex;
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+GHLSSShowPlaceholderForIndex(idx);
+GHLSSRestoreGateActive = YES;
+GHLSSRestoreGateScene = GHLSSHostedScene;
+GHLSSRestoreGateStart = [NSDate timeIntervalSinceReferenceDate];
+GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
+GHLSSRestoreGateRebuilt = NO;
+GHLSSRestoreGateStuckLogged = NO;
+GHLSSRestoreGateMode = 1;
+GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
+if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
+GHLSSSizeGatePreMatched = NO;
+GHLSSSizeGateMatchedOnce = NO;
+GHLSSSizeGateWaitingLogged = NO;
+GHLSSLogLine("v73 resize gated until size matches");
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self showGatedRestoredWindowTick];
+});
+}
+
 // v72：恢复门控 tick v2——不要有任何 App 闪黑边，每 0.5 秒看一次。
 // 就绪（contentState==2）就再等多一帧（约 80ms）才淡入／淡出占位，让第一帧画好；
 // 还没就绪：窗继续盖占位等，绝不直接显示黑窗；卡在 0 超过约 5 秒就重建 scene
@@ -6351,6 +6458,38 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 });
 return;
 }
+    // v73：尺寸門——scene 內容尺寸對上窗 frame 才算就緒（黑半邊修復）。
+    // 尺寸還沒對上：重推一次 resize（立即改 bounds＋transform，frame 防抖推），
+    // 佔位繼續蓋著，0.5 秒後再看；卡滿 5 秒還對不上就重建 scene（跟 cs==0 同一路）。
+    // 尺寸對上了：第一次對上先記一行、再等一個 tick（半秒）讓 scene 把新尺寸畫出來；
+    // 決策時就對上、或上個 tick 已對上，就直接走 80ms 顯示。
+    if (!GHLSSHostedSceneSizeMatchesWindow()) {
+        GHLSSSizeGateMatchedOnce = NO;
+        if (!GHLSSSizeGateWaitingLogged) {
+            GHLSSSizeGateWaitingLogged = YES;
+            GHLSSLogLine("v73 size gate waiting");
+        }
+        if (GHLSSHostedContentView) {
+            [self resizeHostedSceneToContentSize:GHLSSHostedContentView.bounds.size];
+        }
+        if (now >= GHLSSRestoreGateDeadline && !GHLSSRestoreGateRebuilt) {
+            GHLSSLogLine("v73 size gate timeout, rebuilding scene");
+            [self rebuildStuckHostedScene];
+            return;
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showGatedRestoredWindowTick];
+        });
+        return;
+    }
+    if (!GHLSSSizeGatePreMatched && !GHLSSSizeGateMatchedOnce) {
+        GHLSSSizeGateMatchedOnce = YES;
+        GHLSSLogLine("v73 size gate matched");
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showGatedRestoredWindowTick];
+        });
+        return;
+    }
     // 就绪——再等多一帧（约 80ms）才显示，让第一帧画好（2d）。
 GHLSSRestoreGateActive = NO;
 int idx = GHLSSActiveAppIndex;
@@ -6463,6 +6602,9 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
     GHLSSRestoreGateStuckLogged = NO;
     GHLSSRestoreGateMode = mode;
     GHLSSRestoreGateTargetAlpha = targetAlpha;
+    GHLSSSizeGatePreMatched = GHLSSHostedSceneSizeMatchesWindow(); // v73：重建後現算一次（新 scene 建在正確尺寸上，通常已對上）。
+    GHLSSSizeGateMatchedOnce = NO;
+    GHLSSSizeGateWaitingLogged = NO;
     GHLSSLogLine("v72 restore gated until ready");
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self showGatedRestoredWindowTick];
@@ -6553,6 +6695,9 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
         GHLSSRestoreGateRebuilt = NO;
         GHLSSRestoreGateStuckLogged = NO;
         GHLSSRestoreGateMode = 0;
+        GHLSSSizeGatePreMatched = GHLSSHostedSceneSizeMatchesWindow(); // v73：決策時尺寸已對上就不用再等一輪 grace。
+        GHLSSSizeGateMatchedOnce = NO;
+        GHLSSSizeGateWaitingLogged = NO;
         [self showGatedRestoredWindowTick];
         return;
     }
@@ -6569,6 +6714,9 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
     GHLSSRestoreGateRebuilt = NO;
     GHLSSRestoreGateStuckLogged = NO;
     GHLSSRestoreGateMode = 0;
+    GHLSSSizeGatePreMatched = NO; // v73：還沒就緒，尺寸門等 tick 裡再判斷。
+    GHLSSSizeGateMatchedOnce = NO;
+    GHLSSSizeGateWaitingLogged = NO;
     GHLSSLogLine("v72 restore gated until ready");
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self showGatedRestoredWindowTick];
@@ -6742,7 +6890,7 @@ if (GHLSSHostedScene) {
 @try { gateCS = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; gateCS = 2; }
 }
 if (restoreHasTargetFrame) {
-[self animateRestoreSnapshotFromFrame:restoreFromFrame toFrame:restoreTargetFrame ready:(gateCS == 2) completion:^{
+[self animateRestoreSnapshotFromFrame:restoreFromFrame toFrame:restoreTargetFrame ready:(gateCS == 2 && GHLSSHostedSceneSizeMatchesWindow()) completion:^{ // v73：尺寸還沒對上也播佔位塊（真快照會是小內容＋黑邊）。
 [self runRestoreGateDecision];
 }];
 } else {
@@ -6986,6 +7134,7 @@ GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 char buf[128];
 snprintf(buf, sizeof(buf), "v57 window resized to %dx%d", (int)newW, (int)newH);
 GHLSSLogLine(buf);
+[self armSizeGateForResize]; // v73：拖調尺寸鬆手後，尺寸沒對上之前蓋佔位等 scene 重畫。
 }
 
 // v42：手勢動作分派（手勢自定義；v60 釘選鈕沒了，pin 只剩手勢）：pin 釘選/取消、
