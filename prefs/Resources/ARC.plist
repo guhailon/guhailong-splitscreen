@@ -133,30 +133,6 @@
 			</array>
 		</dict>
 		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>grid</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>launcherStyle</string>
-			<key>label</key>
-			<string>啟動器樣式</string>
-			<key>validTitles</key>
-			<array>
-				<string>格狀（默认）</string>
-				<string>圓環</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>grid</string>
-				<string>radial</string>
-			</array>
-		</dict>
-		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>

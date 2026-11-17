@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.71（实验版 v71）</string>
+			<string>SeaDragon Split v1.0.72（实验版 v72）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -297,68 +297,6 @@
 			<string>GHLSSStatusListController</string>
 			<key>label</key>
 			<string>狀態</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>這兩行和子頁裡的是同一設定（浮窗窗口設置／arc設置裡也有一份），主頁多放一份是怕子頁快取舊了看不到。</string>
-			<key>label</key>
-			<string>浮窗退出動畫／啟動器樣式</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>island</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>exitAnimation</string>
-			<key>label</key>
-			<string>浮窗退出動畫</string>
-			<key>validTitles</key>
-			<array>
-				<string>灵动岛（默认）</string>
-				<string>缩小淡出</string>
-				<string>向右滑散</string>
-				<string>下沉淡出</string>
-				<string>方块拼散</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>island</string>
-				<string>shrink</string>
-				<string>slide</string>
-				<string>sink</string>
-				<string>shatter</string>
-			</array>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>grid</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>launcherStyle</string>
-			<key>label</key>
-			<string>啟動器樣式</string>
-			<key>validTitles</key>
-			<array>
-				<string>格狀（默认）</string>
-				<string>圓環</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>grid</string>
-				<string>radial</string>
-			</array>
 		</dict>
 		<dict>
 			<key>cell</key>

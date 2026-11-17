@@ -1,4 +1,17 @@
-// GuHaiLongSplitScreen v1.0.71 (v42.29) — 顾海龙集团原创分屏插件（实验版）
+// GuHaiLongSplitScreen v1.0.72 (v42.30) — 顾海龙集团原创分屏插件（实验版）
+//
+// ── v42.30 (1.0.72)：修 1.0.71 真機測「退出動畫＋啟動器樣式選了沒用」（皇上 2026-11-17 14:00）──
+// (1) 診斷日誌：closeHostedWindow 讀完 exitAnim 記一行「v72 exit anim N」；
+// rebuildARCContent 樣式分支記一行「v72 launcher style radial／grid」——
+// 下次日誌直接證明讀值有沒有到 dylib。
+// (2) 退出動畫套到拖去收小卡：皇上平常關窗是拖主窗到邊緣放手＝
+// minimizeHostedWindow，那條路從來不跑退出動畫（只掛在 closeHostedWindow
+// 上）。改：拖去貼邊放手時，先按設定的 exitAnimation 播一次關窗效果
+// （0 island＝現有行為不動；1 縮小淡出／2 向右滑散／3 下沉淡出 0.35 秒；
+// 4 方块拼散複用 closeHostedWindowWithShatter，結束改走 minimize 顯示
+// peek 不是藏窗），播完還原 frame／alpha／transform 再走現有 minimize。
+// 自動 peek／遊戲模式／點窗外收起不走這裡。遊戲模式開著時動畫 0.01 秒。
+// v43 第一步順延到 1.0.73。
 //
 // ── v42.29 (1.0.71)：只修 1.0.70 真機測出來的三件事（皇上 2026-11-17 11:06）──
 // (1) Telegram 行：23.log 證明點按每次都派發、openURL 每次都回 success，
@@ -15,7 +28,7 @@
 // 窗已經顯示了。改：恢復先藏窗，等 scene 就緒（contentState==2）再淡入；
 // 約 2.5 秒還沒就緒也顯示（超時兜底，窗永不卡死隱藏）。收起路徑、鎖屏、
 // 看門狗都不動。
-// v43 第一步順延到 1.0.72。
+// v43 第一步順延到 1.0.73。
 //
 // ── v42.28 (1.0.70)：改名＋Telegram 行＋影片 5 項全做（皇上 2026-11-17 10:22「全部」）──
 // (1) 改名 SeaDragon Split：插件內（設定入口 label、Root.plist 標題、
@@ -1073,16 +1086,18 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)createHostedSceneForBundleID:(const char *)bundleID name:(const char *)name;
 - (void)buildHostedWindowForBundleID:(const char *)bundleID name:(const char *)name scene:(FBScene *)scene presenter:(_UIScenePresenter *)presenter layerHostView:(UIView *)layerHostView sceneID:(NSString *)sceneID pid:(int)pid;
 - (void)closeHostedWindow;
-- (void)closeHostedWindowWithShatter:(UIWindow *)closingWin startFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha;
+- (void)closeHostedWindowWithShatter:(UIWindow *)closingWin startFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha completion:(void (^)(void))completion;
 - (void)minimizeHostedWindow;
+- (void)minimizeHostedWindowWithExitAnimation:(int)exitAnim fromFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha;
 - (void)restoreHostedWindow;
 - (void)showGatedRestoredWindowTick;
+// v72：门控 v2——不要有任何 App 闪黑边：卡 0 重建、占位盖黑、快照播动画。
+- (void)rebuildStuckHostedScene;
+- (void)animateRestoreSnapshotFromFrame:(CGRect)fromFrame toFrame:(CGRect)toFrame ready:(BOOL)ready completion:(void (^)(void))completion;
+- (void)runRestoreGateDecision;
 - (void)handleScaleSlider:(UISlider *)sender;
 - (void)handleScaleSliderEnded:(UISlider *)sender;
 - (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer;
-- (void)dragTrailBeginAtPoint:(CGPoint)point;
-- (void)dragTrailAddPoint:(CGPoint)point;
-- (void)dragTrailEnd;
 - (void)handleTopStripTap:(UITapGestureRecognizer *)recognizer;
 - (void)handleResizeDrag:(UIPanGestureRecognizer *)recognizer;
 // v42.3：小窗（peek）右下角手柄拖調尺寸（見下面 handleResizeDrag 的分支）。
@@ -1121,8 +1136,9 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (UIButton *)arcThreeScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size;
 - (void)handleARCThreeScreenToolButton:(UIButton *)sender;
 - (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer;
-- (void)showNotificationBannerForName:(const char *)name;
 - (void)showNotificationBannerWithText:(const char *)text;
+// v72：showNotificationBannerForName 整个拿掉（皇上：浮窗已打开提示取消）——
+// 新窗建好不再弹「已打開 <App>」横幅；低电量那两条走 showNotificationBannerWithText，不动。
 - (void)handleBannerTap:(UITapGestureRecognizer *)recognizer;
 - (void)openAppFullscreen:(const char *)bundleID;
 - (void)handleScreenCaptureChanged:(NSNotification *)note;
@@ -1192,9 +1208,24 @@ static int GHLSSHostedPid = 0;
 static BOOL GHLSSHostedMinimized = NO;
 static BOOL GHLSSHostedLaunching = NO;
 static BOOL GHLSSRestoreGateActive = NO; // v71：恢复门控进行中（窗藏着等 scene 就绪）。
-static NSTimeInterval GHLSSRestoreGateDeadline = 0; // v71：门控超时时间（就绪或超时都显示）。
+// v72：门控 v2——不要有任何 App 闪黑边。超时不再直接显示黑窗：
+// 窗继续盖占位等、每 0.5 秒重看一次；卡在 contentState==0 满约 5 秒就重建 scene
+//（v35「session 内永不销毁」只对卡死 case 开例外）；占位是深灰底＋转圈＋App 名，绝不是全黑。
+static NSTimeInterval GHLSSRestoreGateStart = 0; // v72：这次门控开始时间。
+static NSTimeInterval GHLSSRestoreGateDeadline = 0; // v72：重建时间点（开始＋5 秒；不是显示时间）。
 static FBScene *GHLSSRestoreGateScene = nil; // v71：门控盯着的 scene（换了就取消门控）。
 static CGFloat GHLSSRestoreGateTargetAlpha = 1.0; // v71：淡入要回到的 alpha（游戏模式会调淡）。
+static BOOL GHLSSRestoreGateRebuilt = NO; // v72：这次门控已经重建过一次（只重建一次，不循环）。
+static BOOL GHLSSRestoreGateStuckLogged = NO; // v72：重建后还是卡 0 只记一行（不每 0.5 秒刷日志）。
+static int GHLSSRestoreGateMode = 0; // v72：门控模式——0 恢复（窗藏着，等就绪淡入显示）；1 已显示窗（promote／新窗，只盖占位、就绪淡出占位）。
+static UIView *GHLSSGatePlaceholders[GHLSS_APP_COUNT]; // v72：每窗一个载入占位（深灰底＋转圈＋App 名）。
+static BOOL GHLSSSuppressSlideInOnce = NO; // v72：重建 scene 时下一次建窗不滑入（直接出现在原位）。
+static UIWindow *GHLSSSnapshotAnimWindow = nil; // v72：快照动画的临时窗（播完就收掉）.
+
+// v72：载入占位 helper（定义在门控 tick 前面；看门狗／建窗路在它前面就呼叫，
+// 这里先给原型）。
+static void GHLSSShowPlaceholderForIndex(int idx);
+static void GHLSSHidePlaceholderForIndex(int idx);
 
 // v38：每窗一个 scaleRatio（反向耦合缩放，见文件头 v38 节）。
 // 活动窗的 scale 存在这里；切走时存缓存、切回来时读缓存。
@@ -1255,9 +1286,6 @@ static UIWindow *GHLSSDimOverlayWindow; // v40：点窗外事件的阴影背景�
 static BOOL GHLSSDragDockLeft = NO; // v40：这次拖动贴边收起往哪边（Began 时读一次位置设定，拖动中不变——每动一下都读 prefs 太费）。
 static CGFloat GHLSSDragSafeDistance = 50.0; // v40：这次拖动的安全距离（Began 时读一次，同上）。
 static BOOL GHLSSDragDisabled = NO; // v41：這次拖動被調度設定關掉了（Began 時讀一次浮窗拖動手勢開關）。
-static UIWindow *GHLSSDragTrailWindow = nil; // v70：拖窗軌跡窗（全屏透明，只畫虛線，不吃觸摸）
-static CAShapeLayer *GHLSSDragTrailLayer = nil;
-static UIBezierPath *GHLSSDragTrailPath = nil;
 static BOOL GHLSSDoraemonLongPressed = NO; // v40：哆啦A夢鈕刚被长按过（长按关全部窗；点按处理里看到它就 suppress 启动器、清掉；拖动钮时也清掉——长按后拖出按钮外、TouchUpInside 不触发时的兜底）。
 static UIView *GHLSSCacheContainers[GHLSS_APP_COUNT];
 static UIView *GHLSSCacheContentViews[GHLSS_APP_COUNT];
@@ -1455,6 +1483,8 @@ GHLSSCacheLayerHostViews[idx] = nil;
 GHLSSCacheTopStrips[idx] = nil;
 GHLSSCacheContainers[idx] = nil;
 GHLSSCacheContentViews[idx] = nil;
+// v72：占位跟着 container 一起丢掉——指针清掉，不留野指针。
+GHLSSGatePlaceholders[idx] = nil;
 GHLSSCacheResizeHandles[idx] = nil;
 GHLSSCacheSideDividers[idx] = nil;
 GHLSSCacheIsSideDock[idx] = NO;
@@ -4265,7 +4295,16 @@ UIWindow *w = GHLSSCacheWindows[i];
 if (!scene || !w || w.hidden) continue;
 @try {
 NSUInteger cs = [scene contentState];
-if (cs != 2) {
+if (cs == 2) {
+// 就绪——把占位拿掉（之前盖过的）。
+GHLSSHidePlaceholderForIndex(i);
+} else if (cs == 0) {
+// v72：小卡 scene 卡在 0——盖占位，绝不让小卡露黑；不推前景
+//（24.log 证明推 0 没用：时针／计算器／电池小卡各推过一次，一直是 0）。
+// 卡 0 的救法是恢复／切到它时走门控重建，不是看门狗反复推。
+GHLSSShowPlaceholderForIndex(i);
+} else {
+// 准备中（1）——推前景帮它一把。
 char wbuf[256];
 snprintf(wbuf, sizeof(wbuf), "v68 peek watchdog foreground pushed %s contentState=%lu", GHLSSCacheBundleIDs[i], (unsigned long)cs);
 GHLSSPushForegroundCachedSceneAtIndex(i, wbuf);
@@ -4437,6 +4476,42 @@ return;
 }
 GHLSSLoadCacheToActive(idx);
 GHLSSBringWindowToFront(GHLSSHostedWindow);
+// v72：切到看得見的窗也要門控——scene 沒就緒就蓋占位等它（不要有任何 App 閃黑邊）。
+// 就緒（2）照舊直接推前景；準備中（1）推一次再門控；卡在 0 不推（推 0 沒用，
+// 24.log 為證），直接門控、5 秒還 0 就重建。
+NSUInteger promoteCS = 2;
+if (GHLSSHostedScene) {
+@try { promoteCS = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; promoteCS = 2; }
+}
+if (promoteCS != 2) {
+if (promoteCS == 1) {
+@try {
+[GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+settings.foreground = YES;
+if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
+settings.backgrounded = NO;
+}
+}];
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v57 foreground push on promote failed");
+}
+}
+GHLSSShowPlaceholderForIndex(idx);
+GHLSSRestoreGateActive = YES;
+GHLSSRestoreGateScene = GHLSSHostedScene;
+GHLSSRestoreGateStart = [NSDate timeIntervalSinceReferenceDate];
+GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
+GHLSSRestoreGateRebuilt = NO;
+GHLSSRestoreGateStuckLogged = NO;
+GHLSSRestoreGateMode = 1; // 窗本来就看得见，只盖占位、就绪淡出占位。
+GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
+if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
+GHLSSLogLine("v72 promote gated until ready");
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self showGatedRestoredWindowTick];
+});
+} else {
 @try {
 if (GHLSSHostedScene) {
 [GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
@@ -4449,6 +4524,7 @@ settings.backgrounded = NO;
 } @catch (NSException *e) {
 (void)e;
 GHLSSLogLine("v57 foreground push on promote failed");
+}
 }
 char buf[256];
 snprintf(buf, sizeof(buf), "v57 window promoted to main %s", GHLSSCacheBundleIDs[idx]);
@@ -5178,6 +5254,12 @@ GHLSSLogLine(cbuf);
 (void)e;
 GHLSSLogLine("v57 scene contentState failed");
 }
+// v72：锁着时不推 foreground——锁着建的 scene 推了也会掉回 0（24.log 时钟案：
+// 建时 state=1，推完读 0，之后再也没起来）。锁着就等解锁再推（解锁回调
+// 会给全部缓存 scene 推前景，新 scene 那时已进缓存）。
+if (GHLSSScreenLocked) {
+GHLSSLogLine("v72 foreground push deferred, screen locked");
+} else {
 @try {
 [scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
 settings.foreground = YES;
@@ -5188,6 +5270,7 @@ GHLSSLogLine(fbuf);
 } @catch (NSException *e) {
 (void)e;
 GHLSSLogLine("v57 foreground push failed");
+}
 }
 GHLSSLogLine("v57 presenter ready");
 [self buildHostedWindowForBundleID:bundleID name:name scene:scene presenter:presenter layerHostView:nil sceneID:sceneID pid:pid];
@@ -5687,7 +5770,10 @@ GHLSSHostedWindow.rootViewController = vc;
 // 兩窗時塊跑到新窗身上）。
 UIWindow *slideWin = GHLSSHostedWindow;
 CGRect finalFrame = slideWin.frame;
-BOOL doSlideIn = !GHLSSHostedIsSideDock;
+// v72：重建 scene 时不滑入（GHLSSSuppressSlideInOnce，重建直接出现在原位）。
+BOOL suppressSlide = GHLSSSuppressSlideInOnce;
+GHLSSSuppressSlideInOnce = NO;
+BOOL doSlideIn = !GHLSSHostedIsSideDock && !suppressSlide;
 if (doSlideIn) {
 BOOL slideLeft = GHLSSIsFloatingWindowSlideLeft();
 CGFloat startX = slideLeft ? (-finalFrame.size.width) : ([UIScreen mainScreen].bounds.size.width);
@@ -5730,9 +5816,8 @@ if (GHLSSHostedIsSideDock) GHLSSSaveLastThreeScreenPair(GHLSSPairPrevBid, bundle
 }
 GHLSSSaveRestoreList();
 GHLSSUpdateTaskbar();
-// v41：新窗建好時短暫顯示通知橫幅（浮窗設置 → 通知橫幅設置；
-// 開關關了不顯示，時長走設定，預設 1.5 秒）。
-[self showNotificationBannerForName:name];
+// v72：新窗建好不再彈「已打開 <App>」橫幅（皇上：浮窗已打开提示取消）——
+// showNotificationBannerForName 整个拿掉；低电量提示走 showNotificationBannerWithText，不动。
 // v40：恢复了上次的位置/大小——建窗时内容已按恢复的尺寸嵌，再调一次
 // resizeHostedSceneToContentSize，把 scene frame 也推到恢复的尺寸
 //（跟拖角落调尺寸松手时同一条路；只在恢复时调一次）。
@@ -5760,7 +5845,9 @@ GHLSSLogLine(cbuf);
 if (!retryScene || !retryWindow) return;
 if (retryIdx >= 0 && GHLSSCacheScenes[retryIdx] != retryScene) return;
 @try {
-if ([retryScene contentState] != 2) {
+// v72：重试只在准备中（1）时推 foreground；卡在 0 不推（24.log 证明推 0
+// 没用，卡 0 的交给门控重建）；锁着也不推（等解锁回调推）。
+if ([retryScene contentState] == 1 && !GHLSSScreenLocked) {
 [retryScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
 settings.foreground = YES;
 }];
@@ -5780,7 +5867,8 @@ GHLSSLogLine(cbuf);
 if (!retryScene || !retryWindow) return;
 if (retryIdx >= 0 && GHLSSCacheScenes[retryIdx] != retryScene) return;
 @try {
-if ([retryScene contentState] != 2) {
+// v72：同上（只在 1 时推、锁着不推）。
+if ([retryScene contentState] == 1 && !GHLSSScreenLocked) {
 [retryScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
 settings.foreground = YES;
 }];
@@ -5793,6 +5881,31 @@ GHLSSLogLine(rbuf);
 GHLSSLogLine("v57 foreground retry2 failed");
 }
 });
+// v72：新窗建好时 scene 还没就绪——盖占位等它（不要有任何 App 一开就是黑窗）。
+//（就绪的直接显示，不用门控；窗已显示，走已显示窗模式——只盖占位、就绪淡出占位。
+// 卡 0 满 5 秒走同一个重建。）
+{
+NSUInteger newCS = 2;
+if (scene) {
+@try { newCS = [scene contentState]; } @catch (NSException *e) { (void)e; newCS = 2; }
+}
+if (newCS != 2 && newCacheIdx >= 0 && newCacheIdx < GHLSS_APP_COUNT) {
+GHLSSShowPlaceholderForIndex(newCacheIdx);
+GHLSSRestoreGateActive = YES;
+GHLSSRestoreGateScene = scene;
+GHLSSRestoreGateStart = [NSDate timeIntervalSinceReferenceDate];
+GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
+GHLSSRestoreGateRebuilt = NO;
+GHLSSRestoreGateStuckLogged = NO;
+GHLSSRestoreGateMode = 1;
+GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
+if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
+GHLSSLogLine("v72 new window gated until ready");
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self showGatedRestoredWindowTick];
+});
+}
+}
 } @catch (NSException *e) {
 (void)e;
 GHLSSLogLine("v57 window failed exception");
@@ -5867,8 +5980,14 @@ GHLSSUpdateTaskbar();
 // 0.4 秒；動畫完才藏窗、還原 frame／alpha／transform（下次恢復不受影響）。
 // v56：遊戲模式開著時動畫減到最少（0.01 秒直接到位，省電）。
 int exitAnim = GHLSSReadExitAnimation();
+// v72：讀完記一行（0–4），下次日誌直接證明讀值有沒有到 dylib。
+{
+char vbuf[64];
+snprintf(vbuf, sizeof(vbuf), "v72 exit anim %d", exitAnim);
+GHLSSLogLine(vbuf);
+}
 if (exitAnim == 4 && !GHLSSGameMinimalAnimationsActive()) {
-[self closeHostedWindowWithShatter:closingWin startFrame:startFrame startAlpha:startAlpha];
+[self closeHostedWindowWithShatter:closingWin startFrame:startFrame startAlpha:startAlpha completion:nil];
 return;
 }
 void (^closeCompletion)(BOOL) = ^(BOOL finished) {
@@ -5918,7 +6037,7 @@ closingWin.alpha = 0.0;
 // 注意：這裡不能用 @""／@()／@[] 字面量——會產生 __cfstring 段（Linux 交叉
 // 工具鏈下會壞，v13 教訓），一律用 [NSString stringWithCString:encoding:]／
 // [NSNumber numberWith…]／[NSArray arrayWithObjects:]。
-- (void)closeHostedWindowWithShatter:(UIWindow *)closingWin startFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha {
+- (void)closeHostedWindowWithShatter:(UIWindow *)closingWin startFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha completion:(void (^)(void))completion {
 if (!closingWin) return;
 UIView *snap = [closingWin snapshotViewAfterScreenUpdates:YES];
 if (!snap) {
@@ -5933,6 +6052,7 @@ closingWin.hidden = YES;
 closingWin.frame = startFrame;
 closingWin.transform = CGAffineTransformIdentity;
 closingWin.alpha = startAlpha;
+if (completion) completion();
 }];
 return;
 }
@@ -5951,6 +6071,7 @@ closingWin.hidden = YES;
 closingWin.frame = startFrame;
 closingWin.transform = CGAffineTransformIdentity;
 closingWin.alpha = startAlpha;
+if (completion) completion();
 }];
 return;
 }
@@ -6023,6 +6144,9 @@ closingWin.hidden = YES;
 closingWin.frame = startFrame;
 closingWin.transform = CGAffineTransformIdentity;
 closingWin.alpha = startAlpha;
+// v72：收尾回調（關窗路傳 nil；拖去收小卡路在這裡取消隱藏＋調 minimize，
+// 顯示 peek 不是藏窗——要在 overlay 藏掉之前跑，碎片還在飛時 peek 就位）。
+if (completion) completion();
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 overlayWin.hidden = YES;
 });
@@ -6034,6 +6158,67 @@ overlayWin.hidden = YES;
 // 的切换路径与 closeHostedWindow）。启动器层级不用这里复位：
 // showLauncher 每次按活动窗有没有定层级（有窗 Alert - 1、没窗
 // Alert - 3），销毁只发生在没有活动窗的旧 scene 上。
+
+// v72：拖去收小卡也按退出動畫播一次（只改手動拖去貼邊收起這一處——
+// handleTitleDrag Ended 的 shouldDock 分支；自動 peek／遊戲模式／
+// 點窗外收起不走這裡）。0 island＝現有行為不動（呼叫處直接調
+// minimizeHostedWindow，不進這裡）；1 縮小淡出／2 向右滑散／3 下沉淡出
+// 是 0.35 秒 UIView 動畫，播完還原 frame／alpha／transform 再走現有
+// minimize（存幾何在還原之後才對）；4 方块拼散複用
+// closeHostedWindowWithShatter，completion 裡取消隱藏＋調 minimize
+// （顯示 peek 不是藏窗；shatter 本身會把窗 hidden=YES，ShowDockPeek
+// 不取消隱藏，不補這行 peek 會隱形；碎片飛的 0.7 秒裡 peek 已經就位）。
+// 動畫中途有人先把這扇窗收了（per-App 的 GHLSSCacheMinimized）或活動窗
+// 換了（GHLSSHostedWindow 不是這扇窗），completion 只還原視覺
+// （transform／alpha），不動 frame、不再調 minimize（免得把別人的窗收了／
+// 把已縮成 peek 的窗框還原成大窗）。shatter 失敗退路那條 completion 裡
+// 還要重算一次 peek 排布（退路會把 frame 還原成大窗尺寸）。遊戲模式
+// 開著時動畫 0.01 秒（跟 closeHostedWindow 同一套：4 在遊戲模式走下沉）。
+- (void)minimizeHostedWindowWithExitAnimation:(int)exitAnim fromFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha {
+UIWindow *closingWin = GHLSSHostedWindow;
+if (!closingWin) return;
+if (exitAnim == 4 && !GHLSSGameMinimalAnimationsActive()) {
+[self closeHostedWindowWithShatter:closingWin startFrame:startFrame startAlpha:startAlpha completion:^{
+int cidx = GHLSSAppIndexForWindow(closingWin);
+BOOL selfMin = (cidx >= 0 && cidx < GHLSS_APP_COUNT && GHLSSCacheMinimized[cidx]);
+if (selfMin || GHLSSHostedWindow == closingWin) closingWin.hidden = NO;
+if (!selfMin && GHLSSHostedWindow == closingWin) {
+[self minimizeHostedWindow];
+} else if (selfMin) {
+GHLSSLayoutDockPeeks();
+}
+}];
+return;
+}
+NSTimeInterval dockAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGRect endFrame = startFrame;
+CGAffineTransform endTransform = CGAffineTransformIdentity;
+if (exitAnim == 1) {
+// v70：縮小淡出——縮到 1/10＋淡出（錨點是窗中心，視覺上往中心縮）。
+endTransform = CGAffineTransformMakeScale(0.1, 0.1);
+} else if (exitAnim == 2) {
+// v70：向右滑散——不管開窗是哪邊，統一往右滑出屏幕＋淡出。
+endFrame = CGRectMake(screenBounds.size.width + 20.0, startFrame.origin.y, startFrame.size.width, startFrame.size.height);
+} else {
+// v70：下沉淡出——往下沉出屏幕＋淡出（遊戲模式下 4 也走這裡，跟關窗路一致）。
+endFrame = CGRectMake(startFrame.origin.x, screenBounds.size.height + 20.0, startFrame.size.width, startFrame.size.height);
+}
+[UIView animateWithDuration:dockAnimDur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+closingWin.frame = endFrame;
+closingWin.transform = endTransform;
+closingWin.alpha = 0.0;
+} completion:^(BOOL finished) {
+(void)finished;
+closingWin.transform = CGAffineTransformIdentity;
+closingWin.alpha = startAlpha;
+int cidx = GHLSSAppIndexForWindow(closingWin);
+BOOL selfMin = (cidx >= 0 && cidx < GHLSS_APP_COUNT && GHLSSCacheMinimized[cidx]);
+if (selfMin || GHLSSHostedWindow != closingWin) return;
+closingWin.frame = startFrame;
+[self minimizeHostedWindow];
+}];
+}
 
 - (void)minimizeHostedWindow {
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
@@ -6072,50 +6257,336 @@ GHLSSSaveRestoreList();
 GHLSSUpdateTaskbar();
 }
 
-// v71：恢复门控 tick——窗藏着等 scene 就绪，每 0.5 秒看一次。
-// 就绪（contentState==2）就淡入显示；超过 deadline 也显示（超时兜底）。
-// 以下情况直接取消门控、不显示：窗已经被别人显示了（例如解锁回調）、
-// 恢复中又被收起（Minimized 又变回 YES——这时把窗放出来，让 peek 看得见）、
-// scene 换了／没了。门控只管显示，不管 resize（resize 还是走 v65 的延后链）。
-- (void)showGatedRestoredWindowTick {
-if (!GHLSSRestoreGateActive) return;
-if (!GHLSSHostedWindow) { GHLSSRestoreGateActive = NO; return; }
-if (!GHLSSHostedWindow.hidden) { GHLSSRestoreGateActive = NO; return; }
-if (GHLSSHostedMinimized) {
-GHLSSRestoreGateActive = NO;
-GHLSSHostedWindow.hidden = NO;
+// v72：载入占位——深灰底＋转圈＋App 名，绝不是全黑。盖在 container 最上面
+//（内容区之上；点按层／调尺寸手柄提到它上面，点按拖动不受影响；
+// userInteractionEnabled=NO，细条拖动与内容点按照常穿过）。
+// 每窗一个，存在 GHLSSGatePlaceholders 数组里（跟窗一起缩放／移动；
+// 销毁缓存项时清掉指针，见 GHLSSDestroyCachedEntryAtIndex）。
+static void GHLSSShowPlaceholderForIndex(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+UIView *container = GHLSSCacheContainers[idx];
+if (!container) return;
+UIView *ph = GHLSSGatePlaceholders[idx];
+if (ph) {
+[container bringSubviewToFront:ph];
+if (GHLSSPeekTapOverlays[idx]) [container bringSubviewToFront:GHLSSPeekTapOverlays[idx]];
+if (GHLSSCacheResizeHandles[idx]) [container bringSubviewToFront:GHLSSCacheResizeHandles[idx]];
 return;
 }
-if (!GHLSSHostedScene || GHLSSHostedScene != GHLSSRestoreGateScene) { GHLSSRestoreGateActive = NO; return; }
+ph = [[UIView alloc] initWithFrame:container.bounds];
+ph.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+ph.userInteractionEnabled = NO;
+// 深灰（0.16），不是黑——一眼能看出「在载入」而不是黑窗。
+ph.backgroundColor = [UIColor colorWithRed:0.16 green:0.16 blue:0.18 alpha:1.0];
+UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+spinner.color = [UIColor whiteColor];
+spinner.center = CGPointMake(container.bounds.size.width / 2.0, container.bounds.size.height / 2.0 - 12.0);
+spinner.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+[spinner startAnimating];
+[ph addSubview:spinner];
+const char *nm = GHLSSAppNames[idx];
+if (nm && nm[0] != '\0') {
+UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, container.bounds.size.height / 2.0 + 14.0, container.bounds.size.width, 20)];
+label.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+label.text = [NSString stringWithCString:nm encoding:NSUTF8StringEncoding];
+label.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
+label.font = [UIFont systemFontOfSize:13];
+label.textAlignment = NSTextAlignmentCenter;
+[ph addSubview:label];
+}
+[container addSubview:ph];
+if (GHLSSPeekTapOverlays[idx]) [container bringSubviewToFront:GHLSSPeekTapOverlays[idx]];
+if (GHLSSCacheResizeHandles[idx]) [container bringSubviewToFront:GHLSSCacheResizeHandles[idx]];
+GHLSSGatePlaceholders[idx] = ph;
+GHLSSLogLine("v72 placeholder shown");
+}
+
+// v72：拿掉占位（0.2 秒淡出；没有占位就直接回，不重复淡）。
+static void GHLSSHidePlaceholderForIndex(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+UIView *ph = GHLSSGatePlaceholders[idx];
+if (!ph) return;
+GHLSSGatePlaceholders[idx] = nil;
+[UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+ph.alpha = 0.0;
+} completion:^(BOOL finished) {
+(void)finished;
+[ph removeFromSuperview];
+}];
+}
+
+// v72：恢复门控 tick v2——不要有任何 App 闪黑边，每 0.5 秒看一次。
+// 就绪（contentState==2）就再等多一帧（约 80ms）才淡入／淡出占位，让第一帧画好；
+// 还没就绪：窗继续盖占位等，绝不直接显示黑窗；卡在 0 超过约 5 秒就重建 scene
+//（只重建一次；重建后还是 0 就继续等，占位一直盖着）。
+// 取消条件：窗／scene 没了、scene 换了、恢复中又被收起（这时把窗放出来，
+// 让 peek 看得见，占位由看门狗管）。门控只管显示，不管 resize（还是走 v65 的延后链）。
+- (void)showGatedRestoredWindowTick {
+if (!GHLSSRestoreGateActive) return;
+if (!GHLSSHostedWindow || !GHLSSHostedScene) {
+GHLSSRestoreGateActive = NO;
+if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) GHLSSHidePlaceholderForIndex(GHLSSActiveAppIndex);
+return;
+}
+if (GHLSSHostedScene != GHLSSRestoreGateScene) { GHLSSRestoreGateActive = NO; return; }
+if (GHLSSRestoreGateMode == 0) {
+// 恢复模式：窗已显示出来、盖着占位等就绪（cs==2 将要显示那一下窗还藏着，
+// tick 的就绪分支会把它显示出来；锁着时窗也被藏着，等解锁）。
+// 被收起就取消（占位留着，看门狗会在 scene 就绪时拿掉）。
+if (GHLSSHostedMinimized) { GHLSSRestoreGateActive = NO; return; }
+} else {
+// 已显示窗模式（promote／新窗）：窗应该看得见；被藏起来／被收起就取消
+//（占位留着，看门狗会在 scene 就绪时拿掉）。
+if (GHLSSHostedWindow.hidden) { GHLSSRestoreGateActive = NO; return; }
+if (GHLSSHostedMinimized) { GHLSSRestoreGateActive = NO; return; }
+}
 NSUInteger cs = 2;
 @try { cs = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; cs = 2; }
 NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
-if (cs == 2 || now >= GHLSSRestoreGateDeadline) {
+if (cs == 2) {
+if (GHLSSScreenLocked) {
+// 锁着——先不显示，等解锁（解锁回调会推前景＋盖占位，门控继续等）。
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+[self showGatedRestoredWindowTick];
+});
+return;
+}
+    // 就绪——再等多一帧（约 80ms）才显示，让第一帧画好（2d）。
 GHLSSRestoreGateActive = NO;
-BOOL timedOut = (cs != 2);
+int idx = GHLSSActiveAppIndex;
 CGFloat targetAlpha = GHLSSRestoreGateTargetAlpha;
 if (targetAlpha <= 0.01) targetAlpha = 1.0;
-GHLSSHostedWindow.alpha = 0.0;
-GHLSSHostedWindow.hidden = NO;
+FBScene *readyScene = GHLSSHostedScene;
+UIWindow *readyWindow = GHLSSHostedWindow;
+int readyMode = GHLSSRestoreGateMode;
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+// 80ms 内窗被关／被收／scene 换了——不显示。
+if (!readyWindow || readyWindow != GHLSSHostedWindow) return;
+if (!readyScene || readyScene != GHLSSHostedScene) return;
+if (GHLSSHostedMinimized) return;
+if (readyMode == 0) {
+// 恢复：窗还藏着——拿掉占位，淡入显示。
+if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSHidePlaceholderForIndex(idx);
+readyWindow.alpha = 0.0;
+readyWindow.hidden = NO;
 [UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-GHLSSHostedWindow.alpha = targetAlpha;
+readyWindow.alpha = targetAlpha;
 } completion:nil];
-GHLSSUpdateDimOverlay();
-if (timedOut) GHLSSLogLine("v71 restore shown after timeout");
-else GHLSSLogLine("v71 restore shown after ready");
+GHLSSLogLine("v72 restore shown after ready");
 } else {
+// 已显示窗：窗本来就看得见——只把占位淡出。
+if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSHidePlaceholderForIndex(idx);
+GHLSSLogLine("v72 promote shown after ready");
+}
+GHLSSUpdateDimOverlay();
+});
+return;
+}
+// 还没就绪——绝不直接显示黑窗，继续等。
+if (cs == 0 && now >= GHLSSRestoreGateDeadline) {
+if (!GHLSSRestoreGateRebuilt) {
+// 卡在 0 超过约 5 秒——重建 scene（2a）。
+GHLSSLogLine("v72 restore gate timeout, rebuilding scene");
+[self rebuildStuckHostedScene];
+return;
+}
+if (!GHLSSRestoreGateStuckLogged) {
+GHLSSRestoreGateStuckLogged = YES;
+GHLSSLogLine("v72 restore still stuck after rebuild");
+}
+}
+if (cs == 1) {
+// 准备中——再推一次前景帮它一把。0 不推：24.log 证明推 0 没用（时针案
+// 重试／恢复／解锁／看门狗全推过，一直是 0）。
+@try {
+[GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+settings.foreground = YES;
+if ([settings respondsToSelector:@selector(setBackgrounded:)]) {
+settings.backgrounded = NO;
+}
+}];
+} @catch (NSException *e) {
+(void)e;
+}
+}
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 [self showGatedRestoredWindowTick];
 });
 }
+
+- (void)rebuildStuckHostedScene {
+    // v72：scene 卡在 contentState==0 超过约 5 秒——只有销毁重建能让它重新就绪
+    //（v35「session 内永不销毁」在此开例外，只对卡死 case；24.log 时钟案：
+    // 建时 state=1、推完 foreground 读 0，之后重试／恢复／解锁／看门狗全推过，
+    // 一直是 0——不重建永远是黑窗）。重建后重新设门（新 scene 可能还在准备），
+    // 只重建一次；重建后还是 0 就继续等，占位一直盖着。
+    int idx = GHLSSActiveAppIndex;
+    if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+    const char *bid = GHLSSCacheBundleIDs[idx];
+    const char *nm = GHLSSAppNames[idx];
+    if (!bid || bid[0] == '\0') return;
+    char bidCopy[128];
+    char nameCopy[128];
+    strncpy(bidCopy, bid, sizeof(bidCopy) - 1);
+    bidCopy[sizeof(bidCopy) - 1] = '\0';
+    strncpy(nameCopy, nm ? nm : "", sizeof(nameCopy) - 1);
+    nameCopy[sizeof(nameCopy) - 1] = '\0';
+    int mode = GHLSSRestoreGateMode;
+    CGFloat targetAlpha = GHLSSRestoreGateTargetAlpha;
+    // 取消当前门控（tick 链停掉；重建后重新设门）。
+    GHLSSRestoreGateActive = NO;
+    // 占位先拿掉（旧窗要销毁了；新窗重建后按需再盖）。
+    GHLSSHidePlaceholderForIndex(idx);
+    GHLSSSuppressSlideInOnce = YES; // 重建不滑入，直接出现在原位。
+    GHLSSDestroyCachedEntryAtIndex(idx); // 藏窗、清缓存＋活动量。
+    [self createHostedSceneForBundleID:bidCopy name:nameCopy];
+    GHLSSLogLine("v72 scene rebuilt after stuck 0");
+    if (!GHLSSHostedWindow || !GHLSSHostedScene) return;
+    NSUInteger cs = 2;
+    @try { cs = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; cs = 2; }
+    if (cs == 2) {
+        // 新 scene 直接就绪——窗已经显示了（create 时显示的），不用再门控。
+        return;
+    }
+    // 新 scene 还没就绪——重新设门（不再重建第二次）。
+    if (mode == 0) {
+        GHLSSHostedWindow.hidden = YES;
+    } else {
+        int nidx = GHLSSActiveAppIndex;
+        if (nidx >= 0 && nidx < GHLSS_APP_COUNT) GHLSSShowPlaceholderForIndex(nidx);
+    }
+    GHLSSRestoreGateActive = YES;
+    GHLSSRestoreGateScene = GHLSSHostedScene;
+    GHLSSRestoreGateStart = [NSDate timeIntervalSinceReferenceDate];
+    GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
+    GHLSSRestoreGateRebuilt = YES;
+    GHLSSRestoreGateStuckLogged = NO;
+    GHLSSRestoreGateMode = mode;
+    GHLSSRestoreGateTargetAlpha = targetAlpha;
+    GHLSSLogLine("v72 restore gated until ready");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self showGatedRestoredWindowTick];
+    });
+}
+
+- (void)animateRestoreSnapshotFromFrame:(CGRect)fromFrame toFrame:(CGRect)toFrame ready:(BOOL)ready completion:(void (^)(void))completion {
+    // v72：丝滑化——恢复先播快照动画（活内容就绪时是真快照，没就绪时是深灰占位块），
+    // 活窗尺寸一次定好（restore 里已设好），动画只动快照的 center＋transform
+    //（GPU 合成，不触发布局／scene 重排），播完换回真窗。0.25 秒，跟原来窗框动画同长。
+    UIWindow *hosted = GHLSSHostedWindow;
+    if (!hosted) { if (completion) completion(); return; }
+    UIView *snap = nil;
+    if (ready) {
+        @try { snap = [hosted snapshotViewAfterScreenUpdates:NO]; } @catch (NSException *e) { (void)e; snap = nil; }
+    }
+    UIWindowScene *ws = GHLSSActiveWindowScene();
+    UIWindow *overlay = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    overlay.windowLevel = GHLSS_HOSTED_FRONT_LEVEL;
+    overlay.backgroundColor = [UIColor clearColor];
+    if (ws) overlay.windowScene = ws;
+    UIViewController *vc = [[UIViewController alloc] init];
+    vc.view.backgroundColor = [UIColor clearColor];
+    overlay.rootViewController = vc;
+    UIView *animView = snap;
+    if (!animView) {
+        // 没活内容可拍——播一个深灰占位块（转圈＋App 名），绝不播黑块。
+        // 布局按目标框（toFrame）算，transform 会把它压回小卡尺寸。
+        animView = [[UIView alloc] initWithFrame:toFrame];
+        animView.backgroundColor = [UIColor colorWithRed:0.16 green:0.16 blue:0.18 alpha:1.0];
+        UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+        spinner.color = [UIColor whiteColor];
+        spinner.center = CGPointMake(toFrame.size.width / 2.0, toFrame.size.height / 2.0 - 12.0);
+        [spinner startAnimating];
+        [animView addSubview:spinner];
+        const char *nm = (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) ? GHLSSAppNames[GHLSSActiveAppIndex] : NULL;
+        if (nm && nm[0] != '\0') {
+            UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, toFrame.size.height / 2.0 + 14.0, toFrame.size.width, 20)];
+            label.text = [NSString stringWithCString:nm encoding:NSUTF8StringEncoding];
+            label.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
+            label.font = [UIFont systemFontOfSize:13];
+            label.textAlignment = NSTextAlignmentCenter;
+            [animView addSubview:label];
+        }
+    }
+    animView.layer.cornerRadius = GHLSSReadCornerRadius();
+    animView.layer.masksToBounds = YES;
+    // 快照放在目标框上，再用 center＋transform 把它压回小卡位置／尺寸——
+    // 动画只动这两个（GPU 合成），播完回到恒等。
+    animView.frame = toFrame;
+    animView.center = CGPointMake(CGRectGetMidX(fromFrame), CGRectGetMidY(fromFrame));
+    CGFloat s = (toFrame.size.width > 0) ? fromFrame.size.width / toFrame.size.width : 1.0;
+    if (s <= 0 || s > 1.0) s = 1.0;
+    animView.transform = CGAffineTransformMakeScale(s, s);
+    [vc.view addSubview:animView];
+    overlay.hidden = NO;
+    GHLSSSnapshotAnimWindow = overlay;
+    [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        animView.transform = CGAffineTransformIdentity;
+        animView.center = CGPointMake(CGRectGetMidX(toFrame), CGRectGetMidY(toFrame));
+    } completion:^(BOOL finished) {
+        (void)finished;
+        [animView removeFromSuperview];
+        overlay.hidden = YES;
+        if (GHLSSSnapshotAnimWindow == overlay) GHLSSSnapshotAnimWindow = nil;
+        if (completion) completion();
+    }];
+}
+
+- (void)runRestoreGateDecision {
+    // v72：恢复的门控决策（快照动画播完时跑）：scene 就绪就走 tick 的就绪分支
+    //（80ms 延迟＋淡入显示）；没就绪就把窗显示出来、盖占位、设门等。
+    // 调用前 restoreHostedWindow 已把窗藏好、frame 一次定好、前景推好、
+    // GHLSSRestoreGateTargetAlpha 已记好。
+    // v72：动画 0.25 秒里窗可能被关／被收／活动窗换了——先验证，不符合就作废。
+    if (!GHLSSHostedWindow || !GHLSSHostedScene) return;
+    if (GHLSSHostedMinimized) return;
+    if (GHLSSRestoreGateScene && GHLSSHostedScene != GHLSSRestoreGateScene) return;
+    int idx = GHLSSActiveAppIndex;
+    NSUInteger cs = 2;
+    @try { cs = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; cs = 2; }
+    if (cs == 2) {
+        // 就绪——设门后直接跑一次 tick，tick 的就绪分支会等 80ms 再淡入显示。
+        GHLSSRestoreGateActive = YES;
+        GHLSSRestoreGateScene = GHLSSHostedScene;
+        GHLSSRestoreGateStart = [NSDate timeIntervalSinceReferenceDate];
+        GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
+        GHLSSRestoreGateRebuilt = NO;
+        GHLSSRestoreGateStuckLogged = NO;
+        GHLSSRestoreGateMode = 0;
+        [self showGatedRestoredWindowTick];
+        return;
+    }
+    // 没就绪——窗显示出来、盖占位、设门等（绝不显示黑窗）。
+    if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSShowPlaceholderForIndex(idx);
+    CGFloat targetAlpha = GHLSSRestoreGateTargetAlpha;
+    if (targetAlpha <= 0.01) targetAlpha = 1.0;
+    GHLSSHostedWindow.alpha = targetAlpha;
+    GHLSSHostedWindow.hidden = NO;
+    GHLSSRestoreGateActive = YES;
+    GHLSSRestoreGateScene = GHLSSHostedScene;
+    GHLSSRestoreGateStart = [NSDate timeIntervalSinceReferenceDate];
+    GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
+    GHLSSRestoreGateRebuilt = NO;
+    GHLSSRestoreGateStuckLogged = NO;
+    GHLSSRestoreGateMode = 0;
+    GHLSSLogLine("v72 restore gated until ready");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self showGatedRestoredWindowTick];
+    });
+    GHLSSUpdateDimOverlay();
 }
 
 - (void)restoreHostedWindow {
 if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
 // v71：恢复门控——之前恢复（见下面）先把上一次没跑完的门控取消
 //（新恢复自己重新设门；旧 tick 看到旗標没了就直接回，不会乱显示）。
+// v72：同时记下这次恢复盯着的 scene（快照动画播完时门控决策拿它验证——
+// 动画里活动窗换了，这次恢复就作废）。
 GHLSSRestoreGateActive = NO;
+GHLSSRestoreGateScene = GHLSSHostedScene;
 int idx = GHLSSActiveAppIndex;
+// v72：快照动画的起点——恢复前先记下小卡当下的框（动画从这里长到目标框）。
+CGRect restoreFromFrame = GHLSSHostedWindow.frame;
 // v71：恢复门控——恢复先把窗藏起来（小卡点一下就消失，正常）；
 // frame 照旧长到目标尺寸、前景照旧推，等 scene 就绪再淡入显示
 //（见下面门控判断）。目标 alpha 先记下来（游戏模式会把窗调淡，
@@ -6123,6 +6594,9 @@ int idx = GHLSSActiveAppIndex;
 GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
 if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
 GHLSSHostedWindow.hidden = YES;
+// v72：目标框先记在局部量里（几何块算出来后填；快照动画与门控决策在方法尾用）。
+CGRect restoreTargetFrame = CGRectZero;
+BOOL restoreHasTargetFrame = NO;
 // v41：從 peek 恢復——先把窗的尺寸從存過的位置/大小還原（收起時縮
 // 成了 112x216；存的是窗中心 + 尺寸 + scale），再把容器/內容區的
 // 尺寸也還原（系統可能在縮窗時改了容器尺寸），點按層藏起來，
@@ -6170,21 +6644,19 @@ if (targetCX < minCX) targetCX = minCX;
 if (targetCX > maxCX) targetCX = maxCX;
 if (targetCY < minCY) targetCY = minCY;
 if (targetCY > maxCY) targetCY = maxCY;
-// v65：恢復慢＋不順（皇上 15:39）——原來窗框瞬間跳變，scene 沒就緒
-// （contentState=0）時也同步推 resize／前景，scene 一喚醒就卡。改：
-// 窗框 0.25 秒 ease-out 動畫長到目標尺寸；先推前景讓進程醒，再看
-// contentState：就緒照舊立即推 resize；沒就緒先不推，1 秒後再看
-// （醒了就推；還 0 就 2.5 秒再看一次，還 0 就推並記 still not ready）——
-// 窗已經可見，最差就是今天的樣子，不硬等。
-CGRect restoreTargetFrame = CGRectMake(targetCX - targetW / 2.0, targetCY - targetH / 2.0, targetW, targetH);
+// v72：丝滑化——活窗尺寸一次定好（下面直接设 frame，不播窗框动画；
+// 视觉上的生长由快照动画播，快照只动 center＋transform，不触发布局／
+// scene 重排）。先推前景让进程醒，再看 contentState：就绪照旧立即推
+// resize；没就绪先不推，1 秒后再看（醒了就推；还 0 就 2.5 秒再看一次，
+// 还 0 就推并记 still not ready）。
+restoreTargetFrame = CGRectMake(targetCX - targetW / 2.0, targetCY - targetH / 2.0, targetW, targetH);
+restoreHasTargetFrame = YES;
 CGRect restoreTargetContentFrame = CGRectMake(0, 0, targetW, targetH);
 CGRect restoreTargetStripFrame = CGRectMake(0, 0, targetW, GHLSS_HOSTED_STRIP_H);
-[UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
 GHLSSHostedWindow.frame = restoreTargetFrame;
 if (GHLSSHostedContainer) GHLSSHostedContainer.frame = restoreTargetContentFrame;
 if (GHLSSHostedContentView) GHLSSHostedContentView.frame = restoreTargetContentFrame;
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = restoreTargetStripFrame;
-} completion:nil];
 // v42.3：恢復時把 scene frame 也推回滿窗尺寸（不只改 bounds + transform）。
 // 小窗拖調尺寸時松手推過一次小 frame（resizeHostedSceneToContentSize）；
 // 只推 bounds 不推 frame 的話，scene 還以為自己是小窗，恢復後大窗裡
@@ -6232,6 +6704,15 @@ GHLSSLogLine("v57 window restored from peek");
 // foreground 状态弄丢了，只取消 hidden 不够；恢复时也要把
 // foreground=YES 再推一遍（建窗时同一个已证明能用的做法），
 // 单独包 @try/@catch，出错只记日志、继续恢复。
+// v72：scene 卡在 0 时不推——24.log 证明推 0 没用（时针案重试／恢复／
+// 解锁／看门狗全推过，一直是 0）；卡 0 的交给门控重建。
+NSUInteger restorePreCS = 2;
+if (GHLSSHostedScene) {
+@try { restorePreCS = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; restorePreCS = 2; }
+}
+if (restorePreCS == 0) {
+GHLSSLogLine("v72 foreground push on restore skipped, scene stuck 0");
+} else {
 @try {
 if (GHLSSHostedScene) {
 [GHLSSHostedScene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
@@ -6250,32 +6731,22 @@ GHLSSLogLine(fbuf);
 (void)e;
 GHLSSLogLine("v57 foreground push on restore failed");
 }
-// v71：恢复门控判断——前景刚推完，读一次 contentState：就绪（2）直接
-// 淡入显示；还没就绪先藏着，每 0.5 秒看一次（showGatedRestoredWindowTick），
-// 2.5 秒超时也显示。窗的 hidden 状态由 tick 管，这里的 SaveActiveToCache
-// 只同步 Minimized 旗標（hidden 是窗对象自己的属性，dim overlay 读它，
-// 门控期间不显示遮罩；tick 显示时再调一次 GHLSSUpdateDimOverlay）。
+}
+// v72：恢复门控判断——前景刚推完，读一次 contentState：
+// 先播 0.25 秒快照动画（就绪播真快照、没就绪播深灰占位块），播完跑门控决策
+//（runRestoreGateDecision：就绪 80ms 后淡入显示；没就绪显示窗＋盖占位＋设门等）。
+// 没有目标框（idx 无效）时不播动画，直接跑门控决策。
 {
 NSUInteger gateCS = 2;
 if (GHLSSHostedScene) {
 @try { gateCS = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; gateCS = 2; }
 }
-if (gateCS == 2) {
-CGFloat showAlpha = GHLSSRestoreGateTargetAlpha;
-GHLSSHostedWindow.alpha = 0.0;
-GHLSSHostedWindow.hidden = NO;
-[UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-GHLSSHostedWindow.alpha = showAlpha;
-} completion:nil];
-GHLSSLogLine("v71 restore shown after ready");
+if (restoreHasTargetFrame) {
+[self animateRestoreSnapshotFromFrame:restoreFromFrame toFrame:restoreTargetFrame ready:(gateCS == 2) completion:^{
+[self runRestoreGateDecision];
+}];
 } else {
-GHLSSRestoreGateActive = YES;
-GHLSSRestoreGateScene = GHLSSHostedScene;
-GHLSSRestoreGateDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.5;
-GHLSSLogLine("v71 restore gated until ready");
-dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-[self showGatedRestoredWindowTick];
-});
+[self runRestoreGateDecision];
 }
 }
 // v40：恢复完把状态存回缓存、更新阴影背景（窗又看得见了）。
@@ -6339,50 +6810,6 @@ GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 // 安全距离（设定页，默认 50）：拖窗时窗顶离刘海（屏幕顶缘）不到这个
 // 值就自动回弹（夹住位置，让窗顶至少离顶缘这个距离；旧 minY=100 是
 // 夹中心，顶缘能出屏——v40 改成夹窗顶）。
-// v70：拖窗軌跡——拖主浮窗時，手指後面跟一條白色虛線弧線（純裝飾）。
-// 做法是原創：全屏透明窗（level 在浮窗之下、陰影之上，不吃觸摸）＋一條
-// CAShapeLayer（白色 0.7、線寬 3、虛線 pattern、圓頭），手指移到哪、
-// path 加到哪；放手／取消後 0.5 秒淡出、藏窗、清 path。只跟主浮窗（peek
-// 窗不拖，handleTitleDrag 開頭的 peek early return 在前面，照舊）。
-- (void)dragTrailBeginAtPoint:(CGPoint)point {
-if (!GHLSSDragTrailWindow) {
-GHLSSDragTrailWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-GHLSSDragTrailWindow.windowScene = GHLSSActiveWindowScene();
-GHLSSDragTrailWindow.windowLevel = UIWindowLevelAlert - 2.5;
-GHLSSDragTrailWindow.backgroundColor = [UIColor clearColor];
-GHLSSDragTrailWindow.userInteractionEnabled = NO;
-CAShapeLayer *layer = [CAShapeLayer layer];
-layer.strokeColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7].CGColor;
-layer.fillColor = [UIColor clearColor].CGColor;
-layer.lineWidth = 3.0;
-layer.lineDashPattern = [NSArray arrayWithObjects:[NSNumber numberWithInt:2], [NSNumber numberWithInt:6], nil];
-layer.lineCap = kCALineCapRound;
-layer.lineJoin = kCALineJoinRound;
-[GHLSSDragTrailWindow.layer addSublayer:layer];
-GHLSSDragTrailLayer = layer;
-}
-GHLSSDragTrailPath = [UIBezierPath bezierPath];
-[GHLSSDragTrailPath moveToPoint:point];
-GHLSSDragTrailLayer.path = GHLSSDragTrailPath.CGPath;
-GHLSSDragTrailLayer.opacity = 1.0;
-GHLSSDragTrailWindow.hidden = NO;
-}
-- (void)dragTrailAddPoint:(CGPoint)point {
-if (!GHLSSDragTrailPath || !GHLSSDragTrailLayer) return;
-[GHLSSDragTrailPath addLineToPoint:point];
-GHLSSDragTrailLayer.path = GHLSSDragTrailPath.CGPath;
-}
-- (void)dragTrailEnd {
-if (!GHLSSDragTrailWindow || !GHLSSDragTrailLayer) return;
-// 0.5 秒淡出再藏窗（UIView 動畫塊裡改 layer 透明度會跟著動畫走）。
-[UIView animateWithDuration:0.5 animations:^{
-GHLSSDragTrailLayer.opacity = 0.0;
-} completion:^(BOOL finished) {
-(void)finished;
-GHLSSDragTrailWindow.hidden = YES;
-GHLSSDragTrailPath = nil;
-}];
-}
 - (void)handleTitleDrag:(UIPanGestureRecognizer *)recognizer {
 UIWindow *dragWindow = GHLSSWindowForView(recognizer.view);
 if (!dragWindow) dragWindow = GHLSSHostedWindow;
@@ -6405,17 +6832,9 @@ return;
 GHLSSDragDockLeft = GHLSSIsWindowPositionLeft();
 GHLSSDragSafeDistance = GHLSSReadSafeDistance();
 GHLSSLogLine("v57 window dragged");
-// v70：拖窗軌跡——手指落點開始畫虛線（屏幕座標＝窗原點＋窗內落點）。
-{
-CGPoint locInWindow = [recognizer locationInView:dragWindow];
-CGPoint screenPoint = CGPointMake(dragWindow.frame.origin.x + locInWindow.x, dragWindow.frame.origin.y + locInWindow.y);
-[self dragTrailBeginAtPoint:screenPoint];
-}
 }
 if (GHLSSDragDisabled) return;
 if (recognizer.state == UIGestureRecognizerStateCancelled || recognizer.state == UIGestureRecognizerStateFailed) {
-// v70：拖動取消／失敗，軌跡淡出、不動窗。
-[self dragTrailEnd];
 return;
 }
 BOOL dockLeft = GHLSSDragDockLeft;
@@ -6445,21 +6864,26 @@ if (newX > maxX) newX = maxX;
 if (newY < minY) newY = minY;
 if (newY > maxY) newY = maxY;
 dragWindow.center = CGPointMake(newX, newY);
-// v70：拖窗軌跡——手指移到哪、虛線跟到哪（屏幕座標＝窗原點＋窗內落點）。
-{
-CGPoint locInWindow = [recognizer locationInView:dragWindow];
-CGPoint screenPoint = CGPointMake(dragWindow.frame.origin.x + locInWindow.x, dragWindow.frame.origin.y + locInWindow.y);
-[self dragTrailAddPoint:screenPoint];
-}
 if (recognizer.state == UIGestureRecognizerStateEnded) {
-// v70：拖窗軌跡——放手，軌跡 0.5 秒淡出（要在貼邊收起的 early return 之前）。
-[self dragTrailEnd];
 // 放手：窗中心进了贴边那侧的缘 60pt 内——贴边收起（主关掉路徑，
 // 像影片一樣）。右側：中心进右缘 60pt 内；左側：中心进左缘 60pt 内。
 BOOL shouldDock = dockLeft ? (newX <= GHLSS_DOCK_DRAG_THRESHOLD) : (screenBounds.size.width - newX <= GHLSS_DOCK_DRAG_THRESHOLD);
 if (shouldDock) {
 GHLSSLogLine("v57 window docked by drag");
+// v72：拖去收小卡也按退出動畫播一次（0 island＝現有行為不動，
+// 直接收；1–4 先播動畫再收，播完還原幾何才走 minimize；遊戲模式
+// 開著時新方法裡面自己用 0.01 秒）。讀值記一行，證明設定有沒有到。
+int dockExitAnim = GHLSSReadExitAnimation();
+{
+char dbuf[64];
+snprintf(dbuf, sizeof(dbuf), "v72 dock exit anim %d", dockExitAnim);
+GHLSSLogLine(dbuf);
+}
+if (dockExitAnim == 0) {
 [self minimizeHostedWindow];
+} else {
+[self minimizeHostedWindowWithExitAnimation:dockExitAnim fromFrame:dragWindow.frame startAlpha:dragWindow.alpha];
+}
 return;
 }
 // v42：貼邊吸附（放手才吸，不拖著就跳）：拖到頂部（窗頂拖到安全距離
@@ -6881,8 +7305,8 @@ GHLSSKeyboardShifted = NO;
 GHLSSLogLine("v57 window restored after keyboard hide");
 }
 
-// v42：任意文字的通知橫幅（低電量收窗提示用；跟 showNotificationBannerForName
-// 共用同一個橫幅窗）。
+// v42：任意文字的通知橫幅（低電量收窗提示用；v72 起「已打開 <App>」
+// 那條拿掉了，只剩低電量提示走這裡）。
 - (void)showNotificationBannerWithText:(const char *)text {
 if (!GHLSSReadNotificationBanner()) return;
 if (!text) text = "";
@@ -7376,7 +7800,14 @@ return;
 [ordered addObject:[NSString stringWithCString:"GHLSS_THREE_SCREEN_TOOL" encoding:NSUTF8StringEncoding]];
 // v70：啟動器樣式——radial 時圖標排成圓環（見下面 addRadialARCIconsForBids），
 // 否則走原來的格狀弧圈（addARCIconsForBids）。
-if (GHLSSReadLauncherStyleRadial()) {
+// v72：樣式分支記一行（radial／grid），下次日誌證明讀值有沒有到。
+BOOL radialStyle = GHLSSReadLauncherStyleRadial();
+{
+char sbuf[64];
+snprintf(sbuf, sizeof(sbuf), "v72 launcher style %s", radialStyle ? "radial" : "grid");
+GHLSSLogLine(sbuf);
+}
+if (radialStyle) {
 [self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
 } else {
 [self addARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
@@ -7856,18 +8287,8 @@ UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithS
 
 
 
-// v41：通知橫幅——新窗建好時短暫顯示「已打開 <App>」（浮窗設置 →
-// 通知橫幅設置；開關關了不顯示，時長走設定，預設 1.5 秒自動藏）。
-// v42：原來的「已打開 X」橫幅改走共用的文字版（同一個橫幅窗）。
-- (void)showNotificationBannerForName:(const char *)name {
-if (!name) name = "";
-char text[192];
-snprintf(text, sizeof(text), "已打開 %s", name);
-[self showNotificationBannerWithText:text];
-char buf[192];
-snprintf(buf, sizeof(buf), "v57 notification banner %s", name);
-GHLSSLogLine(buf);
-}
+// v72：showNotificationBannerForName 整个拿掉（皇上：浮窗已打开提示取消）。
+// 低电量那两条走 showNotificationBannerWithText，不动。
 
 // v41：截圖/錄屏狀態變了（ARC 設置的截圖錄屏隱藏 ARC，預設開）：
 // 錄屏開始時把 ARC 藏起來，錄完不自動叫回來。截圖的通知在截圖完成
@@ -8338,6 +8759,14 @@ char fbuf[160];
 snprintf(fbuf, sizeof(fbuf), "v57 foreground pushed on unlock %s", GHLSSCacheBundleIDs[i]);
 GHLSSPushForegroundCachedSceneAtIndex(i, fbuf);
 anyRestored = YES;
+// v72：解锁推完前景、scene 还没就绪——盖占位（不要有任何 App 解锁后是黑窗；
+// 看门狗会在就绪时拿掉占位）。
+@try {
+NSUInteger unlockCS = [GHLSSCacheScenes[i] contentState];
+if (unlockCS != 2) GHLSSShowPlaceholderForIndex(i);
+} @catch (NSException *e) {
+(void)e;
+}
 }
 }
 if (!anyRestored) {

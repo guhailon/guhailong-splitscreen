@@ -674,6 +674,10 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
 // 這裡先給原型（主頁控制器與 PlistPage 共用同一個 didSelectRow）。
 static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView *tableView, NSIndexPath *indexPath);
 
+// v72：見下面 GHLSSHandleLinkListTap 的定義——LinkList 點按攔截，
+// 推我們自己的 GHLSSLinkListController（定義在文件後面，這裡先給原型）。
+static BOOL GHLSSHandleLinkListTap(PSListController *controller, UITableView *tableView, NSIndexPath *indexPath);
+
 // v43：手動派發 PSButtonCell 點按——不再賭框架會不會從 action 字串派發。
 // 診斷：plist 的 action 字串、程式現拼的 action 字串、方法、target 全部合規，
 // 但皇上在 v42 真機測到五個操作行點了完全沒反應；框架內部到底讀
@@ -960,6 +964,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // v47：plist 名 detail 的連結行先攔下來自己推 PlistPage（見下面
 // GHLSSHandlePlistDetailTap），不再走框架預設——框架推的原生頁是空的。
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSHandleLinkListTap(self, tableView, indexPath)) return;
     if (GHLSSHandlePlistDetailTap(self, tableView, indexPath)) return;
     if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
     [super tableView:tableView didSelectRowAtIndexPath:indexPath];
@@ -1005,9 +1010,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.71");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.72");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.71。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已經是最新版") message:GHLSSRuntimeString("已經是最新版 1.0.72。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，請去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -2894,6 +2899,16 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
 @interface GHLSSPlistPageController : GuHaiLongSplitScreenRootListController
 @end
 
+// v72：LinkList 子清單控制器（見下面 GHLSSHandleLinkListTap）——
+// 框架原生的 PSListItemsController 在鍵盤頁上只顯示一個選項（子清單幾乎空白，
+// plist 本身是對的、父頁也載了 7 項，框架子清單的生成／快取／渲染在這裡
+// 黑盒修不了；同 v47 的做法：點按攔下來、推我們自己的控制器）。
+// 它從點按那行的 specifier 現場讀 values／titles 建單選行，不走框架快取；
+// 選項寫值走繼承的 setPreferenceValue（CFPreferences＋同步），並記
+// v72 prefs-linklist 日誌，下次日誌能證明寫入。
+@interface GHLSSLinkListController : GuHaiLongSplitScreenRootListController
+@end
+
 // v43：子頁要跳的 plist 白名單（14 份真實檔案；不在裡面的
 // 名字一律不載，免得 loadSpecifiersFromPlistName 拿到壞名字）。
 // v50：Advanced 刪了（去重）、Status 新加。
@@ -2907,6 +2922,44 @@ static BOOL GHLSSPrefsIsKnownPlistName(const char *name) {
     return NO;
 }
 
+
+// v72：攔截 PSLinkListCell 的點按，自己推 GHLSSLinkListController。
+// 根因（皇上 2026-11-17 14:11 報：鍵盤子清單只顯示內弹出，頁面幾乎空白）：
+// plist 本身是對的（Keyboard[4] validTitles 浮窗内弹出／外弹出、
+// validValues inner／outer，出貨包裡也在），父頁也載了 7 項（24.log 證明，
+// 舊快取假說已推翻）——剩下就是框架原生的 PSListItemsController 自己
+// 生成／快取／渲染子清單時出的問題，在這裡黑盒修不了；同 v47 修
+// detail 連結行的做法（框架原生控制器載不到我們 bundle 的東西就空白），
+// 點按先攔下來、推我們自己的控制器：子清單從點按那行的 specifier
+// 現場讀 values／titles 建行，不走框架快取，兩個選項一定都在；
+// 選項寫值走繼承的 setPreferenceValue，並記 v72 prefs-linklist 日誌。
+// 沒有 values（或空）就回 NO 交回框架，不推空白頁。
+// 回傳 YES 表示這一行已經處理了（呼叫方直接 return，不要再走 super）。
+static BOOL GHLSSHandleLinkListTap(PSListController *controller, UITableView *tableView, NSIndexPath *indexPath) {
+    if (!controller || !indexPath) return NO;
+    PSSpecifier *spec = [controller specifierAtIndexPath:indexPath];
+    if (!spec) return NO;
+    if (spec.cellType != PSLinkListCell) return NO;
+    NSArray *values = spec.properties[GHLSSRuntimeString("values")];
+    NSArray *titles = spec.properties[GHLSSRuntimeString("titles")];
+    if (!values || [values count] == 0) {
+        GHLSSPrefsLogLine("v72 prefs-linklist no values, framework fallback");
+        return NO;
+    }
+    (void)titles;
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    GHLSSLinkListController *page = [[GHLSSLinkListController alloc] init];
+    page.specifier = spec;
+    page.parentController = controller;
+    page.rootController = controller.rootController;
+    [controller pushController:page];
+    NSString *key = spec.properties[GHLSSRuntimeString("key")];
+    const char *keyC = key ? [key UTF8String] : "?";
+    char buf[256];
+    snprintf(buf, sizeof(buf), "v72 prefs-linklist push %s options %lu", keyC, (unsigned long)[values count]);
+    GHLSSPrefsLogLine(buf);
+    return YES;
+}
 
 // v47：攔截 plist 名 detail 的連結行，自己手動推 PlistPage。
 // 根因（皇上 2026-11-14 19:29 報：系統設定裡點「三屏设置」進去什麼都
@@ -3390,6 +3443,81 @@ static NSString *GHLSSGestureActionName(const char *value) {
 
 @end
 
+@implementation GHLSSLinkListController
+
+// v72：LinkList 子清單——從點按那行（self.specifier）的 values／titles 現場建單選行。
+// 每個選項一行 PSListItemCell（單選圓點行），values 只有那一個值；
+// 當前值由繼承的 readPreferenceValue 讀（沒存過回 plist 的 default），框架照它打勾。
+- (NSArray *)specifiers {
+    if (!_specifiers) {
+        PSSpecifier *parent = self.specifier;
+        NSArray *values = parent ? parent.properties[GHLSSRuntimeString("values")] : nil;
+        NSArray *titles = parent ? parent.properties[GHLSSRuntimeString("titles")] : nil;
+        NSString *key = parent ? parent.properties[GHLSSRuntimeString("key")] : nil;
+        NSString *defaults = parent ? parent.properties[GHLSSRuntimeString("defaults")] : nil;
+        id def = parent ? parent.properties[GHLSSRuntimeString("default")] : nil;
+        NSMutableArray *specs = [NSMutableArray array];
+        if (values && [values count] > 0 && key) {
+            for (NSUInteger i = 0; i < [values count]; i++) {
+                id value = [values objectAtIndex:i];
+                NSString *title = nil;
+                if (titles && i < [titles count]) title = [titles objectAtIndex:i];
+                if (!title) title = [value description];
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:title target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSListItemCell edit:nil];
+                [spec setProperty:[NSArray arrayWithObject:value] forKey:GHLSSRuntimeString("values")];
+                [spec setProperty:key forKey:GHLSSRuntimeString("key")];
+                if (defaults) [spec setProperty:defaults forKey:GHLSSRuntimeString("defaults")];
+                if (def) [spec setProperty:def forKey:GHLSSRuntimeString("default")];
+                [specs addObject:spec];
+            }
+            const char *keyC = [key UTF8String];
+            char buf[256];
+            snprintf(buf, sizeof(buf), "v72 prefs-linklist %s options %lu", keyC ? keyC : "?", (unsigned long)[values count]);
+            GHLSSPrefsLogLine(buf);
+        } else {
+            // values 讀不到——不推空白頁，顯示一行說明（下次日誌能看到）。
+            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
+            [group setProperty:GHLSSRuntimeString("選項讀不到，先回上一頁再試。") forKey:GHLSSRuntimeString("footerText")];
+            [specs addObject:group];
+            GHLSSPrefsLogLine("v72 prefs-linklist no values at build");
+        }
+        _specifiers = specs;
+    }
+    return _specifiers;
+}
+
+// v72：子頁每次出現都清快取重組（跟 PlistPage 同做法——只讀快取頁回來看見的
+// 必須是新值，選中的勾才跟得上）。
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    @try {
+        _specifiers = nil;
+        [self reloadSpecifiers];
+    } @catch (NSException *e) {
+        const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v72 prefs-linklist viewWillAppear EXCEPTION %s", reason);
+        GHLSSPrefsLogLine(buf);
+    }
+}
+
+// v72：LinkList 選項寫值記一行（框架原生的 PSListItemsController 寫值走它
+// 自己的控制器，繞過我們有記日誌的 setPreferenceValue——這就是 24.log 裡
+// exitAnimation／launcherStyle／keyboardPopupMode 一行 prefs-set 都沒有的原因）。
+// 這裡先記 v72 prefs-linklist，再調繼承的 setPreferenceValue 真正寫入
+//（CFPreferencesSetAppValue＋AppSynchronize，跟開關／滑桿同一條路）。
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSString *key = specifier.properties[GHLSSRuntimeString("key")];
+    const char *keyC = key ? [key UTF8String] : "?";
+    const char *valC = value ? [[value description] UTF8String] : "?";
+    char buf[256];
+    snprintf(buf, sizeof(buf), "v72 prefs-linklist %s = %s", keyC, valC);
+    GHLSSPrefsLogLine(buf);
+    [super setPreferenceValue:value specifier:specifier];
+}
+
+@end
+
 // v50：狀態頁——版本、插件開關狀態（開關值，不是即時載入狀態）、日誌最後
 // 5 行、查看完整日誌、複製診斷信息、聯繫與源（QQ／QQ群／越獄源）。
 // 繼承主頁控制器，所以按鈕派發（冒號 SEL）與提示框都是現成的。
@@ -3466,7 +3594,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("開") : GHLSSRuntimeString("關");
-    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.71\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顧海龍集團分屏 v1.0.72\n插件開關：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日誌：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已複製") message:GHLSSRuntimeString("診斷信息已複製到剪貼板。")];

@@ -220,36 +220,6 @@
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>island</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>exitAnimation</string>
-			<key>label</key>
-			<string>浮窗退出動畫</string>
-			<key>validTitles</key>
-			<array>
-				<string>灵动岛（默认）</string>
-				<string>缩小淡出</string>
-				<string>向右滑散</string>
-				<string>下沉淡出</string>
-				<string>方块拼散</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>island</string>
-				<string>shrink</string>
-				<string>slide</string>
-				<string>sink</string>
-				<string>shatter</string>
-			</array>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
 			<real>50.0</real>
