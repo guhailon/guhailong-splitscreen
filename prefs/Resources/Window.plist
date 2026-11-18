@@ -170,7 +170,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>35.0</real>
+			<real>30.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -188,7 +188,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗圆角大小，自行调节，美观与否取决自己眼光。</string>
+			<string>浮窗圆角大小，自行调节，美观与否取决自己眼光（预设 30）。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -196,7 +196,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>100.0</real>
+			<real>55.0</real>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -214,7 +214,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗大小，100 是现在的 346×749；调小就等比缩小（宽高一起缩，宽高比锁住，不会出黑边）。计算器保持自己的 320×693。</string>
+			<string>浮窗大小，100 是现在的 346×749；调小就等比缩小（宽高一起缩，宽高比锁住，不会出黑边）。计算器保持自己的 320×693。预设 55%。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -241,6 +241,102 @@
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>浮窗与刘海方向安全距离，如果在这个安全距离内，浮窗会自动回弹。拖窗时窗顶离刘海（屏幕顶缘）不到这个值就自动回弹（夹住位置，让窗顶至少离顶缘这个距离）。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>边缘滑动叫出启动器的触发区：上方高度是触发区距屏幕顶部的距离，下方高度是距底部的距离；从触发区外面（太靠近顶缘或底缘）起手，滑不动启动器。预设上 20、下 40。</string>
+			<key>label</key>
+			<string>边缘触发高度</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>20.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>topTriggerHeight</string>
+			<key>label</key>
+			<string>上方触发高度</string>
+			<key>max</key>
+			<real>100.0</real>
+			<key>min</key>
+			<real>0.0</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>40.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>bottomTriggerHeight</string>
+			<key>label</key>
+			<string>下方触发高度</string>
+			<key>max</key>
+			<real>100.0</real>
+			<key>min</key>
+			<real>0.0</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>浮窗往上快速一甩就收成贴边小卡，速度要超过阈值才认（0–100，预设 40）；浮窗数量上限是同时活著的浮窗最多几个，超了最久没动的自动收成小卡（预设 8）。</string>
+			<key>label</key>
+			<string>上甩与上限</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>40.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>flickUpThreshold</string>
+			<key>label</key>
+			<string>上甩速度阈值</string>
+			<key>max</key>
+			<real>100.0</real>
+			<key>min</key>
+			<real>0.0</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>8.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>windowCap</string>
+			<key>label</key>
+			<string>浮窗数量上限</string>
+			<key>max</key>
+			<real>12.0</real>
+			<key>min</key>
+			<real>1.0</real>
+			<key>showValue</key>
+			<true/>
 		</dict>
 		<dict>
 			<key>cell</key>

@@ -1230,6 +1230,7 @@ static GHLSSLauncher *GHLSSLauncherShared = nil;
 static BOOL GHLSSLauncherVisible = NO;
 // 上一次边缘滑动的时间（CFAbsoluteTime），用来做"滑两次才开"。
 static double GHLSSLastSwipeTime = 0;
+static CGFloat GHLSSLastSwipeStartY = -1; // v43.3：这次边缘滑动起手的 Y（屏幕坐标，触发区判定用；没起手过是 -1）。
 
 // 5.2 托管悬浮窗的状态（一个窗，见 V5_DESIGN.md §5.2）。
 static UIWindow *GHLSSHostedWindow = nil;
@@ -1367,6 +1368,7 @@ static UIWindow *GHLSSDimOverlayWindow; // v40：点窗外事件的阴影背景�
 static BOOL GHLSSDragDockLeft = NO; // v40：这次拖动贴边收起往哪边（Began 时读一次位置设定，拖动中不变——每动一下都读 prefs 太费）。
 static CGFloat GHLSSDragSafeDistance = 50.0; // v40：这次拖动的安全距离（Began 时读一次，同上）。
 static BOOL GHLSSDragDisabled = NO; // v41：這次拖動被調度設定關掉了（Began 時讀一次浮窗拖動手勢開關）。
+static CGFloat GHLSSDragFlickUpThreshold = 1000.0; // v43.3：这次拖动的上甩速度门槛 pt/s（Began 时读一次，同上）。
 static BOOL GHLSSDoraemonLongPressed = NO; // v40：哆啦A夢鈕刚被长按过（长按关全部窗；点按处理里看到它就 suppress 启动器、清掉；拖动钮时也清掉——长按后拖出按钮外、TouchUpInside 不触发时的兜底）。
 static UIView *GHLSSCacheContainers[GHLSS_APP_COUNT];
 static UIView *GHLSSCacheContentViews[GHLSS_APP_COUNT];
@@ -1425,6 +1427,8 @@ static void GHLSSHangWindowForIndex(int idx);
 static void GHLSSRestoreHungWindowForIndex(int idx);
 static void GHLSSClearHungStateForIndex(int idx);
 static BOOL GHLSSListContainsBid(NSArray *ids, const char *bundleID);
+// v43.3：先声明（下面定义；GHLSSBringWindowToFront 要调，先声明）。
+static void GHLSEnforceWindowCap(UIWindow *window);
 // v53：先声明（下面定义；GHLSSPresetSizeForBundleID 与
 // GHLSSRefreshDoraemonButtonImageIfNeeded 要用，先声明）。
 static int GHLSSReadWindowSizePreset(void);
@@ -1613,7 +1617,7 @@ GHLSSLogLine("v57 scene destroyed");
 // 改成 346×749，寬高佔屏都是 0.836，內容正好填滿）。
 #define GHLSS_FIXED_WINDOW_W 346.0
 #define GHLSS_FIXED_WINDOW_H 749.0
-// v41：圓角改走設定（cornerRadius，預設 35；上面三處已改讀設定）。
+// v41：圓角改走設定（cornerRadius，預設 30，v43.3 照 S2 值改；上面三處已改讀設定）。
 
 // v40：多窗层级（锁屏 2000 之下）：宿主窗基础 Alert - 2（1998）、
 // 带到最前 Alert - 1.75（1998.25）、贴边小卡 Alert - 1.5（1998.5）、
@@ -2012,7 +2016,7 @@ static BOOL GHLSSReadShadowEnabled(void) {
 return GHLSSReadPrefsBool("shadowEnabled", YES);
 }
 static CGFloat GHLSSReadCornerRadius(void) {
-double v = GHLSSReadPrefsDouble("cornerRadius", 35.0);
+double v = GHLSSReadPrefsDouble("cornerRadius", 30.0);
 if (v < 0) v = 0;
 if (v > 50) v = 50;
 return (CGFloat)v;
@@ -2308,12 +2312,47 @@ BOOL r = (strcmp(v, "radial") == 0);
 free(v);
 return r;
 }
-// v70：浮窗大小百分比（windowSizePercent 50–100，預設 100；夾住）。
+// v70：浮窗大小百分比（windowSizePercent 50–100，預設 55，v43.3 照 S2 值改；夾住）。
 static CGFloat GHLSSReadWindowSizePercent(void) {
-double v = GHLSSReadPrefsDouble("windowSizePercent", 100.0);
+double v = GHLSSReadPrefsDouble("windowSizePercent", 55.0);
 if (v < 50.0) v = 50.0;
 if (v > 100.0) v = 100.0;
 return (CGFloat)v;
+}
+// v43.3：上方触发高度（topTriggerHeight，0–100，预设 20）：边缘滑动
+// 触发区距屏幕顶部的距离；从比这更靠近顶缘的地方起手，边缘滑动
+// 不开启动器（跟状态栏手势让路）。
+static CGFloat GHLSSReadTopTriggerHeight(void) {
+double v = GHLSSReadPrefsDouble("topTriggerHeight", 20.0);
+if (v < 0) v = 0;
+if (v > 100) v = 100;
+return (CGFloat)v;
+}
+// v43.3：下方触发高度（bottomTriggerHeight，0–100，预设 40）：
+// 触发区距屏幕底部的距离；从比这更靠近底缘的地方起手不开启动器
+//（跟 Home 条手势让路）。
+static CGFloat GHLSSReadBottomTriggerHeight(void) {
+double v = GHLSSReadPrefsDouble("bottomTriggerHeight", 40.0);
+if (v < 0) v = 0;
+if (v > 100) v = 100;
+return (CGFloat)v;
+}
+// v43.3：上甩速度阈值（flickUpThreshold，0–100 S2 刻度，预设 40）：
+// 浮窗往上甩的速度门槛，换算成 pt/s 是设定值 ×25（40 → 1000 pt/s，
+// 一次干脆利落的上甩）；行为在 handleTitleDrag。
+static CGFloat GHLSSReadFlickUpVelocityThreshold(void) {
+double v = GHLSSReadPrefsDouble("flickUpThreshold", 40.0);
+if (v < 0) v = 0;
+if (v > 100) v = 100;
+return (CGFloat)(v * 25.0);
+}
+// v43.3：浮窗数量上限（windowCap，1–12，预设 8）：同时活著的浮窗
+// 最多几个；超了最久没动的自动收成小卡（GHLSEnforceWindowCap）。
+static int GHLSSReadWindowCap(void) {
+double v = GHLSSReadPrefsDouble("windowCap", 8.0);
+if (v < 1) v = 1;
+if (v > 12) v = 12;
+return (int)lround(v);
 }
 static BOOL GHLSSReadARCShowOpenDots(void) {
 return GHLSSReadPrefsBool("arcShowOpenDots", YES);
@@ -3156,6 +3195,8 @@ GHLSSRestoreHungWindowForIndex(fidx);
 GHLSSMarkWindowFront(GHLSSAppIndexForWindow(window));
 // v42.3：一次一個大窗——其他大窗自動縮成 peek（見上面）。
 GHLSSAutoPeekOtherWindows(window);
+// v43.3：上限——活窗数超了就把最久没动的收成小卡。
+GHLSEnforceWindowCap(window);
 GHLSSLogLine("v57 window brought to front");
 }
 
@@ -3164,6 +3205,38 @@ static BOOL GHLSSIsSplitPartnerIndex(int idx) {
 if (!GHLSSSplitActive) return NO;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return NO;
 return (idx == GHLSSSplitLeftIdx || idx == GHLSSSplitRightIdx);
+}
+
+// v43.3：浮窗数量上限——同时活著的浮窗超过上限时，最久没动的那扇
+// 自动收成小卡（跟自动收起同一条路：先存位置再 showDockPeek）。
+// 跳过：刚带到最前的窗、钉选的窗、分屏搭档、贴边侧窗。
+// 单窗模式下自动收起本来就只留一扇，上限只在钉选／侧窗／分屏
+// 把活窗数顶上去时才咬得住；全是钉选／搭档就谁也不收，只停下。
+static void GHLSEnforceWindowCap(UIWindow *window) {
+int cap = GHLSSReadWindowCap();
+int exceptIdx = GHLSSAppIndexForWindow(window);
+while (GHLSSVisibleHostedWindowCount() > cap) {
+int victim = -1;
+for (int k = GHLSS_APP_COUNT - 1; k >= 0; k--) {
+int i = GHLSSFrontOrder[k];
+if (i == exceptIdx) continue;
+if (i < 0 || i >= GHLSS_APP_COUNT) continue;
+UIWindow *w = GHLSSCacheWindows[i];
+if (!w || w.hidden || GHLSSCacheMinimized[i]) continue;
+if (GHLSSCacheBundleIDs[i][0] == '\0') continue;
+if (GHLSSCacheIsSideDock[i]) continue;
+if (GHLSSIsSplitPartnerIndex(i)) continue;
+if (GHLSSIsWindowPinned(GHLSSCacheBundleIDs[i])) continue;
+victim = i;
+break;
+}
+if (victim < 0) break;
+GHLSSSaveGeometryForIndex(victim);
+GHLSSShowDockPeekForIndex(victim);
+char buf[128];
+snprintf(buf, sizeof(buf), "v43.3 window cap peeked %s", GHLSSCacheBundleIDs[victim]);
+GHLSSLogLine(buf);
+}
 }
 
 // v43：分屏几何——竖屏左右并排：两半等宽开局（中间留分隔线厚度），
@@ -4599,7 +4672,33 @@ return YES;
 // （edgeSwipeCount=1）或 2 秒內滑兩次才開（=2，預設，防誤觸）；
 // 第一次只記日誌。滑哪邊跟調度設定走（沒設就跟小窗顯示位置）。
 - (void)handleEdgeSwipe:(UIScreenEdgePanGestureRecognizer *)recognizer {
+// v43.3：记下起手 Y——触发区判定用起手位置，不是松手位置。
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+CGPoint p = [recognizer locationInView:nil];
+GHLSSLastSwipeStartY = p.y;
+return;
+}
+if (recognizer.state == UIGestureRecognizerStateCancelled || recognizer.state == UIGestureRecognizerStateFailed) {
+GHLSSLastSwipeStartY = -1;
+return;
+}
 if (recognizer.state != UIGestureRecognizerStateEnded) return;
+// v43.3：触发区——起手 Y 必须落在 [上方触发高度, 屏高 − 下方触发高度] 内，
+// 不然这次滑动不开启动器，也不计入 1x/2x 计数。感应带窗本身保持全高
+//（拖动手势拿它当固定参考坐标，改 frame 会量错手指位置），只在
+// 这里按起手 Y 拦。起手 Y 没记到就退回松手 Y。
+CGFloat swipeStartY = GHLSSLastSwipeStartY;
+GHLSSLastSwipeStartY = -1;
+if (swipeStartY < 0) swipeStartY = [recognizer locationInView:nil].y;
+CGFloat trigTop = GHLSSReadTopTriggerHeight();
+CGFloat trigBottom = GHLSSReadBottomTriggerHeight();
+CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
+if (swipeStartY < trigTop || swipeStartY > screenH - trigBottom) {
+char dbuf[128];
+snprintf(dbuf, sizeof(dbuf), "v43.3 edge swipe outside trigger zone y=%.0f top=%.0f bottom=%.0f", swipeStartY, trigTop, trigBottom);
+GHLSSLogLine(dbuf);
+return;
+}
 // v53：分屏關著時邊緣滑動不觸發（開關關了就真的停用）。
 if (!GHLSSReadEnabled()) return;
 // v55：記下手指在邊緣的 Y——ARC 弧心錨在這裡（開三屏時用不到，
@@ -7182,6 +7281,7 @@ return;
 }
 GHLSSDragDockLeft = GHLSSIsWindowPositionLeft();
 GHLSSDragSafeDistance = GHLSSReadSafeDistance();
+GHLSSDragFlickUpThreshold = GHLSSReadFlickUpVelocityThreshold();
 GHLSSLogLine("v57 window dragged");
 }
 if (GHLSSDragDisabled) return;
@@ -7219,8 +7319,12 @@ if (recognizer.state == UIGestureRecognizerStateEnded) {
 // 放手：窗中心进了贴边那侧的缘 60pt 内——贴边收起（主关掉路徑，
 // 像影片一樣）。右側：中心进右缘 60pt 内；左側：中心进左缘 60pt 内。
 BOOL shouldDock = dockLeft ? (newX <= GHLSS_DOCK_DRAG_THRESHOLD) : (screenBounds.size.width - newX <= GHLSS_DOCK_DRAG_THRESHOLD);
-if (shouldDock) {
-GHLSSLogLine("v57 window docked by drag");
+// v43.3：往上快速一甩也收起——速度超过阈值（设定值 ×25 pt/s，
+// 预设 40 → 1000），跟拖到贴边同一条路（含退出动画）。
+CGPoint flickVel = [recognizer velocityInView:fixedRefView];
+BOOL flickUpDock = (flickVel.y <= -GHLSSDragFlickUpThreshold);
+if (shouldDock || flickUpDock) {
+GHLSSLogLine(flickUpDock ? "v43.3 window flicked up, docking" : "v57 window docked by drag");
 // v72：拖去收小卡也按退出動畫播一次（0 island＝現有行為不動，
 // 直接收；1–4 先播動畫再收，播完還原幾何才走 minimize；遊戲模式
 // 開著時新方法裡面自己用 0.01 秒）。讀值記一行，證明設定有沒有到。
