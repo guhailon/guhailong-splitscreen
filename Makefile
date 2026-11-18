@@ -9,10 +9,14 @@ INSTALL_TARGET_PROCESSES = SpringBoard
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = GuHaiLongSplitScreen
+TWEAK_NAME = GuHaiLongSplitScreen GHLSSKeyboardHelper
 
 GuHaiLongSplitScreen_FILES = Tweak.xm
 GuHaiLongSplitScreen_CFLAGS = -fobjc-arc
+# v43.5（1.0.80）：第二個 dylib——鍵盤助手，塞進 App 進程（Classes
+# UIApplication，見 GHLSSKeyboardHelper.plist；%ctor 裡再排掉
+# SpringBoard／抖音兩個包名／設定 App）。只橋接鍵盤通知＋移鍵盤窗，
+# 不進 SpringBoard。兩個 dylib 共用同一個 .deb。
 # v24（5.2）建 scene 要用的私有框架：FBProcessManager / FBSceneManager /
 # FBApplicationProcessLaunchTransaction 在 FrontBoard；FBSMutableSceneDefinition /
 # FBSMutableSceneParameters / FBSSceneIdentity / FBSSceneClientIdentity /
@@ -22,6 +26,10 @@ GuHaiLongSplitScreen_CFLAGS = -fobjc-arc
 #（不走 NSClassFromString 的 PrivClass：本工程 -Werror，找不到方法的
 # 警告会直接变成编译错误）。
 GuHaiLongSplitScreen_PRIVATE_FRAMEWORKS = FrontBoard FrontBoardServices RunningBoardServices BaseBoard
+
+GHLSSKeyboardHelper_FILES = KeyboardHelper.xm
+GHLSSKeyboardHelper_CFLAGS = -fobjc-arc
+GHLSSKeyboardHelper_FRAMEWORKS = UIKit Foundation CoreGraphics
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 

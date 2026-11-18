@@ -10,9 +10,149 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>键盘弹出时浮窗自动上移：收到键盘通知就按键盘高度把浮窗上移，键盘收起回原位。探针：键盘通知由被托管 App 行程发，可能到不了 SpringBoard，收不到就不动，需真机验证。</string>
+			<string>1.0.80 起：键盘弹出／收起由 App 行程内的键盘助手桥接给 SpringBoard，下面各行才真正生效。真外置键盘是实验功能，默认关。</string>
 			<key>label</key>
 			<string>浮窗键盘设置</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>keyboardExternalEnabled</string>
+			<key>label</key>
+			<string>真外置键盘（实验）</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>开：浮窗 App 打字时，键盘移到屏幕底部浮窗外面（全宽）。关：键盘留在浮窗内。实验功能，未真机验证；打字异常立刻关掉，下次弹键盘就恢复，不用 respring。只对外弹出模式生效。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>竖屏键盘弹出方式</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>inner</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>keyboardPopupModePortrait</string>
+			<key>label</key>
+			<string>竖屏键盘弹出方式</string>
+			<key>validTitles</key>
+			<array>
+				<string>浮窗内弹出</string>
+				<string>浮窗外弹出</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>inner</string>
+				<string>outer</string>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>横屏键盘弹出方式</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>outer</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>keyboardPopupModeLandscape</string>
+			<key>label</key>
+			<string>横屏键盘弹出方式</string>
+			<key>validTitles</key>
+			<array>
+				<string>浮窗内弹出</string>
+				<string>浮窗外弹出</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>inner</string>
+				<string>outer</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>landscapeEnlargeOnKeyboard</string>
+			<key>label</key>
+			<string>横屏键盘弹出时放大浮窗</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>仅横屏生效；键盘弹出时浮窗放大到键盘上方空位，收起恢复原尺寸。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>closeWindowOnExternalKeyboardHide</string>
+			<key>label</key>
+			<string>外置键盘收起时同时关闭浮窗</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>只在外弹出模式下生效；键盘收起时活动浮窗一起关掉。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>landscapeMoveExternalKeyboard</string>
+			<key>label</key>
+			<string>横屏时可拖动外置键盘</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>仅横屏且是外置键盘时生效；要开真外置键盘开关。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -32,59 +172,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>探针：键盘通知由 App 行程发，可能到不了 SpringBoard；收到了窗才上移、收起回原位，收不到就不动。</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>内弹出＝键盘出现在浮窗内、浮窗为它上移；外弹出＝键盘出现在浮窗外、浮窗不动。两种都走键盘通知监听，通知到不了 SpringBoard 就不动（探针）。</string>
-			<key>label</key>
-			<string>浮窗键盘弹出方式</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>inner</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>keyboardPopupMode</string>
-			<key>label</key>
-			<string>浮窗键盘弹出方式</string>
-			<key>validTitles</key>
-			<array>
-				<string>浮窗内弹出</string>
-				<string>外弹出</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>inner</string>
-				<string>outer</string>
-			</array>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>closeWindowOnExternalKeyboardHide</string>
-			<key>label</key>
-			<string>外置键盘收起同时关闭浮窗</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>只在外弹出模式下生效；键盘收起时活动浮窗一起关掉。横屏＋外弹出时，外置键盘可以拖动移位置（探针：SpringBoard 侧能不能动到键盘视窗未证实）。</string>
+			<string>内弹出模式下生效：浮窗底被键盘挡住才上移，收起回原位。</string>
 		</dict>
 	</array>
 	<key>title</key>

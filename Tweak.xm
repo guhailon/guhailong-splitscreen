@@ -1,3 +1,11 @@
+// v43.5 (1.0.80)：鍵盤設置（皇上 2026-11-17 21:28–21:32 打√：6 鍵盤設置，最後一項）。
+// (a) 設定頁對齊別人那頁：豎屏／橫屏分開內／外彈出、橫屏鍵盤彈起放大浮窗、
+// 橫屏時拖動外置鍵盤（震動那項別人自己說半成品，不做）。舊 keyboardPopupMode
+// 單鍵只當遷移 fallback。(b) 新 dylib GHLSSKeyboardHelper 塞進 App 進程：
+// 橋接鍵盤通知給 SpringBoard（Darwin 通知＋kbNotifyInfo），內彈上移／外彈
+// 關窗／橫屏放大才真正生效；kill switch 開著＋外彈出＋已託管時才移鍵盤窗
+// 到屏幕底部全寬（實驗，預設關）。SpringBoard 側橫屏拖鍵盤探針已刪
+// （鍵盤窗不在 SpringBoard 進程裡，永遠找不到；拖動改由助手做）。
 // v43.2 (1.0.77)：環形啟動器重做（皇上 2026-11-17 21:28–21:32 打√：4 環形啟動器）。
 // v43 (1.0.76)：真分屏多活窗第一步（皇上 2026-11-17 21:28–21:32 打√：1 多活窗先做）。
 // v42.33 (1.0.75)：繁体文案转简体中文（设定页／浮窗／提示全部简体）；含 1.0.74 的转圈修复。
@@ -1212,8 +1220,10 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)handleSplitDividerDrag:(UIPanGestureRecognizer *)recognizer;
 - (void)handleKeyboardWillShow:(NSNotification *)note;
 - (void)handleKeyboardWillHide:(NSNotification *)note;
-- (void)ghlssMaybeAttachKeyboardDrag:(NSNotification *)note;
-- (void)handleKeyboardDrag:(UIPanGestureRecognizer *)recognizer;
+- (void)ghlssHandleKeyboardShowHeight:(CGFloat)kbHeight bundleID:(const char *)bid;
+- (void)ghlssHandleKeyboardHideBundleID:(const char *)bid;
+- (void)ghlssEnlargeWindowForKeyboardHeight:(CGFloat)kbHeight;
+- (void)ghlssRestoreEnlargedWindowForKeyboard;
 @end
 
 // 窗与状态要一直留着（静态变量拿着，不会被释放）。
@@ -1394,7 +1404,8 @@ static BOOL GHLSSScreenLocked = NO; // v64：鎖屏旗標（看門狗用：鎖�
 static BOOL GHLSSTaskbarSnapshotLogged = NO; // v54：任務欄快照成功只記一行（見 GHLSSUpdateTaskbar）。
 static BOOL GHLSSKeyboardShifted = NO;
 static CGRect GHLSSKeyboardSavedFrame = {{0, 0}, {0, 0}};
-static UIWindow *GHLSSKeyboardDragTarget = nil; // v54：橫屏拖外置鍵盤掛著的那扇鍵盤窗（探針；找到才掛手勢）。
+static BOOL GHLSSKeyboardEnlarged = NO; // v43.5：橫屏放大中（鍵盤彈出時放大、收起恢復原尺寸）。
+static CGRect GHLSSKeyboardEnlargedSavedFrame = {{0, 0}, {0, 0}}; // v43.5：放大前原尺寸。
 // v42：上次的三屏組合用——上一個開著的窗的 bundleID（開側窗時存上次的組合用）。
 static char GHLSSPairPrevBid[128] = {0};
 // v42：側窗分隔線當次厚度（建窗時讀設定記下，拖動時用同一份）。
@@ -2174,17 +2185,25 @@ return GHLSSReadPrefsBool("enabled", NO);
 static BOOL GHLSSReadKeyboardAvoidEnabled(void) {
 return GHLSSReadPrefsBool("keyboardAvoidEnabled", YES);
 }
-// v54：浮窗鍵盤彈出方式（keyboardPopupMode，Keyboard.plist）：0＝浮窗內彈出
-//（鍵盤出現在浮窗內／浮窗為鍵盤上移，現有做法，預設）；1＝外彈出
-//（鍵盤出現在浮窗外、浮窗不為它上移）。字串讀法（跟 windowSizePreset 同款）。
-static int GHLSSReadKeyboardPopupMode(void) {
-char *mode = GHLSSReadPrefsCString("keyboardPopupMode");
-int m = 0;
+// v43.5：浮窗鍵盤彈出方式分豎屏／橫屏（Keyboard.plist 新鍵
+// keyboardPopupModePortrait／keyboardPopupModeLandscape；舊鍵
+// keyboardPopupMode 只當遷移 fallback：新鍵沒存過就讀舊鍵，舊鍵
+// 也沒有就豎屏內彈出／橫屏外彈出（S2 鍵盤模式是外置）。0＝浮窗內彈出
+//（鍵盤出現在浮窗內／浮窗為鍵盤上移）；1＝外彈出（鍵盤出現在浮窗外、
+// 浮窗不為它上移；真出浮窗外要開真外置鍵盤實驗開關，見鍵盤助手）。
+static int GHLSSReadKeyboardPopupModeForOrientation(BOOL landscape) {
+char *mode = GHLSSReadPrefsCString(landscape ? "keyboardPopupModeLandscape" : "keyboardPopupModePortrait");
+if (!mode) mode = GHLSSReadPrefsCString("keyboardPopupMode");
+int m = landscape ? 1 : 0;
 if (mode) {
 m = (strcmp(mode, "outer") == 0) ? 1 : 0;
 free(mode);
 }
 return m;
+}
+// v43.5：橫屏鍵盤彈起放大浮窗（landscapeEnlargeOnKeyboard，預設開，照 S2）。
+static BOOL GHLSSReadLandscapeEnlargeOnKeyboard(void) {
+return GHLSSReadPrefsBool("landscapeEnlargeOnKeyboard", YES);
 }
 // v54：外置鍵盤收起同時關閉浮窗（closeWindowOnExternalKeyboardHide，
 // 預設開）：只在外彈出模式下生效；內彈出收起時照舊只回原位。
@@ -2312,9 +2331,10 @@ BOOL r = (strcmp(v, "radial") == 0);
 free(v);
 return r;
 }
-// v70：浮窗大小百分比（windowSizePercent 50–100，預設 55，v43.3 照 S2 值改；夾住）。
+// v70：浮窗大小百分比（windowSizePercent 50–100，預設 100（1.0.80 改回：
+// 55 太小，Lee 要上一版的尺寸；v43.3 曾照 S2 值改成 55）；夾住）。
 static CGFloat GHLSSReadWindowSizePercent(void) {
-double v = GHLSSReadPrefsDouble("windowSizePercent", 55.0);
+double v = GHLSSReadPrefsDouble("windowSizePercent", 100.0);
 if (v < 50.0) v = 50.0;
 if (v > 100.0) v = 100.0;
 return (CGFloat)v;
@@ -7930,84 +7950,34 @@ if (!GHLSSHostedSceneSizeMatchesWindow()) [self armSizeGateForResize];
 }
 }
 
-// v54：橫屏＋外彈出時，試著給外置鍵盤加拖動（探針）：鍵盤窗是不是在
-// SpringBoard 進程裡未證實——找得到（類名含 Keyboard 的窗）就掛一個
-// 拖動手勢、記一行；找不到就記一行「沒找到」，不硬上。
-- (void)ghlssMaybeAttachKeyboardDrag:(NSNotification *)note {
-(void)note;
-CGRect screenBounds = [UIScreen mainScreen].bounds;
-if (screenBounds.size.width <= screenBounds.size.height) return;
-UIApplication *app = [UIApplication sharedApplication];
-if (!app) return;
-UIWindow *kbWindow = nil;
-for (id sc in [app connectedScenes]) {
-if (![sc isKindOfClass:[UIWindowScene class]]) continue;
-for (UIWindow *w in [(UIWindowScene *)sc windows]) {
-const char *cls = class_getName([w class]);
-if (cls && strstr(cls, "Keyboard")) { kbWindow = w; break; }
-}
-if (kbWindow) break;
-}
-if (!kbWindow) {
-GHLSSLogLine("v57 keyboard drag no keyboard window (probe)");
-return;
-}
-if (kbWindow == GHLSSKeyboardDragTarget) return;
-GHLSSKeyboardDragTarget = kbWindow;
-UIPanGestureRecognizer *drag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleKeyboardDrag:)];
-drag.delegate = self;
-[kbWindow addGestureRecognizer:drag];
-GHLSSLogLine("v57 keyboard drag attached (probe)");
-}
-
-// v54：拖外置鍵盤（探針）：跟手指移鍵盤窗，夾在屏幕內；系統隨時可能
-// 把鍵盤窗移回去——移不動／移回去都是探針結果，看日誌。
-- (void)handleKeyboardDrag:(UIPanGestureRecognizer *)recognizer {
-UIWindow *kbWindow = (UIWindow *)recognizer.view;
-if (!kbWindow) return;
-// v68：同款跟手修法——nil 就是觸摸所在的窗（正在被拖的鍵盤窗），
-// 改拿固定邊條窗當參考；探針，順手一起換。
-UIView *fixedRefView = GHLSSStripWindow ? (UIView *)GHLSSStripWindow : nil;
-CGPoint t = [recognizer translationInView:fixedRefView];
-[recognizer setTranslation:CGPointZero inView:fixedRefView];
-CGRect f = kbWindow.frame;
-CGRect screenBounds = [UIScreen mainScreen].bounds;
-CGFloat nx = f.origin.x + t.x;
-CGFloat ny = f.origin.y + t.y;
-if (nx < 0) nx = 0;
-if (nx > screenBounds.size.width - f.size.width) nx = screenBounds.size.width - f.size.width;
-if (ny < 0) ny = 0;
-if (ny > screenBounds.size.height - f.size.height) ny = screenBounds.size.height - f.size.height;
-kbWindow.frame = CGRectMake(nx, ny, f.size.width, f.size.height);
-if (recognizer.state == UIGestureRecognizerStateEnded) {
-char buf[128];
-snprintf(buf, sizeof(buf), "v57 keyboard dragged to %d,%d (probe)", (int)nx, (int)ny);
-GHLSSLogLine(buf);
-}
-}
-
 // v42：鍵盤彈出時浮窗自動上移（探針：鍵盤通知是 App 進程發的，
 // SpringBoard 這邊可能收不到——收到了才上移，收不到就不動，見 §115）。
 // 上移只動活動窗（鍵盤擋住它的底才移，移多少看鍵盤高度），收起回原位。
 // v54：彈出方式分內／外（keyboardPopupMode）：內彈出走老路上移；外彈出
 // 浮窗不動（鍵盤在浮窗外），橫屏時試著給鍵盤加拖動（見上）；
 // 收起時外彈出模式＋開關開著就關窗（見 handleKeyboardWillHide）。
-- (void)handleKeyboardWillShow:(NSNotification *)note {
-if (!GHLSSReadKeyboardAvoidEnabled()) return;
-int mode = GHLSSReadKeyboardPopupMode();
-if (mode == 1) {
-GHLSSLogLine("v57 keyboard show outer mode no shift");
-[self ghlssMaybeAttachKeyboardDrag:note];
-return;
-}
-if (!GHLSSHostedWindow || GHLSSHostedMinimized || GHLSSKeyboardShifted) return;
-NSDictionary *info = note.userInfo;
-NSValue *frameValue = info ? [info objectForKey:UIKeyboardFrameEndUserInfoKey] : nil;
-if (!frameValue) return;
-CGRect kbFrame = [frameValue CGRectValue];
-CGFloat kbHeight = kbFrame.size.height;
+// v43.5：鍵盤彈出／收起共用邏輯（舊 NSNotification 路徑＋Darwin 橋接共用）。
+// kbHeight：鍵盤高度（pt）；bid：發通知的 App 包名，NULL 表示不比對
+//（舊路徑沒有包名）。只對活動浮窗動作；橫屏放大不認「自動上移」開關，
+// 上移／關窗照舊認各自開關。
+- (void)ghlssHandleKeyboardShowHeight:(CGFloat)kbHeight bundleID:(const char *)bid {
+if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
+if (bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0) return;
 if (kbHeight <= 0) return;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
+BOOL landscape = screenBounds.size.width > screenBounds.size.height;
+int mode = GHLSSReadKeyboardPopupModeForOrientation(landscape);
+// 橫屏放大：先放大（放大後窗底已在鍵盤上方，不用再上移）；不認自動上移開關。
+if (landscape && GHLSSReadLandscapeEnlargeOnKeyboard()) {
+[self ghlssEnlargeWindowForKeyboardHeight:kbHeight];
+return;
+}
+if (!GHLSSReadKeyboardAvoidEnabled()) return;
+if (mode == 1) {
+GHLSSLogLine("v43.5 keyboard show outer mode no shift");
+return;
+}
+if (GHLSSKeyboardShifted) return;
 CGRect winFrame = GHLSSHostedWindow.frame;
 CGFloat winBottom = winFrame.origin.y + winFrame.size.height;
 CGFloat kbTop = screenBounds.size.height - kbHeight;
@@ -8020,25 +7990,76 @@ if (newY < minY) newY = minY;
 GHLSSHostedWindow.frame = CGRectMake(winFrame.origin.x, newY, winFrame.size.width, winFrame.size.height);
 GHLSSKeyboardShifted = YES;
 char buf[128];
-snprintf(buf, sizeof(buf), "v57 window shifted up for keyboard %dpt mode=inner", (int)shift);
+snprintf(buf, sizeof(buf), "v43.5 window shifted up for keyboard %dpt mode=inner", (int)shift);
 GHLSSLogLine(buf);
 }
-- (void)handleKeyboardWillHide:(NSNotification *)note {
-(void)note;
+// v43.5：橫屏鍵盤彈起放大浮窗——把活動窗放大到鍵盤上方空位，收起恢復原尺寸。
+// 用 resizeActiveWindowToFrame（走現成夾取＋scene 改尺寸＋尺寸門）；
+// 放大前原尺寸存靜態量，收起時同一條路縮回去，存的幾何也跟著回去。
+- (void)ghlssEnlargeWindowForKeyboardHeight:(CGFloat)kbHeight {
+if (GHLSSKeyboardEnlarged || !GHLSSHostedWindow || GHLSSHostedMinimized) return;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGRect winFrame = GHLSSHostedWindow.frame;
+CGFloat targetW = screenBounds.size.width - 32.0;
+CGFloat targetH = screenBounds.size.height - kbHeight - 60.0;
+if (targetW <= winFrame.size.width && targetH <= winFrame.size.height) return;
+CGFloat cx = screenBounds.size.width / 2.0;
+CGFloat cy = (screenBounds.size.height - kbHeight) / 2.0;
+GHLSSKeyboardEnlargedSavedFrame = winFrame;
+GHLSSKeyboardEnlarged = YES;
+[self resizeActiveWindowToFrame:CGRectMake(cx - targetW / 2.0, cy - targetH / 2.0, targetW, targetH)];
+char buf[128];
+snprintf(buf, sizeof(buf), "v43.5 window enlarged for keyboard %dx%d", (int)targetW, (int)targetH);
+GHLSSLogLine(buf);
+}
+- (void)ghlssRestoreEnlargedWindowForKeyboard {
+if (!GHLSSKeyboardEnlarged || !GHLSSHostedWindow) return;
+GHLSSKeyboardEnlarged = NO;
+[self resizeActiveWindowToFrame:GHLSSKeyboardEnlargedSavedFrame];
+GHLSSLogLine("v43.5 window restored after keyboard hide (enlarge)");
+}
+- (void)ghlssHandleKeyboardHideBundleID:(const char *)bid {
+if (!GHLSSHostedWindow) return;
+if (bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0) return;
+// 放大中先恢復尺寸（放大時 shift 沒跑，恢復尺寸就夠了，不關窗）。
+if (GHLSSKeyboardEnlarged) {
+[self ghlssRestoreEnlargedWindowForKeyboard];
+return;
+}
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+BOOL landscape = screenBounds.size.width > screenBounds.size.height;
+int mode = GHLSSReadKeyboardPopupModeForOrientation(landscape);
 // v54：外彈出模式——鍵盤收起時，開關開著（預設開）就把活動浮窗一起關掉
 //（走現有關窗路徑）；內彈出模式收起時照舊只回原位。跟「自動上移」
 // 開關無關（那個只管上移）；只認模式＋這個開關。
-if (GHLSSReadKeyboardPopupMode() == 1 && GHLSSReadCloseWindowOnExternalKeyboardHide()) {
-if (GHLSSHostedWindow && !GHLSSHostedMinimized) {
-GHLSSLogLine("v57 keyboard hide closing window (outer mode)");
+if (mode == 1 && GHLSSReadCloseWindowOnExternalKeyboardHide()) {
+if (!GHLSSHostedMinimized) {
+GHLSSLogLine("v43.5 keyboard hide closing window (outer mode)");
 [self closeHostedWindow];
 }
 return;
 }
-if (!GHLSSKeyboardShifted || !GHLSSHostedWindow) return;
+if (!GHLSSKeyboardShifted) return;
 GHLSSHostedWindow.frame = GHLSSKeyboardSavedFrame;
 GHLSSKeyboardShifted = NO;
-GHLSSLogLine("v57 window restored after keyboard hide");
+GHLSSLogLine("v43.5 window restored after keyboard hide");
+}
+// v42：鍵盤監聽舊路徑（NSNotificationCenter——鍵盤通知由 App 行程發，
+// SpringBoard 這邊可能收不到；收到了走上面共用邏輯。Darwin 橋接見下面
+// notify_register_dispatch，那條才是 1.0.80 的主路）。
+- (void)handleKeyboardWillShow:(NSNotification *)note {
+NSDictionary *info = note.userInfo;
+NSValue *frameValue = info ? [info objectForKey:UIKeyboardFrameEndUserInfoKey] : nil;
+CGFloat kbHeight = 0;
+if (frameValue) {
+CGRect kf = [frameValue CGRectValue];
+kbHeight = kf.size.height;
+}
+[self ghlssHandleKeyboardShowHeight:kbHeight bundleID:NULL];
+}
+- (void)handleKeyboardWillHide:(NSNotification *)note {
+(void)note;
+[self ghlssHandleKeyboardHideBundleID:NULL];
 }
 
 // v42：任意文字的通知橫幅（低電量收窗提示用；v72 起「已打開 <App>」
@@ -9602,6 +9623,44 @@ if (lockNotifyResult == 0) {
 GHLSSLogLine("v57 lockstate notify registered");
 } else {
 GHLSSLogLine("v57 lockstate notify register failed");
+}
+// v43.5：鍵盤橋接——App 行程的鍵盤助手（GHLSSKeyboardHelper）收到
+// 鍵盤彈出／收起就寫 kbNotifyInfo（"<包名>|<鍵盤高>"）再 notify_post
+// Darwin 通知；SpringBoard 側用 notify_register_dispatch 接（跟鎖屏
+// 同一寫法；不要用 CFNotificationCenterAddObserver，會凍住 SpringBoard）。
+// 收到就走上面共用邏輯（內彈出上移／外彈出關窗／橫屏放大）。
+int kbShowToken = 0;
+int kbShowResult = notify_register_dispatch("com.guhailong.splitscreen.keyboardWillShow", &kbShowToken, dispatch_get_main_queue(), ^(int token) {
+(void)token;
+char *info = GHLSSReadPrefsCString("kbNotifyInfo");
+if (!info) return;
+char bid[128] = {0};
+int height = 0;
+if (sscanf(info, "%127[^|]|%d", bid, &height) == 2) {
+[GHLSSLauncherShared ghlssHandleKeyboardShowHeight:(CGFloat)height bundleID:bid];
+}
+free(info);
+});
+if (kbShowResult == 0) {
+GHLSSLogLine("v43.5 keyboard show notify registered");
+} else {
+GHLSSLogLine("v43.5 keyboard show notify register failed");
+}
+int kbHideToken = 0;
+int kbHideResult = notify_register_dispatch("com.guhailong.splitscreen.keyboardDidHide", &kbHideToken, dispatch_get_main_queue(), ^(int token) {
+(void)token;
+char *info = GHLSSReadPrefsCString("kbNotifyInfo");
+if (!info) return;
+char bid[128] = {0};
+if (sscanf(info, "%127[^|]|%*d", bid) == 1) {
+[GHLSSLauncherShared ghlssHandleKeyboardHideBundleID:bid];
+}
+free(info);
+});
+if (kbHideResult == 0) {
+GHLSSLogLine("v43.5 keyboard hide notify registered");
+} else {
+GHLSSLogLine("v43.5 keyboard hide notify register failed");
 }
 // v42：鍵盤監聽（NSNotificationCenter，不是被禁的
 // CFNotificationCenterAddObserver；探針：鍵盤通知由 App 行程發，
