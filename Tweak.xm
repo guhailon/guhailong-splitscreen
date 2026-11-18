@@ -1,7 +1,16 @@
+// v43.2 (1.0.77)：環形啟動器重做（皇上 2026-11-17 21:28–21:32 打√：4 環形啟動器）。
 // v43 (1.0.76)：真分屏多活窗第一步（皇上 2026-11-17 21:28–21:32 打√：1 多活窗先做）。
 // v42.33 (1.0.75)：繁体文案转简体中文（设定页／浮窗／提示全部简体）；含 1.0.74 的转圈修复。
 // GuHaiLongSplitScreen v1.0.73 (v42.31) — 顾海龙集团原创分屏插件（实验版）
 //
+// ── v43.2 (1.0.77)：環形啟動器重做——圖標按環容量同心圓密排（不再用層數權重分環，
+// 有多少 App 排多少，不寫死 40 個）、中間一個大設定齒輪（點了開系統設定，
+// 分屏設定頁深連結）、背景按樣式變暗（圓環 0.65、格狀照舊 0.55）、關閉時
+// 圖標往外四散飛走（不是直接消失）。launcherStyle 預設改圓環（沒設過＝
+// radial；明確選 grid 才走格狀）。三屏／分屏工具鈕照舊在環裡排布。
+// 格狀版（addARCIconsForBids）一字不動；1.0.76 分屏邏輯不動。
+// 已知局限：齒輪的深連結（App-Prefs:root=GuHaiLongSplitScreen）有沒有直達
+// 分屏設定頁，要真機驗（落不到就停在設定根目錄，結果記 v43.2 日誌）。
 // ── v43 (1.0.76)：真分屏第一步——左右并排两个活窗＋中间可拖分隔线＋自动收起豁免 ──
 // (1) 分屏布局：ARC 分屏工具钮开一对 App（上次的组合，没有就最近两个），
 // 两半左右并排（等宽开局，纵向跟三屏侧窗同一段）、各托管一个活 scene、
@@ -1170,6 +1179,9 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)handleARCThreeScreenToolButton:(UIButton *)sender;
 - (UIButton *)arcSplitScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size;
 - (void)handleARCSplitScreenToolButton:(UIButton *)sender;
+// v43.2：圓環中央大設定齒輪。
+- (UIButton *)arcRadialGearButtonAtCenter:(CGPoint)center size:(CGFloat)size;
+- (void)handleARCRadialGearButton:(UIButton *)sender;
 - (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)showNotificationBannerWithText:(const char *)text;
 // v72：showNotificationBannerForName 整个拿掉（皇上：浮窗已打开提示取消）——
@@ -2286,11 +2298,14 @@ free(v);
 }
 return a;
 }
-// v70：啟動器樣式（launcherStyle 字串：grid／radial，預設 grid 格狀弧圈）。
+// v70：啟動器樣式（launcherStyle 字串：grid／radial）。
+// v43.2：預設改圓環——沒設過（沒值）＝radial，明確選 grid 才走格狀；
+// 設過 radial 照舊 radial，髒值走格狀（跟舊行為一樣）。
 static BOOL GHLSSReadLauncherStyleRadial(void) {
 char *v = GHLSSReadPrefsCString("launcherStyle");
-BOOL r = (v && strcmp(v, "radial") == 0);
-if (v) free(v);
+if (!v) return YES;
+BOOL r = (strcmp(v, "radial") == 0);
+free(v);
 return r;
 }
 // v70：浮窗大小百分比（windowSizePercent 50–100，預設 100；夾住）。
@@ -8280,6 +8295,17 @@ GHLSSUpdateStripPosition();
 GHLSSLauncherBackdropWindow.hidden = NO;
 GHLSSLauncherWindow.hidden = NO;
 GHLSSLauncherVisible = YES;
+// v43.2：啟動器背景暗度跟樣式走——圓環 0.65（S2 那種明顯變暗），格狀照舊
+// 0.55。每次打開都重設（關閉四散動畫會把背景根視圖 alpha 收到 0，
+// 這裡順手復原，免得下次打開背景是透明的）。
+if (GHLSSLauncherBackdropWindow) {
+UIView *bgRoot = GHLSSLauncherBackdropWindow.rootViewController.view;
+if (bgRoot) {
+CGFloat dimAlpha = GHLSSReadLauncherStyleRadial() ? 0.65 : 0.55;
+bgRoot.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:dimAlpha];
+bgRoot.alpha = 1.0;
+}
+}
 GHLSSLogLine("v57 launcher opened");
 // v41：叫出 ARC 時給一下震動（ARC 設置的震動反饋開關，預設開）。
 if (GHLSSReadARCHaptics()) {
@@ -8294,10 +8320,52 @@ UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithS
 
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
-GHLSSLauncherWindow.hidden = YES;
-if (GHLSSLauncherBackdropWindow) GHLSSLauncherBackdropWindow.hidden = YES;
 GHLSSLauncherVisible = NO;
+// v43.2：關閉動畫——圖標往外四散飛走（S2 關啟動器那樣），不是直接消失。
+// 遊戲工具箱是行不是環，不散（照舊直接藏）。四散方向是各圖標相對屏幕
+// 中心的方向（圓環／格狀都適用），140pt 外＋縮 0.6＋淡出，0.35 秒。
+// 動畫跑完才藏窗；中途重開的話 completion 只藏舊窗（指標比對＋
+// GHLSSLauncherVisible 守衛），不會把新開的啟動器藏掉。
+BOOL toolbox = (GHLSSGameModeActive && GHLSSReadGameModeEnabled());
+NSMutableArray *flyers = nil;
+if (!toolbox && GHLSSLauncherContentView) {
+flyers = [NSMutableArray array];
+for (UIView *sub in [GHLSSLauncherContentView subviews]) {
+if ([sub isKindOfClass:[UIButton class]]) [flyers addObject:sub];
+}
+}
+UIWindow *dismissWin = GHLSSLauncherWindow;
+UIWindow *dismissBgWin = GHLSSLauncherBackdropWindow;
+UIView *dismissBgRoot = dismissBgWin ? dismissBgWin.rootViewController.view : nil;
+if (!flyers || [flyers count] == 0) {
+GHLSSLauncherWindow.hidden = YES;
+if (dismissBgWin) dismissBgWin.hidden = YES;
 GHLSSLogLine("v57 launcher dismissed");
+return;
+}
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGPoint scatterCenter = CGPointMake(screenBounds.size.width / 2.0, screenBounds.size.height / 2.0);
+[UIView animateWithDuration:0.35 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+for (UIButton *btn in flyers) {
+CGPoint c = btn.center;
+CGFloat dx = c.x - scatterCenter.x;
+CGFloat dy = c.y - scatterCenter.y;
+CGFloat len = sqrt(dx * dx + dy * dy);
+if (len < 1.0) { dx = 0.0; dy = -1.0; len = 1.0; }
+btn.center = CGPointMake(c.x + dx / len * 140.0, c.y + dy / len * 140.0);
+btn.alpha = 0.0;
+btn.transform = CGAffineTransformMakeScale(0.6, 0.6);
+}
+if (dismissBgRoot) dismissBgRoot.alpha = 0.0;
+} completion:^(BOOL finished) {
+(void)finished;
+if (!GHLSSLauncherVisible) {
+if (GHLSSLauncherWindow == dismissWin) GHLSSLauncherWindow.hidden = YES;
+if (dismissBgWin) dismissBgWin.hidden = YES;
+}
+if (dismissBgRoot) dismissBgRoot.alpha = 1.0;
+GHLSSLogLine("v57 launcher dismissed");
+}];
 }
 
 
@@ -8325,6 +8393,11 @@ UITapGestureRecognizer *bgTap = [[UITapGestureRecognizer alloc] initWithTarget:s
 [bgRoot addGestureRecognizer:bgTap];
 bgVC.view = bgRoot;
 GHLSSLauncherBackdropWindow.rootViewController = bgVC;
+} else if (!GHLSSLauncherBackdropWindow.windowScene) {
+// v43.2：背景窗只建一次——第一次建時若 scene 是 nil（建窗太早），背景就
+// 永遠不顯示（Lee 說啟動器「不變暗」可能就是這個）；下次打開時補上 scene。
+UIWindowScene *bgSceneRetry = GHLSSActiveWindowScene();
+if (bgSceneRetry) GHLSSLauncherBackdropWindow.windowScene = bgSceneRetry;
 }
 // 覆蓋層窗（每次打開都重建；全屏透明，圖標直接按屏幕座標排）。
 GHLSSLauncherWindow = [[UIWindow alloc] initWithFrame:screenBounds];
@@ -8741,67 +8814,92 @@ GHLSSLogLine(buf);
 return maxBottom + 12.0;
 }
 
-// v70：環形啟動器——跟格狀版同一套輸入（ordered 陣列、層數／權重分配、
-// 同一兩個放圖標 helper），只換位置：圓心屏幕中心，環半徑等分（Rmax＝
-// min(屏寬,屏高)/2 − iconSize/2 − 12；E＝1 時一環 Rmax，E＝2 時 Rmax/2、
-// Rmax），每環圖標均分 360°、從頂部（−90°）開始。「GHLSS_THREE_SCREEN_TOOL」
-// 特殊項照舊走 arcThreeScreenToolButtonAtCenter。三屏工具鈕跟 ARC 標題
-// 照舊（在 rebuildARCContent 裡，不動）。
+// v43.2：圓環排布——給定圖標尺寸，算環半徑與每環容量（環半徑 R1＝齒輪半徑＋
+// 圖標半徑＋16；環距＝圖標＋14；最外環不超過 Rmax＝min(屏寬,屏高)/2 −
+// 圖標/2 − 12）。回傳總容量；radii／caps 只填用到的環，其餘清 0。
+static int GHLSSRadialRingLayout(CGFloat iconSize, CGFloat gearSize, CGFloat radii[6], int caps[6]) {
+for (int i = 0; i < 6; i++) { radii[i] = 0; caps[i] = 0; }
+CGRect sb = [UIScreen mainScreen].bounds;
+CGFloat Rmax = MIN(sb.size.width, sb.size.height) / 2.0 - iconSize / 2.0 - 12.0;
+CGFloat R1 = gearSize / 2.0 + iconSize / 2.0 + 16.0;
+CGFloat pitch = iconSize + 14.0;
+int total = 0;
+for (int r = 0; r < 6; r++) {
+CGFloat radius = R1 + r * pitch;
+if (radius > Rmax) break;
+radii[r] = radius;
+caps[r] = (int)(2.0 * M_PI * radius / pitch);
+if (caps[r] < 1) caps[r] = 1;
+total += caps[r];
+}
+return total;
+}
+
+// v43.2：環形啟動器重做——跟格狀版同一套輸入（ordered 陣列、同一兩個放圖標
+// helper），只換位置：圓心屏幕中心，圖標按環容量同心圓密排（不再用層數權重
+// 分環：每環能放幾個由環周長／圖標間距定，內環先填滿；圖標太多放不下時
+// 自適應縮小圖標，最小 40pt；有多少 App 排多少，不寫死 40 個）。
+// 中間一個大設定齒輪（76pt，點了開系統設定）。每環圖標均分 360°、從頂部
+// （−90°）開始，相鄰環錯半格（看起來更密）。「GHLSS_THREE_SCREEN_TOOL」／
+// 「GHLSS_SPLIT_SCREEN_TOOL」特殊項照舊走各自的工具鈕 helper。
 - (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
 if (!bids || bids.count == 0) return 0;
 NSInteger total = bids.count;
-int L = GHLSSReadARCLayerCount();
-int E = MIN(L, (int)total);
-if (E < 1) E = 1;
-if (E > 5) E = 5;
-int weights[5] = {1, 2, 3, 4, 5};
-int totalWeight = 0;
-for (int r = 0; r < E; r++) totalWeight += weights[r];
-int ringCount[5] = {0, 0, 0, 0, 0};
-int assigned = 0;
-for (int r = 0; r < E; r++) {
-ringCount[r] = (int)lround((double)total * weights[r] / (double)totalWeight);
-assigned += ringCount[r];
-}
-while (assigned > total) {
-for (int r = E - 1; r >= 0 && assigned > total; r--) {
-if (ringCount[r] > 0) { ringCount[r]--; assigned--; }
-}
-}
-while (assigned < total) {
-ringCount[E - 1]++;
-assigned++;
-}
 CGRect screenBounds = [UIScreen mainScreen].bounds;
-CGFloat Rmax = MIN(screenBounds.size.width, screenBounds.size.height) / 2.0 - size / 2.0 - 12.0;
-if (Rmax < 40.0) Rmax = 40.0;
 CGPoint center = CGPointMake(screenBounds.size.width / 2.0, screenBounds.size.height / 2.0);
+CGFloat gearSize = 76.0;
+CGFloat icon = size;
+if (icon < 40.0) icon = 40.0;
+if (icon > 72.0) icon = 72.0;
+// 自適應：先按設定圖標尺寸算容量，放不下全部就縮小（每次減 4，最小 40）。
+CGFloat radii[6] = {0, 0, 0, 0, 0, 0};
+int caps[6] = {0, 0, 0, 0, 0, 0};
+int rings = 0;
+int capacity = 0;
+while (YES) {
+capacity = GHLSSRadialRingLayout(icon, gearSize, radii, caps);
+rings = 0;
+for (int r = 0; r < 6; r++) { if (caps[r] > 0) rings++; else break; }
+if (capacity >= total || icon <= 40.0) break;
+icon -= 4.0;
+}
+if (rings == 0) {
+// 兜底（不該發生）：單環放全部，半徑取 Rmax。
+CGFloat rmax = MIN(screenBounds.size.width, screenBounds.size.height) / 2.0 - icon / 2.0 - 12.0;
+if (rmax < 40.0) rmax = 40.0;
+radii[0] = rmax;
+caps[0] = (int)total;
+rings = 1;
+}
 CGFloat maxBottom = 0;
 NSInteger idx = 0;
-for (int ring = 0; ring < E; ring++) {
-CGFloat radius = (E == 1) ? Rmax : (Rmax * (ring + 1) / (double)E);
-int count = ringCount[ring];
+for (int ring = 0; ring < rings; ring++) {
+int count = caps[ring];
+if (count <= 0) continue;
+CGFloat radius = radii[ring];
 for (int j = 0; j < count; j++) {
 if (idx >= total) break;
 id item = [bids objectAtIndex:idx++];
 if (![item isKindOfClass:[NSString class]]) continue;
 const char *bid = [(NSString *)item UTF8String];
 if (!bid || bid[0] == '\0') continue;
-CGFloat angle = -M_PI_2 + 2.0 * M_PI * (count == 1 ? 0.0 : (double)j / (double)count);
+double step = (count == 1) ? 0.0 : 2.0 * M_PI / (double)count;
+double stagger = (ring % 2 == 1) ? step / 2.0 : 0.0;
+double angle = -M_PI_2 + stagger + step * (double)j;
 CGPoint p = CGPointMake(center.x + radius * cos(angle), center.y + radius * sin(angle));
 if (strcmp(bid, "GHLSS_THREE_SCREEN_TOOL") == 0) {
 // v56：三屏工具圖標（跟格狀版同一顆，照舊）。
-UIButton *toolBtn = [self arcThreeScreenToolButtonAtCenter:p size:size];
+UIButton *toolBtn = [self arcThreeScreenToolButtonAtCenter:p size:icon];
 [GHLSSLauncherContentView addSubview:toolBtn];
-CGFloat toolBottom = p.y + size / 2.0;
+CGFloat toolBottom = p.y + icon / 2.0;
 if (toolBottom > maxBottom) maxBottom = toolBottom;
 continue;
 }
 if (strcmp(bid, "GHLSS_SPLIT_SCREEN_TOOL") == 0) {
 // v43：分屏工具图标（跟格状版同一颗，照旧）。
-UIButton *toolBtn = [self arcSplitScreenToolButtonAtCenter:p size:size];
+UIButton *toolBtn = [self arcSplitScreenToolButtonAtCenter:p size:icon];
 [GHLSSLauncherContentView addSubview:toolBtn];
-CGFloat toolBottom = p.y + size / 2.0;
+CGFloat toolBottom = p.y + icon / 2.0;
 if (toolBottom > maxBottom) maxBottom = toolBottom;
 continue;
 }
@@ -8809,13 +8907,54 @@ char name[128];
 GHLSSAppNameForBundleID(bid, name, sizeof(name));
 NSInteger tag = GHLSSAppIndexForBundleID(bid);
 if (tag < 0) continue;
-UIButton *btn = [self arcIconButtonForBundleID:bid name:name tag:tag action:action atCenter:p size:size withName:NO];
+UIButton *btn = [self arcIconButtonForBundleID:bid name:name tag:tag action:action atCenter:p size:icon withName:NO];
 [GHLSSLauncherContentView addSubview:btn];
-CGFloat bottom = p.y + size / 2.0;
+CGFloat bottom = p.y + icon / 2.0;
 if (bottom > maxBottom) maxBottom = bottom;
 }
 }
+// 中間大設定齒輪。
+UIButton *gearBtn = [self arcRadialGearButtonAtCenter:center size:gearSize];
+[GHLSSLauncherContentView addSubview:gearBtn];
+{
+char sbuf[128];
+snprintf(sbuf, sizeof(sbuf), "v43.2 radial icons=%d size=%d rings=%d", (int)total, (int)icon, rings);
+GHLSSLogLine(sbuf);
+}
 return maxBottom + 12.0;
+}
+
+// v43.2：圓環中央大設定齒輪——深底白齒輪（SF Symbol gearshape.fill），
+// 點了開系統設定（分屏設定頁深連結，見 handleARCRadialGearButton）。
+- (UIButton *)arcRadialGearButtonAtCenter:(CGPoint)center size:(CGFloat)size {
+UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+btn.frame = CGRectMake(center.x - size / 2.0, center.y - size / 2.0, size, size);
+btn.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.18];
+btn.layer.cornerRadius = size / 2.0;
+btn.layer.borderWidth = 1.5;
+btn.layer.borderColor = [UIColor whiteColor].CGColor;
+UIImage *gear = [UIImage systemImageNamed:[NSString stringWithCString:"gearshape.fill" encoding:NSUTF8StringEncoding]];
+UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(size * 0.18, size * 0.18, size * 0.64, size * 0.64)];
+iconView.image = gear;
+iconView.tintColor = [UIColor whiteColor];
+iconView.contentMode = UIViewContentModeScaleAspectFit;
+[btn addSubview:iconView];
+[btn addTarget:self action:@selector(handleARCRadialGearButton:) forControlEvents:UIControlEventTouchUpInside];
+return btn;
+}
+
+- (void)handleARCRadialGearButton:(UIButton *)sender {
+(void)sender;
+GHLSSLogLine("v43.2 arc gear tapped");
+[self dismissLauncher];
+NSString *urlStr = [NSString stringWithCString:"App-Prefs:root=GuHaiLongSplitScreen" encoding:NSUTF8StringEncoding];
+NSURL *url = [NSURL URLWithString:urlStr];
+if (!url) return;
+[[UIApplication sharedApplication] openURL:url options:[NSDictionary dictionary] completionHandler:^(BOOL success) {
+char buf[64];
+snprintf(buf, sizeof(buf), "v43.2 gear open settings %s", success ? "success" : "failed");
+GHLSSLogLine(buf);
+}];
 }
 
 // v41：ARC 裡一顆圓形 App 圖標（icon + 名 + 狀態點）：開著的 App 帶

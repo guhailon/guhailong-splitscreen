@@ -98,7 +98,7 @@
 			<key>cell</key>
 			<string>PSLinkListCell</string>
 			<key>default</key>
-			<string>grid</string>
+			<string>radial</string>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -107,8 +107,8 @@
 			<string>启动器样式</string>
 			<key>validTitles</key>
 			<array>
-				<string>格状（默认）</string>
-				<string>圆环</string>
+				<string>格状</string>
+				<string>圆环（默认）</string>
 			</array>
 			<key>validValues</key>
 			<array>
