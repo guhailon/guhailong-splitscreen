@@ -1,5 +1,24 @@
+// v43 (1.0.76)：真分屏多活窗第一步（皇上 2026-11-17 21:28–21:32 打√：1 多活窗先做）。
 // v42.33 (1.0.75)：繁体文案转简体中文（设定页／浮窗／提示全部简体）；含 1.0.74 的转圈修复。
 // GuHaiLongSplitScreen v1.0.73 (v42.31) — 顾海龙集团原创分屏插件（实验版）
+//
+// ── v43 (1.0.76)：真分屏第一步——左右并排两个活窗＋中间可拖分隔线＋自动收起豁免 ──
+// (1) 分屏布局：ARC 分屏工具钮开一对 App（上次的组合，没有就最近两个），
+// 两半左右并排（等宽开局，纵向跟三屏侧窗同一段）、各托管一个活 scene、
+// 两个 scene 都保持前景（1.0.56 的教训：推后台就停合成、窗变黑），触摸
+// 各归手指下的窗。(2) 双向分隔线：中间一条分隔线（跟三屏分隔线同一套
+// 样子／粗细／颜色／手势开关），拖动时两边 frame 一起改、松手时两边
+// scene 一起推新尺寸（复用拖调尺寸「即时改视图、松手调 scene」的做法），
+// 松手后两边各设一次 1.0.73 尺寸门（门只盯一扇窗：先左窗，1.5 秒后补右窗）。
+// (3) 自动收起豁免：分屏搭档不走 GHLSSAutoPeekOtherWindows（「一次一个
+// 大窗」只对这对搭档暂停，其他窗照旧自动收小卡）。关／收／挂一扇搭档
+// 就结束分屏（另一半恢复成普通浮窗预设尺寸；半边尺寸不存几何，防毒化）。
+// 不做：左右互换、模式选择器、直向 App 横屏留直向比例、新动作震动／音效、
+// 环形启动器、窗口参数、键盘、FPS、退出动画、游戏模式、横屏三屏。
+// 已知局限（真机待证）：两个大窗同时合成从未真机证实；已在跑的 App
+// 托管现有主 scene，窄半边里内容按宽缩放、顶对齐、下方留黑（跟三屏侧窗
+// 同一限制），没跑的 App 新开 scene 会按窄宽重排版、填满；开对子时侧窗
+// 先以普通浮窗出现、再排成半边，有一下跳变。
 //
 // ── v42.31 (1.0.73)：只修黑半邊（皇上 2026-11-17 15:37：主修就是主浮窗跟小浮窗的問題，
 // 其他都先放著——圓環重排／退出動畫 16 種／FPS 顯示／視窗參數全部停掉，不進這版）──
@@ -1149,6 +1168,8 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (UIButton *)arcIconButtonForBundleID:(const char *)bid name:(const char *)name tag:(NSInteger)tag action:(SEL)action atCenter:(CGPoint)center size:(CGFloat)size withName:(BOOL)withName;
 - (UIButton *)arcThreeScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size;
 - (void)handleARCThreeScreenToolButton:(UIButton *)sender;
+- (UIButton *)arcSplitScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size;
+- (void)handleARCSplitScreenToolButton:(UIButton *)sender;
 - (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)showNotificationBannerWithText:(const char *)text;
 // v72：showNotificationBannerForName 整个拿掉（皇上：浮窗已打开提示取消）——
@@ -1173,6 +1194,10 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)openPairWithBundleIDs:(const char *)mainBid mainName:(const char *)mainName sideBid:(const char *)sideBid sideName:(const char *)sideName;
 - (void)openThreeScreenFromEdge;
 - (void)checkPendingPairOpen;
+- (void)openSplitScreenFromEdge;
+- (void)applySplitPairLayout;
+- (void)endSplitPairSession;
+- (void)handleSplitDividerDrag:(UIPanGestureRecognizer *)recognizer;
 - (void)handleKeyboardWillShow:(NSNotification *)note;
 - (void)handleKeyboardWillHide:(NSNotification *)note;
 - (void)ghlssMaybeAttachKeyboardDrag:(NSNotification *)note;
@@ -1216,6 +1241,16 @@ static UIView *GHLSSHostedResizeHandle = nil;
 static UIView *GHLSSHostedSideDivider = nil; // v41：三屏側窗內緣的分隔線（16pt，拖動調側窗寬度；只在側窗時存在）。
 static BOOL GHLSSHostedIsSideDock = NO; // v41：活動窗是不是三屏側窗。
 static BOOL GHLSSForceThreeScreenOnce = NO; // v41：ARC 打開方式選「三屏」時，下一次開窗強制走側窗（一次性的，用完清掉）。
+// v43：分屏（真左右分屏第一步）——ARC 分屏工具钮点了一次，下一次开对子
+// 走分屏（一次性的，用完清掉）；会话进行中两半左右并排、各托管一个活
+// scene，两个 scene 都保持前景；中间一条分隔线窗可拖。
+static BOOL GHLSSForceSplitPairOnce = NO; // v43：下一次开对子走分屏（一次性的，用完清掉）。
+static BOOL GHLSSSplitActive = NO; // v43：分屏会话进行中。
+static int GHLSSSplitLeftIdx = -1; // v43：分屏左窗在缓存里的下标。
+static int GHLSSSplitRightIdx = -1; // v43：分屏右窗在缓存里的下标。
+static UIWindow *GHLSSSplitDividerWindow = nil; // v43：两窗中间的分隔线窗（可拖）。
+static BOOL GHLSSSplitDividerDragDisabled = NO; // v43：这次分隔线拖动被手势开关关掉了（Began 时读一次）。
+static CGFloat GHLSSSplitLeftWidth = 0; // v43：左窗当前宽度（等宽开局，拖分隔线时改）。
 static NSString *GHLSSHostedSceneID = nil;
 static char GHLSSHostedBundleID[128] = {0};
 static int GHLSSHostedPid = 0;
@@ -1255,6 +1290,11 @@ static BOOL GHLSSSizeGateWaitingLogged = NO; // v73：尺寸等候只記一行�
 static void GHLSSShowPlaceholderForIndex(int idx);
 static void GHLSSHidePlaceholderForIndex(int idx);
 static BOOL GHLSSHostedSceneSizeMatchesWindow(void); // v73：尺寸門判斷（定義在門控 tick 前面）。
+static BOOL GHLSSIsSplitPartnerIndex(int idx); // v43：是不是分屏搭档（会话进行中、左／右下标之一）。
+static void GHLSSSetCachedWindowFrame(int idx, CGRect frame); // v43：只改缓存里一扇窗的 frame（不动活动量、不推 scene）。
+static void GHLSSSplitPairFrames(CGFloat leftW, CGRect *outLeft, CGRect *outRight, CGRect *outDivider); // v43：分屏几何（左／右／分隔线）。
+static void GHLSSPushSceneFrameForIndexNow(int idx); // v43：立即把第 idx 个窗的 scene frame 推到内容尺寸（不走防抖）。
+static CGFloat GHLSSScreenSafeTopInset(void); // v43：前向宣告（定义在下面 v54 处，分屏几何要用）。
 
 // v38：每窗一个 scaleRatio（反向耦合缩放，见文件头 v38 节）。
 // 活动窗的 scale 存在这里；切走时存缓存、切回来时读缓存。
@@ -2369,6 +2409,11 @@ if (GHLSSCacheIsSideDock[idx]) {
 GHLSSLogLine("v57 geometry not saved, side dock");
 return;
 }
+// v43：分屏半边尺寸不进 geo（半边 199 宽存进来就是毒化，下次恢复开成半边窄条）。
+if (GHLSSIsSplitPartnerIndex(idx)) {
+GHLSSLogLine("v57 geometry not saved, split pair");
+return;
+}
 char key[64];
 CGPoint c = w.center;
 CGSize s = w.bounds.size;
@@ -3049,6 +3094,9 @@ UIWindow *w = GHLSSCacheWindows[i];
 if (!w || w.hidden || GHLSSCacheMinimized[i]) continue;
 if (GHLSSCacheBundleIDs[i][0] == '\0') continue;
 if (GHLSSCacheIsSideDock[i]) continue;
+// v43：分屏搭档豁免——分屏会话里两半都留着，不自动收小卡
+//（「一次一个大窗」只对这对搭档暂停；其他窗照旧收）。
+if (GHLSSIsSplitPartnerIndex(i)) continue;
 if (GHLSSIsWindowPinned(GHLSSCacheBundleIDs[i])) continue;
 // 收起前先存位置/大小（跟手動最小化一樣，縮窗之後再存會存成 peek 尺寸）。
 GHLSSSaveGeometryForIndex(i);
@@ -3094,6 +3142,110 @@ GHLSSMarkWindowFront(GHLSSAppIndexForWindow(window));
 // v42.3：一次一個大窗——其他大窗自動縮成 peek（見上面）。
 GHLSSAutoPeekOtherWindows(window);
 GHLSSLogLine("v57 window brought to front");
+}
+
+// v43：是不是分屏搭档（会话进行中、左／右下标之一）。
+static BOOL GHLSSIsSplitPartnerIndex(int idx) {
+if (!GHLSSSplitActive) return NO;
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return NO;
+return (idx == GHLSSSplitLeftIdx || idx == GHLSSSplitRightIdx);
+}
+
+// v43：分屏几何——竖屏左右并排：两半等宽开局（中间留分隔线厚度），
+// 纵向跟三屏侧窗同一段（顶 max(安全距离, 状态列底)，底留 34pt Home 条）。
+// 左宽夹在 100..屏宽−线厚−100（两边都不窄于 100pt，跟三屏分隔线同款下限）。
+static void GHLSSSplitPairFrames(CGFloat leftW, CGRect *outLeft, CGRect *outRight, CGRect *outDivider) {
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat thickness = GHLSSReadSideDividerThickness();
+CGFloat topInset = GHLSSScreenSafeTopInset();
+CGFloat safeDistance = GHLSSReadSafeDistance();
+CGFloat topY = safeDistance;
+if (topY < topInset) topY = topInset;
+CGFloat bottomLimit = screenBounds.size.height - 34.0;
+CGFloat h = bottomLimit - topY;
+if (h < 200.0) h = 200.0;
+if (leftW < 100.0) leftW = 100.0;
+CGFloat maxLeft = screenBounds.size.width - thickness - 100.0;
+if (leftW > maxLeft) leftW = maxLeft;
+CGFloat rightW = screenBounds.size.width - thickness - leftW;
+if (outLeft) *outLeft = CGRectMake(0, topY, leftW, h);
+if (outRight) *outRight = CGRectMake(leftW + thickness, topY, rightW, h);
+if (outDivider) *outDivider = CGRectMake(leftW, topY, thickness, h);
+}
+
+// v43：只改缓存里第 idx 个窗的 frame（窗＋容器＋内容区＋细条＋缩放条＋
+// 手柄），不动活动量、不推 scene（分隔线拖动 live、布局排布时用；
+// scene 在松手／排完后统一推）。自家分隔线视图藏起来（分屏用中间那条线）。
+static void GHLSSSetCachedWindowFrame(int idx, CGRect frame) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+UIWindow *w = GHLSSCacheWindows[idx];
+UIView *container = GHLSSCacheContainers[idx];
+UIView *contentView = GHLSSCacheContentViews[idx];
+if (!w || !container || !contentView) return;
+CGFloat newW = frame.size.width;
+CGFloat newH = frame.size.height;
+w.frame = frame;
+container.frame = CGRectMake(0, 0, newW, newH);
+contentView.frame = CGRectMake(0, 0, newW, newH);
+UIView *topStrip = GHLSSCacheTopStrips[idx];
+if (topStrip) topStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
+UIView *scaleBar = GHLSSCacheScaleSliderBars[idx];
+if (scaleBar) {
+scaleBar.frame = CGRectMake(0, GHLSS_HOSTED_STRIP_H, newW, 72);
+for (UIView *sub in scaleBar.subviews) {
+if ([sub isKindOfClass:[UIButton class]] && sub.tag >= 100 && sub.tag <= 102) {
+int sp = (int)sub.tag - 100;
+sub.frame = CGRectMake(newW - 140 + sp * 44, 39, 40, 28);
+}
+}
+}
+UIView *slider = GHLSSCacheScaleSliders[idx];
+if (slider) slider.frame = CGRectMake(10, 3, newW - 70, 30);
+UIView *label = GHLSSCacheScaleLabels[idx];
+if (label) label.frame = CGRectMake(newW - 56, 3, 46, 30);
+UIView *handle = GHLSSCacheResizeHandles[idx];
+if (handle) handle.frame = CGRectMake(newW - 36, newH - 36, 36, 36);
+UIView *sideDiv = GHLSSCacheSideDividers[idx];
+if (sideDiv) sideDiv.hidden = YES;
+}
+
+// v43：立即把第 idx 个窗的 scene frame 推到它的内容尺寸（不走防抖——
+// 防抖令牌是全域的，两半连推会互相取消，头一扇的推就丢了；布局排布／
+// 分隔线松手是一次性的，直接推。做法跟 peek 路的直接推同一套）。
+// layer-host 路不用推 frame（scene frame 就是屏幕尺寸，不能改；显示
+// 缩放已由 ApplyScale 的即时部分改好）。
+static void GHLSSPushSceneFrameForIndexNow(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+FBScene *scene = GHLSSCacheScenes[idx];
+UIView *contentView = GHLSSCacheContentViews[idx];
+if (!scene || !contentView) return;
+if (!GHLSSCachePresenters[idx] || !GHLSSCachePresenters[idx].presentationView) return;
+CGSize contentSize = contentView.bounds.size;
+if (contentSize.width <= 0 || contentSize.height <= 0) return;
+CGFloat scale = GHLSSCacheScaleRatios[idx];
+if (scale <= 0) scale = GHLSSDefaultScaleRatioForBundleID(GHLSSCacheBundleIDs[idx]);
+if (scale < 0.5) scale = 0.5;
+if (scale > 2.0) scale = 2.0;
+CGSize frameSize = GHLSSSceneFrameSizeForContentSizeAndScale(contentSize, scale);
+@try {
+[scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
+settings.frame = CGRectMake(0, 0, frameSize.width, frameSize.height);
+settings.interfaceOrientation = UIInterfaceOrientationPortrait;
+settings.deviceOrientation = UIDeviceOrientationPortrait;
+settings.peripheryInsets = UIEdgeInsetsZero;
+settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
+}];
+if (scene == GHLSSHostedScene) {
+GHLSSHostedSceneFrameSize = frameSize;
+GHLSSHostedSceneFrameSizeValid = YES;
+}
+char fbuf[128];
+snprintf(fbuf, sizeof(fbuf), "v43 split scene frame pushed %dx%d", (int)frameSize.width, (int)frameSize.height);
+GHLSSLogLine(fbuf);
+} @catch (NSException *e) {
+(void)e;
+GHLSSLogLine("v43 split scene frame push failed");
+}
 }
 
 // v54：狀態列高度（夾 startY 用）：取第一個連接場景的 statusBar 高度，拿不到就 44。
@@ -3517,6 +3669,11 @@ static void GHLSSHangWindowForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 UIWindow *w = GHLSSCacheWindows[idx];
 if (!w || !GHLSSCacheContainers[idx] || GHLSSCacheHung[idx]) return;
+// v43：挂起的是分屏搭档——先结束分屏（另一半恢复成普通浮窗；这扇窗
+// 的挂起前 frame 由结束分屏时先还原成普通尺寸，就不会存成半边）。
+if (GHLSSIsSplitPartnerIndex(idx) && GHLSSLauncherShared) {
+[GHLSSLauncherShared endSplitPairSession];
+}
 GHLSSHangSavedFrames[idx] = w.frame;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGFloat sliver = 30.0;
@@ -5955,6 +6112,12 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 });
 }
 }
+// v43：分屏搭档建好了——两半都齐了就排成分屏（主窗先建时侧窗还没影，
+// 这里直接跳过；侧窗建好时两半齐了，排布局。缓存复用不走建窗，
+// openPairWithBundleIDs 里的延后补调会排）。
+if (GHLSSSplitActive) {
+[self applySplitPairLayout];
+}
 } @catch (NSException *e) {
 (void)e;
 GHLSSLogLine("v57 window failed exception");
@@ -5981,6 +6144,13 @@ GHLSSRestoreGateActive = NO;
 int idx = GHLSSActiveAppIndex;
 BOOL wasSideDock = GHLSSHostedIsSideDock;
 BOOL wasMinimized = GHLSSHostedMinimized;
+// v43：关的是分屏搭档——先结束分屏（另一半恢复成普通浮窗；这扇窗
+// 的几何由结束分屏时先还原成普通尺寸，存的就不是半边；活动量切回来
+// 再继续关这扇）。
+if (idx >= 0 && GHLSSIsSplitPartnerIndex(idx)) {
+[self endSplitPairSession];
+if (GHLSSCacheWindows[idx]) GHLSSLoadCacheToActive(idx);
+}
 // v70：關窗前先把掛著的窗恢復回來（退出動畫要在看得見的窗上播，掛著是半截出屏的）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT && GHLSSCacheHung[idx]) {
 GHLSSRestoreHungWindowForIndex(idx);
@@ -6272,6 +6442,13 @@ closingWin.frame = startFrame;
 - (void)minimizeHostedWindow {
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 int idx = GHLSSActiveAppIndex;
+// v43：收起的是分屏搭档——先结束分屏（另一半恢复成普通浮窗；这扇窗
+// 的几何由结束分屏时先还原成普通尺寸，存的就不是半边；活动量切回来
+// 再继续收这扇）。
+if (idx >= 0 && GHLSSIsSplitPartnerIndex(idx)) {
+[self endSplitPairSession];
+if (GHLSSCacheWindows[idx]) GHLSSLoadCacheToActive(idx);
+}
 // v70：收起前先清懸掛狀態（點按層拿掉、旗標清掉；窗接著就縮成 peek，不用還原 frame）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSClearHungStateForIndex(idx);
 GHLSSHostedMinimized = YES;
@@ -7270,6 +7447,28 @@ GHLSSUpdateTaskbar();
 // 沒開就開浮窗；側窗 App 1.5 秒後開側窗（錯開兩次啟動事務）。
 - (void)openPairWithBundleIDs:(const char *)mainBid mainName:(const char *)mainName sideBid:(const char *)sideBid sideName:(const char *)sideName {
 if (!mainBid || !sideBid || !mainBid[0] || !sideBid[0]) return;
+// v43：分屏对子——搭档下标先定下来、豁免先挂上（侧窗建好时带到最前会走
+// 自动收起，没有豁免主窗那半会被收成小卡）。搭档不在启动器里、或两边
+// 是同一个 App，就退回三屏对子。
+BOOL splitMode = GHLSSForceSplitPairOnce;
+GHLSSForceSplitPairOnce = NO;
+if (splitMode) {
+int splitLeftIdx = GHLSSAppIndexForBundleID(mainBid);
+int splitRightIdx = GHLSSAppIndexForBundleID(sideBid);
+if (splitLeftIdx < 0 || splitRightIdx < 0 || splitLeftIdx == splitRightIdx) {
+GHLSSLogLine("v43 split pair invalid, opening as three screen");
+splitMode = NO;
+} else {
+if (GHLSSSplitActive) [self endSplitPairSession];
+GHLSSSplitActive = YES;
+GHLSSSplitLeftIdx = splitLeftIdx;
+GHLSSSplitRightIdx = splitRightIdx;
+GHLSSSplitLeftWidth = 0;
+char sbuf[300];
+snprintf(sbuf, sizeof(sbuf), "v43 split pair opening %s + %s", mainBid, sideBid);
+GHLSSLogLine(sbuf);
+}
+}
 char buf[300];
 snprintf(buf, sizeof(buf), "v57 opening pair %s + %s", mainBid, sideBid);
 GHLSSLogLine(buf);
@@ -7290,11 +7489,24 @@ if (sideNameCopy) free(sideNameCopy);
 return;
 }
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+if (splitMode) {
+// v43：分屏的侧窗正常开浮窗（不走侧窗）；滑入动画省了（建好直接排半边）。
+GHLSSSuppressSlideInOnce = YES;
+[self launchHostedApp:sideBidCopy name:sideNameCopy];
+} else {
 GHLSSForceThreeScreenOnce = YES;
 [self launchHostedApp:sideBidCopy name:sideNameCopy];
+}
 free(sideBidCopy);
 free(sideNameCopy);
 });
+if (splitMode) {
+// v43：安全网——侧窗是缓存复用时不走建窗，建窗钩子排不上布局，4 秒后补排一次。
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4000 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+[self applySplitPairLayout];
+GHLSSSuppressSlideInOnce = NO;
+});
+}
 }
 
 // v42：邊緣滑動直接開三屏（開關開著時）：有上次的組合就重開那一對，
@@ -7352,6 +7564,247 @@ char buf[300];
 snprintf(buf, sizeof(buf), "v57 opening pair from settings %s + %s", a, b);
 GHLSSLogLine(buf);
 [self openPairWithBundleIDs:a mainName:nameA sideBid:b sideName:nameB];
+}
+
+// v43：ARC 分屏工具钮开分屏对子：有上次的组合就重开那一对；没有就用
+// 最近用的两个 App（只取启动器里有的）；再没有就计算器＋设置。
+- (void)openSplitScreenFromEdge {
+char *lastPair = GHLSSReadPrefsCString("lastThreeScreenPair");
+if (lastPair) {
+char a[128], b[128];
+if (GHLSSSplitPairString(lastPair, a, sizeof(a), b, sizeof(b)) && GHLSSAppIndexForBundleID(a) >= 0 && GHLSSAppIndexForBundleID(b) >= 0 && strcmp(a, b) != 0) {
+char nameA[128], nameB[128];
+GHLSSAppNameForBundleID(a, nameA, sizeof(nameA));
+GHLSSAppNameForBundleID(b, nameB, sizeof(nameB));
+GHLSSLogLine("v43 split screen opening last pair");
+free(lastPair);
+GHLSSForceSplitPairOnce = YES;
+[self openPairWithBundleIDs:a mainName:nameA sideBid:b sideName:nameB];
+return;
+}
+free(lastPair);
+}
+NSArray *recent = GHLSSReadIDList("recentAppIDs");
+char first[128] = {0};
+char second[128] = {0};
+for (id item in recent) {
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *r = [(NSString *)item UTF8String];
+if (!r || !r[0]) continue;
+if (GHLSSAppIndexForBundleID(r) < 0) continue;
+if (first[0] == '\0') {
+strncpy(first, r, sizeof(first) - 1);
+} else if (strcmp(first, r) != 0) {
+strncpy(second, r, sizeof(second) - 1);
+break;
+}
+}
+if (first[0] == '\0') strncpy(first, "com.apple.calculator", sizeof(first) - 1);
+if (second[0] == '\0') {
+if (strcmp(first, "com.apple.calculator") != 0) strncpy(second, "com.apple.calculator", sizeof(second) - 1);
+else strncpy(second, "com.apple.Preferences", sizeof(second) - 1);
+}
+char nameA[128], nameB[128];
+GHLSSAppNameForBundleID(first, nameA, sizeof(nameA));
+GHLSSAppNameForBundleID(second, nameB, sizeof(nameB));
+GHLSSLogLine("v43 split screen opening recent pair");
+GHLSSForceSplitPairOnce = YES;
+[self openPairWithBundleIDs:first mainName:nameA sideBid:second sideName:nameB];
+}
+
+// v43：分屏布局——两半左右并排＋中间分隔线窗。两半都齐了（窗在、没藏、
+// 没收）才排；缺一半就只记一行、不动。排完两半的 scene 都推到新尺寸
+//（各切一次活动量；推完把活动量还给原来那扇窗）。分隔线窗没有就建、
+// 有就移到新位置。1.0.73 尺寸门照旧——新建窗的门控在建窗时已设，这里
+// 只推尺寸，不重设门。
+- (void)applySplitPairLayout {
+if (!GHLSSSplitActive) return;
+int li = GHLSSSplitLeftIdx;
+int ri = GHLSSSplitRightIdx;
+if (li < 0 || ri < 0 || li >= GHLSS_APP_COUNT || ri >= GHLSS_APP_COUNT) return;
+UIWindow *lw = GHLSSCacheWindows[li];
+UIWindow *rw = GHLSSCacheWindows[ri];
+if (!lw || !rw || lw.hidden || rw.hidden || GHLSSCacheMinimized[li] || GHLSSCacheMinimized[ri]) {
+GHLSSLogLine("v43 split layout skipped, pair not ready");
+return;
+}
+int savedActive = GHLSSActiveAppIndex;
+CGFloat leftW = GHLSSSplitLeftWidth;
+if (leftW <= 0) {
+CGFloat thickness = GHLSSReadSideDividerThickness();
+leftW = ([UIScreen mainScreen].bounds.size.width - thickness) / 2.0;
+}
+CGRect leftFrame, rightFrame, divFrame;
+GHLSSSplitPairFrames(leftW, &leftFrame, &rightFrame, &divFrame);
+GHLSSSplitLeftWidth = leftFrame.size.width;
+// 两半都不是侧窗了（侧窗旗标清掉，自家分隔线视图在 SetCachedWindowFrame 里藏起来）。
+GHLSSCacheIsSideDock[li] = NO;
+GHLSSCacheIsSideDock[ri] = NO;
+GHLSSSetCachedWindowFrame(li, leftFrame);
+GHLSSSetCachedWindowFrame(ri, rightFrame);
+// 分隔线窗：没有就建（金色线＋中间抓手，跟三屏分隔线同一套样子；
+// 层级跟带到最前的窗同一层，夹缝里不盖内容）。
+if (!GHLSSSplitDividerWindow) {
+GHLSSSplitDividerWindow = [[UIWindow alloc] initWithFrame:divFrame];
+GHLSSSplitDividerWindow.windowLevel = GHLSS_HOSTED_FRONT_LEVEL;
+GHLSSSplitDividerWindow.backgroundColor = [UIColor clearColor];
+UIWindowScene *divScene = GHLSSActiveWindowScene();
+if (divScene) GHLSSSplitDividerWindow.windowScene = divScene;
+UIViewController *divVC = [[UIViewController alloc] init];
+UIView *divRoot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, divFrame.size.width, divFrame.size.height)];
+CGFloat divThickness = divFrame.size.width;
+int divColor = GHLSSReadSideDividerColor();
+if (divColor == 0) {
+divRoot.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:0.8];
+} else if (divColor == 1) {
+divRoot.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.25];
+} else {
+divRoot.backgroundColor = [UIColor clearColor];
+}
+UIView *divPill = [[UIView alloc] initWithFrame:CGRectMake((divThickness - 4.0) / 2.0, divFrame.size.height / 2.0 - 20, 4, 40)];
+if (divColor == 0) {
+divPill.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
+} else if (divColor == 1) {
+divPill.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+} else {
+divPill.backgroundColor = [UIColor clearColor];
+}
+divPill.layer.cornerRadius = 2.0;
+[divRoot addSubview:divPill];
+UIPanGestureRecognizer *divDrag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleSplitDividerDrag:)];
+divDrag.delegate = self;
+[divRoot addGestureRecognizer:divDrag];
+divVC.view = divRoot;
+GHLSSSplitDividerWindow.rootViewController = divVC;
+GHLSSLogLine("v43 split divider window created");
+} else {
+GHLSSSplitDividerWindow.frame = divFrame;
+UIView *divRoot = GHLSSSplitDividerWindow.rootViewController.view;
+if (divRoot) divRoot.frame = CGRectMake(0, 0, divFrame.size.width, divFrame.size.height);
+}
+GHLSSSplitDividerWindow.hidden = NO;
+// 两半的 scene 都推到新尺寸＋推回前景（各切一次活动量；
+// 1.0.56 的教训：推后台就停合成、窗变黑）。
+GHLSSLoadCacheToActive(li);
+[self resizeHostedSceneToContentSize:CGSizeMake(leftFrame.size.width, leftFrame.size.height)];
+GHLSSPushSceneFrameForIndexNow(li);
+{
+char fbuf[192];
+snprintf(fbuf, sizeof(fbuf), "v43 split foreground pushed %s", GHLSSCacheBundleIDs[li]);
+GHLSSPushForegroundCachedSceneAtIndex(li, fbuf);
+}
+GHLSSLoadCacheToActive(ri);
+[self resizeHostedSceneToContentSize:CGSizeMake(rightFrame.size.width, rightFrame.size.height)];
+GHLSSPushSceneFrameForIndexNow(ri);
+{
+char fbuf[192];
+snprintf(fbuf, sizeof(fbuf), "v43 split foreground pushed %s", GHLSSCacheBundleIDs[ri]);
+GHLSSPushForegroundCachedSceneAtIndex(ri, fbuf);
+}
+if (savedActive >= 0 && GHLSSCacheWindows[savedActive]) GHLSSLoadCacheToActive(savedActive);
+char buf[192];
+snprintf(buf, sizeof(buf), "v43 split layout applied left %dx%d right %dx%d", (int)leftFrame.size.width, (int)leftFrame.size.height, (int)rightFrame.size.width, (int)rightFrame.size.height);
+GHLSSLogLine(buf);
+}
+
+// v43：结束分屏会话——分隔线窗藏起来、旗标清掉、两半恢复成普通浮窗
+//（预设尺寸、居中；scene 推到新尺寸；几何不存半边——SaveGeometry 里
+// 有分屏守卫，存也是被拦的）。关窗／收起／挂起一扇搭档时调（调之前
+// 活动量是那扇搭档，调完由调用方切回原来那扇）；开新对子时也先调
+// 一次（旧搭档恢复成普通浮窗）。
+- (void)endSplitPairSession {
+if (!GHLSSSplitActive) return;
+int li = GHLSSSplitLeftIdx;
+int ri = GHLSSSplitRightIdx;
+int savedActive = GHLSSActiveAppIndex;
+if (GHLSSSplitDividerWindow) GHLSSSplitDividerWindow.hidden = YES;
+GHLSSSplitActive = NO;
+GHLSSSplitLeftIdx = -1;
+GHLSSSplitRightIdx = -1;
+GHLSSSplitLeftWidth = 0;
+int partners[2] = {li, ri};
+for (int k = 0; k < 2; k++) {
+int idx = partners[k];
+if (idx < 0 || idx >= GHLSS_APP_COUNT) continue;
+UIWindow *w = GHLSSCacheWindows[idx];
+if (!w || w.hidden || GHLSSCacheMinimized[idx]) continue;
+GHLSSCacheIsSideDock[idx] = NO;
+CGFloat presetW, presetH;
+GHLSSPresetSizeForBundleID(GHLSSCacheBundleIDs[idx], &presetW, &presetH);
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGRect frame = CGRectMake((screenBounds.size.width - presetW) / 2.0, (screenBounds.size.height - presetH) / 2.0, presetW, presetH);
+GHLSSSetCachedWindowFrame(idx, frame);
+GHLSSLoadCacheToActive(idx);
+// v43：这里不能走 resizeHostedSceneToContentSize——它排一个 0.05 秒防抖推
+// frame，紧接着关窗／收起会把窗变成 peek／藏起来，防抖块醒来读到的是
+// peek 尺寸，会把 scene frame 推成 112x242（毁了 v58 的 peek 贴合）。
+// 改走 ApplyScale(NO)（即时改视图、不排防抖）＋立即推 frame。
+GHLSSApplyScaleToHostedWindow(NO);
+GHLSSPushSceneFrameForIndexNow(idx);
+if (GHLSSCacheScenes[idx]) {
+char fbuf[192];
+snprintf(fbuf, sizeof(fbuf), "v43 split ended, restored %s", GHLSSCacheBundleIDs[idx]);
+GHLSSPushForegroundCachedSceneAtIndex(idx, fbuf);
+}
+}
+if (savedActive >= 0 && GHLSSCacheWindows[savedActive]) GHLSSLoadCacheToActive(savedActive);
+GHLSSLogLine("v43 split session ended");
+}
+
+// v43：拖分屏分隔线——两边一起动（左窗变宽、右窗变窄，反之亦然）。
+// 拖动时只改窗与视图（live）；松手时才调两边 scene 的 frame
+//（跟三屏分隔线／右下角手柄同一条路）＋两边各设一次尺寸门
+//（1.0.73 的门只盯活动窗：先给左窗设，1.5 秒后再给右窗补一次；
+// 松手后活动窗落在左半边，补右窗门控时落在右半边——拖分隔线不属于
+// 哪一半，落在哪一半都不影响点按，点哪扇窗活动量就切到哪扇）。
+- (void)handleSplitDividerDrag:(UIPanGestureRecognizer *)recognizer {
+if (!GHLSSSplitActive) return;
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+GHLSSSplitDividerDragDisabled = !GHLSSReadSideWindowGestures();
+if (GHLSSSplitDividerDragDisabled) {
+GHLSSLogLine("v43 split divider drag disabled");
+return;
+}
+GHLSSLogLine("v43 split divider dragged");
+}
+if (GHLSSSplitDividerDragDisabled) return;
+UIView *fixedRefView = GHLSSStripWindow ? (UIView *)GHLSSStripWindow : nil;
+CGPoint point = [recognizer translationInView:fixedRefView];
+[recognizer setTranslation:CGPointZero inView:fixedRefView];
+CGFloat newLeftW = GHLSSSplitLeftWidth + point.x;
+CGRect leftFrame, rightFrame, divFrame;
+GHLSSSplitPairFrames(newLeftW, &leftFrame, &rightFrame, &divFrame);
+GHLSSSplitLeftWidth = leftFrame.size.width;
+int li = GHLSSSplitLeftIdx;
+int ri = GHLSSSplitRightIdx;
+if (li < 0 || ri < 0) return;
+GHLSSSetCachedWindowFrame(li, leftFrame);
+GHLSSSetCachedWindowFrame(ri, rightFrame);
+if (GHLSSSplitDividerWindow) {
+CGRect df = GHLSSSplitDividerWindow.frame;
+GHLSSSplitDividerWindow.frame = CGRectMake(divFrame.origin.x, df.origin.y, df.size.width, df.size.height);
+}
+if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled) {
+char rbuf[192];
+snprintf(rbuf, sizeof(rbuf), "v43 split divider resized left %dx%d right %dx%d", (int)leftFrame.size.width, (int)leftFrame.size.height, (int)rightFrame.size.width, (int)rightFrame.size.height);
+GHLSSLogLine(rbuf);
+int leftIdx = li;
+int rightIdx = ri;
+GHLSSLoadCacheToActive(leftIdx);
+[self resizeHostedSceneToContentSize:CGSizeMake(leftFrame.size.width, leftFrame.size.height)];
+GHLSSPushSceneFrameForIndexNow(leftIdx);
+// 左窗设尺寸门（门只盯活动窗，活动量先不切走，不然第一个 tick 就取消）。
+GHLSSLoadCacheToActive(leftIdx);
+[self armSizeGateForResize];
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+if (!GHLSSSplitActive) return;
+if (GHLSSRestoreGateActive) return;
+if (rightIdx < 0 || rightIdx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheWindows[rightIdx] || GHLSSCacheWindows[rightIdx].hidden || GHLSSCacheMinimized[rightIdx]) return;
+GHLSSLoadCacheToActive(rightIdx);
+if (!GHLSSHostedSceneSizeMatchesWindow()) [self armSizeGateForResize];
+});
+}
 }
 
 // v54：橫屏＋外彈出時，試著給外置鍵盤加拖動（探針）：鍵盤窗是不是在
@@ -7958,6 +8411,8 @@ return;
 // v56：扇形末尾加一顆三屏工具圖標（跟 App 圖標一樣沿弧排布；
 // 不是 1.0.55 刪掉的四行——那四行不恢復）。
 [ordered addObject:[NSString stringWithCString:"GHLSS_THREE_SCREEN_TOOL" encoding:NSUTF8StringEncoding]];
+// v43：再加一颗分屏工具图标（跟三屏工具图标一样沿弧排布）。
+[ordered addObject:[NSString stringWithCString:"GHLSS_SPLIT_SCREEN_TOOL" encoding:NSUTF8StringEncoding]];
 // v70：啟動器樣式——radial 時圖標排成圓環（見下面 addRadialARCIconsForBids），
 // 否則走原來的格狀弧圈（addARCIconsForBids）。
 // v72：樣式分支記一行（radial／grid），下次日誌證明讀值有沒有到。
@@ -8260,6 +8715,15 @@ CGFloat toolBottom = iy + size / 2.0;
 if (toolBottom > maxBottom) maxBottom = toolBottom;
 continue;
 }
+if (strcmp(bid, "GHLSS_SPLIT_SCREEN_TOOL") == 0) {
+// v43：分屏工具图标——金底圆角「分屏」字，点了开一对分屏 App
+//（上次的组合，没有就最近两个 App，跟三屏工具钮同一条路）。
+UIButton *toolBtn = [self arcSplitScreenToolButtonAtCenter:CGPointMake(ix, iy) size:size];
+[GHLSSLauncherContentView addSubview:toolBtn];
+CGFloat toolBottom = iy + size / 2.0;
+if (toolBottom > maxBottom) maxBottom = toolBottom;
+continue;
+}
 char name[128];
 GHLSSAppNameForBundleID(bid, name, sizeof(name));
 NSInteger tag = GHLSSAppIndexForBundleID(bid);
@@ -8328,6 +8792,14 @@ CGPoint p = CGPointMake(center.x + radius * cos(angle), center.y + radius * sin(
 if (strcmp(bid, "GHLSS_THREE_SCREEN_TOOL") == 0) {
 // v56：三屏工具圖標（跟格狀版同一顆，照舊）。
 UIButton *toolBtn = [self arcThreeScreenToolButtonAtCenter:p size:size];
+[GHLSSLauncherContentView addSubview:toolBtn];
+CGFloat toolBottom = p.y + size / 2.0;
+if (toolBottom > maxBottom) maxBottom = toolBottom;
+continue;
+}
+if (strcmp(bid, "GHLSS_SPLIT_SCREEN_TOOL") == 0) {
+// v43：分屏工具图标（跟格状版同一颗，照旧）。
+UIButton *toolBtn = [self arcSplitScreenToolButtonAtCenter:p size:size];
 [GHLSSLauncherContentView addSubview:toolBtn];
 CGFloat toolBottom = p.y + size / 2.0;
 if (toolBottom > maxBottom) maxBottom = toolBottom;
@@ -8421,6 +8893,28 @@ return btn;
 GHLSSLogLine("v57 arc three screen tool tapped");
 [self dismissLauncher];
 [self openThreeScreenFromEdge];
+}
+
+// v43：分屏工具钮——跟三屏工具钮同一颗金底圆角钮，字换成「分屏」，点了开一对分屏 App。
+- (UIButton *)arcSplitScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size {
+UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+btn.frame = CGRectMake(center.x - size / 2.0, center.y - size / 2.0, size, size);
+btn.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
+btn.layer.cornerRadius = size * 0.22;
+btn.layer.borderWidth = 1.5;
+btn.layer.borderColor = [UIColor whiteColor].CGColor;
+[btn setTitle:[NSString stringWithCString:"分屏" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[btn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+btn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+[btn addTarget:self action:@selector(handleARCSplitScreenToolButton:) forControlEvents:UIControlEventTouchUpInside];
+return btn;
+}
+
+- (void)handleARCSplitScreenToolButton:(UIButton *)sender {
+(void)sender;
+GHLSSLogLine("v43 arc split screen tool tapped");
+[self dismissLauncher];
+[self openSplitScreenFromEdge];
 }
 
 // v41：長按 ARC 圖標——置頂/取消置頂（置頂的固定在最上面一段，
@@ -8896,6 +9390,8 @@ GHLSSLogLine(hbuf);
 if (!anyScene) {
 GHLSSLogLine("v57 lock state locked, no hosted scene");
 }
+// v43：锁屏也把分屏分隔线窗藏起来（解锁时再显示回来）。
+if (GHLSSSplitDividerWindow) GHLSSSplitDividerWindow.hidden = YES;
 GHLSSUpdateDimOverlay();
 } else {
 GHLSSScreenLocked = NO;
@@ -8932,6 +9428,8 @@ if (unlockCS != 2) GHLSSShowPlaceholderForIndex(i);
 if (!anyRestored) {
 GHLSSLogLine("v57 lock state unlocked");
 }
+// v43：解锁时分屏分隔线窗显示回来（分屏会话还在时）。
+if (GHLSSSplitActive && GHLSSSplitDividerWindow) GHLSSSplitDividerWindow.hidden = NO;
 GHLSSUpdateDimOverlay();
 }
 });
