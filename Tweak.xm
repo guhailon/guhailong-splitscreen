@@ -7,12 +7,16 @@
 // 有多少 App 排多少，不寫死 40 個）、中間一個大設定齒輪（點了開系統設定，
 // 分屏設定頁深連結）、背景按樣式變暗（圓環 0.65、格狀照舊 0.55）、關閉時
 // 圖標往外四散飛走（不是直接消失）。launcherStyle 預設改圓環（沒設過＝
-// radial；明確選 grid 才走格狀）。三屏／分屏工具鈕照舊在環裡排布。
+// radial；明確選 grid 才走格狀）。三屏／分屏工具鈕 1.0.79 已拿掉（皇上 2026-11-18 說沒必要留）。
 // 格狀版（addARCIconsForBids）一字不動；1.0.76 分屏邏輯不動。
 // 已知局限：齒輪的深連結（App-Prefs:root=GuHaiLongSplitScreen）有沒有直達
 // 分屏設定頁，要真機驗（落不到就停在設定根目錄，結果記 v43.2 日誌）。
+// ── v43.4 (1.0.79)：拿掉啟動器裡「分屏」「三屏」兩顆金底工具鈕（皇上 2026-11-18
+// 說沒必要留）。分屏／三屏功能本身不動。分屏對子新入口：邊緣滑動 2 下開
+// （皇上 2026-11-18 11:40 定；見 handleEdgeSwipe:，第 2 下開 openSplitScreenFromEdge；
+// BUILD_LOG §275）；三屏組合入口照舊（邊緣滑動＋設定頁 openThreeScreenPair）。
 // ── v43 (1.0.76)：真分屏第一步——左右并排两个活窗＋中间可拖分隔线＋自动收起豁免 ──
-// (1) 分屏布局：ARC 分屏工具钮开一对 App（上次的组合，没有就最近两个），
+// (1) 分屏布局：openSplitScreenFromEdge 开一对 App（上次的组合，没有就最近两个），
 // 两半左右并排（等宽开局，纵向跟三屏侧窗同一段）、各托管一个活 scene、
 // 两个 scene 都保持前景（1.0.56 的教训：推后台就停合成、窗变黑），触摸
 // 各归手指下的窗。(2) 双向分隔线：中间一条分隔线（跟三屏分隔线同一套
@@ -1175,10 +1179,6 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (CGFloat)addARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
 - (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
 - (UIButton *)arcIconButtonForBundleID:(const char *)bid name:(const char *)name tag:(NSInteger)tag action:(SEL)action atCenter:(CGPoint)center size:(CGFloat)size withName:(BOOL)withName;
-- (UIButton *)arcThreeScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size;
-- (void)handleARCThreeScreenToolButton:(UIButton *)sender;
-- (UIButton *)arcSplitScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size;
-- (void)handleARCSplitScreenToolButton:(UIButton *)sender;
 // v43.2：圓環中央大設定齒輪。
 - (UIButton *)arcRadialGearButtonAtCenter:(CGPoint)center size:(CGFloat)size;
 - (void)handleARCRadialGearButton:(UIButton *)sender;
@@ -1254,7 +1254,7 @@ static UIView *GHLSSHostedResizeHandle = nil;
 static UIView *GHLSSHostedSideDivider = nil; // v41：三屏側窗內緣的分隔線（16pt，拖動調側窗寬度；只在側窗時存在）。
 static BOOL GHLSSHostedIsSideDock = NO; // v41：活動窗是不是三屏側窗。
 static BOOL GHLSSForceThreeScreenOnce = NO; // v41：ARC 打開方式選「三屏」時，下一次開窗強制走側窗（一次性的，用完清掉）。
-// v43：分屏（真左右分屏第一步）——ARC 分屏工具钮点了一次，下一次开对子
+// v43：分屏（真左右分屏第一步）——开对子一次，下一次开对子
 // 走分屏（一次性的，用完清掉）；会话进行中两半左右并排、各托管一个活
 // scene，两个 scene 都保持前景；中间一条分隔线窗可拖。
 static BOOL GHLSSForceSplitPairOnce = NO; // v43：下一次开对子走分屏（一次性的，用完清掉）。
@@ -4671,6 +4671,8 @@ return YES;
 // v41：右邊緣滑動開 ARC（調度窗口設置：滑幾次、滑哪邊）。滑 1 次開
 // （edgeSwipeCount=1）或 2 秒內滑兩次才開（=2，預設，防誤觸）；
 // 第一次只記日誌。滑哪邊跟調度設定走（沒設就跟小窗顯示位置）。
+// v43.4：edgeSwipeCount=2 時，第 2 下改開分屏對子（openSplitScreenFromEdge，
+// 皇上 2026-11-18 11:40 定）；第 1 下照舊（開關開著開三屏，否則開 ARC）。
 - (void)handleEdgeSwipe:(UIScreenEdgePanGestureRecognizer *)recognizer {
 // v43.3：记下起手 Y——触发区判定用起手位置，不是松手位置。
 if (recognizer.state == UIGestureRecognizerStateBegan) {
@@ -4716,8 +4718,9 @@ return;
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v57 edge swipe 2nd, opening three screen");
-[self openThreeScreenFromEdge];
+GHLSSLogLine("v43.4 edge swipe 2nd, opening split pair");
+[self dismissLauncher];
+[self openSplitScreenFromEdge];
 } else {
 GHLSSLastSwipeTime = now;
 GHLSSLogLine("v57 edge swipe 1st, armed");
@@ -4732,8 +4735,9 @@ return;
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v57 edge swipe 2nd, opening ARC");
-[self showLauncher];
+GHLSSLogLine("v43.4 edge swipe 2nd, opening split pair");
+[self dismissLauncher];
+[self openSplitScreenFromEdge];
 } else {
 GHLSSLastSwipeTime = now;
 GHLSSLogLine("v57 edge swipe 1st, armed");
@@ -7685,7 +7689,7 @@ GHLSSLogLine(buf);
 [self openPairWithBundleIDs:a mainName:nameA sideBid:b sideName:nameB];
 }
 
-// v43：ARC 分屏工具钮开分屏对子：有上次的组合就重开那一对；没有就用
+// v43：openSplitScreenFromEdge 开分屏对子：有上次的组合就重开那一对；没有就用
 // 最近用的两个 App（只取启动器里有的）；再没有就计算器＋设置。
 - (void)openSplitScreenFromEdge {
 char *lastPair = GHLSSReadPrefsCString("lastThreeScreenPair");
@@ -8585,11 +8589,9 @@ if ([ordered count] == 0) {
 GHLSSLogLine("v57 launcher no apps");
 return;
 }
-// v56：扇形末尾加一顆三屏工具圖標（跟 App 圖標一樣沿弧排布；
-// 不是 1.0.55 刪掉的四行——那四行不恢復）。
-[ordered addObject:[NSString stringWithCString:"GHLSS_THREE_SCREEN_TOOL" encoding:NSUTF8StringEncoding]];
-// v43：再加一颗分屏工具图标（跟三屏工具图标一样沿弧排布）。
-[ordered addObject:[NSString stringWithCString:"GHLSS_SPLIT_SCREEN_TOOL" encoding:NSUTF8StringEncoding]];
+// v43.4：啟動器裡的「分屏」「三屏」工具鈕已拿掉（皇上 2026-11-18 說沒必要留），
+// 只排 App 圖標。
+GHLSSLogLine("v43.4 launcher no tool buttons");
 // v70：啟動器樣式——radial 時圖標排成圓環（見下面 addRadialARCIconsForBids），
 // 否則走原來的格狀弧圈（addARCIconsForBids）。
 // v72：樣式分支記一行（radial／grid），下次日誌證明讀值有沒有到。
@@ -8883,24 +8885,6 @@ double ang = (m == 1) ? (angLo + angHi) / 2.0 : angLo + j * (sweep / (m - 1));
 CGFloat dir = slideLeft ? 1.0 : -1.0;
 CGFloat ix = cx + dir * R * cos(ang);
 CGFloat iy = cy + R * sin(ang);
-if (strcmp(bid, "GHLSS_THREE_SCREEN_TOOL") == 0) {
-// v56：三屏工具圖標——金底圓角「三屏」字，點了開上次的三屏組合
-//（沒有就開最近 App 的側窗，跟邊緣滑動開三屏同一條路）。
-UIButton *toolBtn = [self arcThreeScreenToolButtonAtCenter:CGPointMake(ix, iy) size:size];
-[GHLSSLauncherContentView addSubview:toolBtn];
-CGFloat toolBottom = iy + size / 2.0;
-if (toolBottom > maxBottom) maxBottom = toolBottom;
-continue;
-}
-if (strcmp(bid, "GHLSS_SPLIT_SCREEN_TOOL") == 0) {
-// v43：分屏工具图标——金底圆角「分屏」字，点了开一对分屏 App
-//（上次的组合，没有就最近两个 App，跟三屏工具钮同一条路）。
-UIButton *toolBtn = [self arcSplitScreenToolButtonAtCenter:CGPointMake(ix, iy) size:size];
-[GHLSSLauncherContentView addSubview:toolBtn];
-CGFloat toolBottom = iy + size / 2.0;
-if (toolBottom > maxBottom) maxBottom = toolBottom;
-continue;
-}
 char name[128];
 GHLSSAppNameForBundleID(bid, name, sizeof(name));
 NSInteger tag = GHLSSAppIndexForBundleID(bid);
@@ -8944,8 +8928,7 @@ return total;
 // 分環：每環能放幾個由環周長／圖標間距定，內環先填滿；圖標太多放不下時
 // 自適應縮小圖標，最小 40pt；有多少 App 排多少，不寫死 40 個）。
 // 中間一個大設定齒輪（76pt，點了開系統設定）。每環圖標均分 360°、從頂部
-// （−90°）開始，相鄰環錯半格（看起來更密）。「GHLSS_THREE_SCREEN_TOOL」／
-// 「GHLSS_SPLIT_SCREEN_TOOL」特殊項照舊走各自的工具鈕 helper。
+// （−90°）開始，相鄰環錯半格（看起來更密）。
 - (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
 if (!bids || bids.count == 0) return 0;
 NSInteger total = bids.count;
@@ -8991,22 +8974,6 @@ double step = (count == 1) ? 0.0 : 2.0 * M_PI / (double)count;
 double stagger = (ring % 2 == 1) ? step / 2.0 : 0.0;
 double angle = -M_PI_2 + stagger + step * (double)j;
 CGPoint p = CGPointMake(center.x + radius * cos(angle), center.y + radius * sin(angle));
-if (strcmp(bid, "GHLSS_THREE_SCREEN_TOOL") == 0) {
-// v56：三屏工具圖標（跟格狀版同一顆，照舊）。
-UIButton *toolBtn = [self arcThreeScreenToolButtonAtCenter:p size:icon];
-[GHLSSLauncherContentView addSubview:toolBtn];
-CGFloat toolBottom = p.y + icon / 2.0;
-if (toolBottom > maxBottom) maxBottom = toolBottom;
-continue;
-}
-if (strcmp(bid, "GHLSS_SPLIT_SCREEN_TOOL") == 0) {
-// v43：分屏工具图标（跟格状版同一颗，照旧）。
-UIButton *toolBtn = [self arcSplitScreenToolButtonAtCenter:p size:icon];
-[GHLSSLauncherContentView addSubview:toolBtn];
-CGFloat toolBottom = p.y + icon / 2.0;
-if (toolBottom > maxBottom) maxBottom = toolBottom;
-continue;
-}
 char name[128];
 GHLSSAppNameForBundleID(bid, name, sizeof(name));
 NSInteger tag = GHLSSAppIndexForBundleID(bid);
@@ -9113,51 +9080,6 @@ UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWit
 lp.minimumPressDuration = 0.5;
 [btn addGestureRecognizer:lp];
 return btn;
-}
-
-// v56：三屏工具圖標——金底圓角「三屏」字（扇形裡的一個圖標位，
-// 不是 1.0.55 刪掉的四行）。點了開上次的三屏組合（沒有就開最近 App 的側窗）。
-- (UIButton *)arcThreeScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size {
-UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-btn.frame = CGRectMake(center.x - size / 2.0, center.y - size / 2.0, size, size);
-btn.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-btn.layer.cornerRadius = size * 0.22;
-btn.layer.borderWidth = 1.5;
-btn.layer.borderColor = [UIColor whiteColor].CGColor;
-[btn setTitle:[NSString stringWithCString:"三屏" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[btn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-btn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-[btn addTarget:self action:@selector(handleARCThreeScreenToolButton:) forControlEvents:UIControlEventTouchUpInside];
-return btn;
-}
-
-- (void)handleARCThreeScreenToolButton:(UIButton *)sender {
-(void)sender;
-GHLSSLogLine("v57 arc three screen tool tapped");
-[self dismissLauncher];
-[self openThreeScreenFromEdge];
-}
-
-// v43：分屏工具钮——跟三屏工具钮同一颗金底圆角钮，字换成「分屏」，点了开一对分屏 App。
-- (UIButton *)arcSplitScreenToolButtonAtCenter:(CGPoint)center size:(CGFloat)size {
-UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-btn.frame = CGRectMake(center.x - size / 2.0, center.y - size / 2.0, size, size);
-btn.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-btn.layer.cornerRadius = size * 0.22;
-btn.layer.borderWidth = 1.5;
-btn.layer.borderColor = [UIColor whiteColor].CGColor;
-[btn setTitle:[NSString stringWithCString:"分屏" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[btn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-btn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-[btn addTarget:self action:@selector(handleARCSplitScreenToolButton:) forControlEvents:UIControlEventTouchUpInside];
-return btn;
-}
-
-- (void)handleARCSplitScreenToolButton:(UIButton *)sender {
-(void)sender;
-GHLSSLogLine("v43 arc split screen tool tapped");
-[self dismissLauncher];
-[self openSplitScreenFromEdge];
 }
 
 // v41：長按 ARC 圖標——置頂/取消置頂（置頂的固定在最上面一段，
