@@ -1,3 +1,5 @@
+// v43.6 (1.0.81)：恢复黑窗修复——restoreHostedWindow 改尺寸之前先预抓快照（小卡最后一帧活内容），恢复动画优先播这张；改完尺寸再抓是黑的（皇上 2026-11-18 20:37 影片定案）。L4377 任务栏快照／L6410 碎裂退出快照查过：都在改尺寸之前抓，没有同样问题，原样不动。
+// v43.6 (1.0.81)：自選 App 上限 7 個→10 個（皇上 2026-11-18 20:32 點的：7 個不夠，加到 10 個）。
 // v43.5 (1.0.80)：鍵盤設置（皇上 2026-11-17 21:28–21:32 打√：6 鍵盤設置，最後一項）。
 // (a) 設定頁對齊別人那頁：豎屏／橫屏分開內／外彈出、橫屏鍵盤彈起放大浮窗、
 // 橫屏時拖動外置鍵盤（震動那項別人自己說半成品，不做）。舊 keyboardPopupMode
@@ -868,8 +870,10 @@ fclose(f);
 // 同時開 12 個窗（每 App 一個 scene 緩存，v35 規則不變）。微信就是
 // 「任何 App」裡的一個，不用單獨加——用戶在 ARC 的「＋」或設定頁選
 // 它，就進一個自選槽位。
-#define GHLSS_APP_COUNT 12
-#define GHLSS_CUSTOM_APP_COUNT 7
+// v43.6：上限提到 15 個——自選槽位 7 個→10 個（customApp1–10）；
+// 固定 5 個不動。啟動器/ARC 最多同時開 15 個窗。
+#define GHLSS_APP_COUNT 15
+#define GHLSS_CUSTOM_APP_COUNT 10
 static char GHLSSAppBundleIDs[GHLSS_APP_COUNT][128] = {
 "com.apple.calculator",
 "com.apple.mobiletimer",
@@ -896,7 +900,10 @@ static const char *GHLSSAppEnabledKeys[GHLSS_APP_COUNT] = {
 "customApp4Enabled",
 "customApp5Enabled",
 "customApp6Enabled",
-"customApp7Enabled"
+"customApp7Enabled",
+"customApp8Enabled",
+"customApp9Enabled",
+"customApp10Enabled"
 };
 // v41：自選槽位的 bundle ID 鍵（customAppNBundleID，存在同一個 prefs
 // domain；開關是上面對應的 customAppNEnabled）。
@@ -907,7 +914,10 @@ static const char *GHLSSCustomBundleIDKeys[GHLSS_CUSTOM_APP_COUNT] = {
 "customApp4BundleID",
 "customApp5BundleID",
 "customApp6BundleID",
-"customApp7BundleID"
+"customApp7BundleID",
+"customApp8BundleID",
+"customApp9BundleID",
+"customApp10BundleID"
 };
 // v40：记位置/大小的键前缀——一个 App 一个前缀，键 = "geo" + 前缀 +
 // 字段（例："geoCalculatorX"、"geoCalculatorScale"）。字段：X、Y（窗中心）、
@@ -1293,6 +1303,7 @@ static int GHLSSRestoreGateMode = 0; // v72：门控模式——0 恢复（窗�
 static UIView *GHLSSGatePlaceholders[GHLSS_APP_COUNT]; // v72：每窗一个载入占位（深灰底＋转圈＋App 名）。
 static BOOL GHLSSSuppressSlideInOnce = NO; // v72：重建 scene 时下一次建窗不滑入（直接出现在原位）。
 static UIWindow *GHLSSSnapshotAnimWindow = nil; // v72：快照动画的临时窗（播完就收掉）.
+static UIView *GHLSSRestorePreSnap = nil; // v43.6：恢复前预抓的快照（改尺寸之前抓，layer 里还是小卡最后一帧活内容；动画用完就清）。
 
 // v73：尺寸門——scene 內容尺寸對上窗 frame 才算就緒（黑半邊修復）。
 // 1.0.72 影片：設定從小卡恢復成大窗，內容只佔左邊約 55%，右邊全黑約 2 秒——
@@ -2806,7 +2817,7 @@ return GHLSSIsAppEnabled(idx);
 }
 // 把一個 App 加進/移出啟動器（ARC 的「＋」與設定頁選擇器共用同一份鍵，
 // 兩邊改了都同步）。固定 App 只改它的開關；自選 App：開時找第一個空槽位
-// 寫 bundle ID + 開關開，關時清掉那個槽位；沒空槽位就回 NO（上限 12 個）。
+// 寫 bundle ID + 開關開，關時清掉那個槽位；沒空槽位就回 NO（上限 15 個）。
 static BOOL GHLSSSetAppInLauncher(const char *bundleID, BOOL inLauncher) {
 if (!bundleID || bundleID[0] == '\0') return NO;
 int idx = GHLSSAppIndexForBundleID(bundleID);
@@ -6949,13 +6960,19 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 
 - (void)animateRestoreSnapshotFromFrame:(CGRect)fromFrame toFrame:(CGRect)toFrame ready:(BOOL)ready completion:(void (^)(void))completion {
     // v72：丝滑化——恢复先播快照动画（活内容就绪时是真快照；v74：没就绪也先试真快照，
-    // 上次快照是靜態圖、不會黑——scene 在小卡裡本來就活著，layer 裡有最後一幀；拍不到才播靜態佔位）。
+    // 拍不到才播靜態佔位）。v43.6：真快照优先用恢复前预抓的那张——改尺寸之前抓的，
+    // scene 还在小卡尺寸上合成，layer 里是小卡最后一帧；改完尺寸再现抓会是黑的。
     // 活窗尺寸一次定好（restore 里已设好），动画只动快照的 center＋transform
     //（GPU 合成，不触发布局／scene 重排），播完换回真窗。
     UIWindow *hosted = GHLSSHostedWindow;
     if (!hosted) { if (completion) completion(); return; }
-    UIView *snap = nil;
+    // v43.6：优先用预抓的快照；预抓是 nil（没抓到／这次恢复没走预抓）才走现抓；
+    // 现抓也是 nil 才走下面的静态占位（深灰＋图标＋名）。用完就清，不留着。
+    UIView *snap = GHLSSRestorePreSnap;
+    GHLSSRestorePreSnap = nil;
+    if (!snap) {
     @try { snap = [hosted snapshotViewAfterScreenUpdates:NO]; } @catch (NSException *e) { (void)e; snap = nil; }
+    }
     if (!ready && snap) GHLSSLogLine("v74 restore snapshot used");
     UIWindowScene *ws = GHLSSActiveWindowScene();
     UIWindow *overlay = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
@@ -7061,6 +7078,12 @@ GHLSSRestoreGateScene = GHLSSHostedScene;
 int idx = GHLSSActiveAppIndex;
 // v72：快照动画的起点——恢复前先记下小卡当下的框（动画从这里长到目标框）。
 CGRect restoreFromFrame = GHLSSHostedWindow.frame;
+// v43.6：恢复前先抓快照——这时窗还在小卡尺寸、scene 还在小卡尺寸上合成，
+// layer 里是小卡最后一帧活内容；等下面把窗／容器改到大窗尺寸、推 scene
+// resize 之后再抓，抓到的 layer 树是黑的（20:37 影片：微信从小卡恢复整窗黑 0.7 秒）。
+// 抓不到就是 nil，动画里再走现抓／静态占位。
+GHLSSRestorePreSnap = nil;
+@try { GHLSSRestorePreSnap = [GHLSSHostedWindow snapshotViewAfterScreenUpdates:NO]; } @catch (NSException *e) { (void)e; GHLSSRestorePreSnap = nil; }
 // v71：恢复门控——恢复先把窗藏起来（小卡点一下就消失，正常）；
 // frame 照旧长到目标尺寸、前景照旧推，等 scene 就绪再淡入显示
 //（见下面门控判断）。目标 alpha 先记下来（游戏模式会把窗调淡，
@@ -7207,7 +7230,7 @@ GHLSSLogLine("v57 foreground push on restore failed");
 }
 }
 // v72：恢复门控判断——前景刚推完，读一次 contentState：
-// 先播 0.7 秒快照动画（就绪播真快照；v74：没就绪也试真快照，拍不到才播靜態佔位），播完跑门控决策
+// 先播 0.7 秒快照动画（就绪播真快照；v74：没就绪也试真快照——v43.6 起优先用恢复前预抓的，拍不到才播靜態佔位），播完跑门控决策
 //（runRestoreGateDecision：就绪 80ms 后淡入显示；没就绪显示窗＋盖占位＋设门等）。
 // 没有目标框（idx 无效）时不播动画，直接跑门控决策。
 {
@@ -7216,10 +7239,11 @@ if (GHLSSHostedScene) {
 @try { gateCS = [GHLSSHostedScene contentState]; } @catch (NSException *e) { (void)e; gateCS = 2; }
 }
 if (restoreHasTargetFrame) {
-[self animateRestoreSnapshotFromFrame:restoreFromFrame toFrame:restoreTargetFrame ready:(gateCS == 2 && GHLSSHostedSceneSizeMatchesWindow()) completion:^{ // v74：尺寸還沒對上也試真快照（上次快照是靜態圖，不會黑）；拍不到才播靜態佔位。
+[self animateRestoreSnapshotFromFrame:restoreFromFrame toFrame:restoreTargetFrame ready:(gateCS == 2 && GHLSSHostedSceneSizeMatchesWindow()) completion:^{ // v43.6：动画优先用恢复前预抓的快照（小卡最后一帧，不会黑）；预抓 nil 才现抓，现抓不到才播静态占位。
 [self runRestoreGateDecision];
 }];
 } else {
+GHLSSRestorePreSnap = nil; // v43.6：没目标框就不播动画，预抓的快照不用了，清掉。
 [self runRestoreGateDecision];
 }
 }
@@ -9321,7 +9345,7 @@ GHLSSLogLine("v57 app picker closed");
 }
 
 // v41：選 App 頁的開關——當場勾選，立刻生效、存 CFPreferences；
-// 滿了（12 個槽位用完）開關彈回關。關掉的 App 如果正開著窗，
+// 滿了（15 個槽位用完）開關彈回關。關掉的 App 如果正開著窗，
 // 窗留著（只從啟動器拿掉，下次打不開而已）。
 - (void)handleAppPickerToggle:(UISwitch *)sender {
 NSInteger row = sender.tag;

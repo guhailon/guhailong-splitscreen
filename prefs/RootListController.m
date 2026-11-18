@@ -607,12 +607,12 @@ static int GHLSSFixedIndexForBundleID(const char *bid) {
 }
 
 // 某個 bundleID 是不是在啟動器裡（固定 App 讀開關，預設開；
-// 自選 App 看 7 個槽位裡有沒有它的 bundleID 且開關開著）。
+// 自選 App 看 10 個槽位裡有沒有它的 bundleID 且開關開著）。
 static BOOL GHLSSAppInLauncher(const char *bid) {
     if (!bid || bid[0] == '\0') return NO;
     int fixed = GHLSSFixedIndexForBundleID(bid);
     if (fixed >= 0) return GHLSSPrefsBool(GHLSSFixedEnabledKeys[fixed], YES);
-    for (int s = 1; s <= 7; s++) {
+    for (int s = 1; s <= 10; s++) {
         char slotKey[32];
         char enabledKey[32];
         snprintf(slotKey, sizeof(slotKey), "customApp%dBundleID", s);
@@ -627,7 +627,7 @@ static BOOL GHLSSAppInLauncher(const char *bid) {
 
 // 把某個 App 放進／拿出啟動器（跟主插件的 GHLSSSetAppInLauncher 同款
 // 邏輯，設定頁這邊重寫一份——設定 bundle 和主插件是兩個進程，
-// 調不到主插件的函數）。滿了（7 個自選槽位都佔了）回 NO。
+// 調不到主插件的函數）。滿了（10 個自選槽位都佔了）回 NO。
 static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
     if (!bid || bid[0] == '\0') return NO;
     int fixed = GHLSSFixedIndexForBundleID(bid);
@@ -636,7 +636,7 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
         return YES;
     }
     if (on) {
-        for (int s = 1; s <= 7; s++) {
+        for (int s = 1; s <= 10; s++) {
             char slotKey[32];
             char enabledKey[32];
             snprintf(slotKey, sizeof(slotKey), "customApp%dBundleID", s);
@@ -652,7 +652,7 @@ static BOOL GHLSSSetAppInLauncherPrefs(const char *bid, BOOL on) {
         }
         return NO;
     }
-    for (int s = 1; s <= 7; s++) {
+    for (int s = 1; s <= 10; s++) {
         char slotKey[32];
         char enabledKey[32];
         snprintf(slotKey, sizeof(slotKey), "customApp%dBundleID", s);
@@ -1010,9 +1010,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.80");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.81");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.80。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.81。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1330,7 +1330,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 // 清單讀後台緩存檔（主插件啟動 5 秒後在後台列舉、寫檔；設定頁
 // 只讀緩存，不列舉、不堵主線程）。固定 5 個永遠在最前面；
 // 自選 App 的開關 key 是 sel-<bundleID>，走 GHLSSSetAppInLauncherPrefs
-// 的槽位邏輯（7 個自選槽位）。
+// 的槽位邏輯（10 個自選槽位）。
 // v55：選 App 頁每行掛 App 圖標（UIImage 取 App 圖標的私有方法，走運行時拿；
 // 拿不到就回 nil、行只顯示名字，不擋列表、不閃退）。圖標按 bundleID 快取，
 // 開頁只取一次（清單上百個也不卡）。
@@ -1432,7 +1432,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
             if ([self ghlssIsGamePicker]) {
                 [group setProperty:GHLSSRuntimeString("选哪些 App 算游戏：进这些 App 自动开游戏模式（浮窗变淡、缩边、防误触；出来自动恢复）。开关只管游戏清单，不影响启动器。") forKey:footerKey];
             } else {
-                [group setProperty:GHLSSRuntimeString("开的 App 出现在启动器/ARC 里（最多 12 个，自选 7 个）。清单在后台列举、缓存起来；刚装的 App 可能要等一会儿才出现，缺 App 时点下面「重新扫描」。") forKey:footerKey];
+                [group setProperty:GHLSSRuntimeString("开的 App 出现在启动器/ARC 里（最多 15 个，自选 10 个）。清单在后台列举、缓存起来；刚装的 App 可能要等一会儿才出现，缺 App 时点下面「重新扫描」。") forKey:footerKey];
             }
             [specs addObject:group];
             // v50：重新掃描（清單是後台列舉的緩存，舊了會缺 App；點一下請
@@ -1546,7 +1546,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
 }
 
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
-    // v56：遊戲模式——開關寫遊戲清單（沒有 7 個上限，不彈自選已滿提示）。
+    // v56：遊戲模式——開關寫遊戲清單（沒有 10 個上限，不彈自選已滿提示）。
     if ([self ghlssIsGamePicker]) {
         BOOL on = [value boolValue];
         NSString *bidStr = specifier.properties[GHLSSRuntimeString("ghlssGameBid")];
@@ -1575,8 +1575,8 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
         snprintf(buf, sizeof(buf), "v57 prefs-set: sel %s = %d ok %d", [bidStr UTF8String], on ? 1 : 0, ok ? 1 : 0);
         GHLSSPrefsLogLine(buf);
         if (!ok && on) {
-            // 自選槽位滿了（7 個）：開關彈回關，告訴用戶。
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("自选 App 已满") message:GHLSSRuntimeString("最多加 7 个自选 App，先关掉一个再加。") preferredStyle:UIAlertControllerStyleAlert];
+            // 自選槽位滿了（10 個）：開關彈回關，告訴用戶。
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("自选 App 已满") message:GHLSSRuntimeString("最多加 10 个自选 App，先关掉一个再加。") preferredStyle:UIAlertControllerStyleAlert];
             UIAlertAction *okAction = [UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil];
             [alert addAction:okAction];
             [self presentViewController:alert animated:YES completion:nil];
@@ -1659,12 +1659,12 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             }
         }
     }
-    // 預設順序：固定 5 個照槽位，再加自選槽 1–7 照槽位。
+    // 預設順序：固定 5 個照槽位，再加自選槽 1–10 照槽位。
     for (int i = 0; i < 5; i++) {
         NSString *bid = [NSString stringWithCString:GHLSSFixedBundleIDs[i] encoding:NSUTF8StringEncoding];
         if (GHLSSAppInLauncher(GHLSSFixedBundleIDs[i]) && ![ordered containsObject:bid]) [ordered addObject:bid];
     }
-    for (int sl = 1; sl <= 7; sl++) {
+    for (int sl = 1; sl <= 10; sl++) {
         char slotKey[32];
         snprintf(slotKey, sizeof(slotKey), "customApp%dBundleID", sl);
         char *slotBid = GHLSSPrefsCString(slotKey);
@@ -3594,7 +3594,7 @@ static NSString *GHLSSGestureActionName(const char *value) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.80\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.81\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("诊断信息已复制到剪贴板。")];
