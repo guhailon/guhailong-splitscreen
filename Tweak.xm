@@ -4832,6 +4832,16 @@ GHLSSLogLine("v43.13 edge swipe 2nd, opening three screen");
 } else {
 GHLSSLastSwipeTime = now;
 GHLSSLogLine("v57 edge swipe 1st, armed");
+// v43.15：第 1 下待命给轻震回饋（Lee 2026-11-21 定「肯定给反应」），沿用 ARC 震动开关。
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+GHLSSLogLine("v57 edge swipe 1st haptic");
+} @catch (NSException *e) {
+(void)e;
+}
+}
 }
 return;
 }
@@ -4849,6 +4859,16 @@ GHLSSLogLine("v43.4 edge swipe 2nd, opening split pair");
 } else {
 GHLSSLastSwipeTime = now;
 GHLSSLogLine("v57 edge swipe 1st, armed");
+// v43.15：第 1 下待命给轻震回饋（Lee 2026-11-21 定「肯定给反应」），沿用 ARC 震动开关。
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+GHLSSLogLine("v57 edge swipe 1st haptic");
+} @catch (NSException *e) {
+(void)e;
+}
+}
 }
 }
 
