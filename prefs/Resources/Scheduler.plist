@@ -73,14 +73,6 @@
 			<string>浮窗手势</string>
 		</dict>
 		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GestureCustom</string>
-			<key>label</key>
-			<string>手势自定义</string>
-		</dict>
-		<dict>
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>

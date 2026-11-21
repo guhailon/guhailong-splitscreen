@@ -50,13 +50,79 @@
 			<key>key</key>
 			<string>taskbarEnabled</string>
 			<key>label</key>
-			<string>底部任务栏</string>
+			<string>任务栏</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>屏幕底下一条任务栏，开著的窗都在上面（图标＋绿点），点一下切到那个窗；开了 2 秒内建好，不用 respring。</string>
+			<string>屏幕上一条任务栏（放底部或顶部），开著的窗都在上面，点一下切到那个窗；开了 2 秒内建好，不用 respring。</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>bottom</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>taskbarPosition</string>
+			<key>label</key>
+			<string>任务栏位置</string>
+			<key>validTitles</key>
+			<array>
+				<string>底部</string>
+				<string>顶部</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>bottom</string>
+				<string>top</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>1.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>taskbarOpacity</string>
+			<key>label</key>
+			<string>任务栏透明度</string>
+			<key>max</key>
+			<real>1.0</real>
+			<key>min</key>
+			<real>0.0</real>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>1.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>taskbarScale</string>
+			<key>label</key>
+			<string>任务栏大小</string>
+			<key>max</key>
+			<real>1.3</real>
+			<key>min</key>
+			<real>0.7</real>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>任务栏放底部或顶部；透明度 1.0 就是现在的样子，调低变透明；大小 1.0 就是现在的尺寸。改了立刻生效，不用 respring。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

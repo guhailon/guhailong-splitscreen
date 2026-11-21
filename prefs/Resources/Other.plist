@@ -20,38 +20,6 @@
 			<key>label</key>
 			<string>悬浮图标设置</string>
 		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>Scheduler</string>
-			<key>label</key>
-			<string>改边缘滑动</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>FloatingIcon</string>
-			<key>label</key>
-			<string>改哆啦A梦钮</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GestureCustom</string>
-			<key>label</key>
-			<string>改手势绑定</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>Window</string>
-			<key>label</key>
-			<string>改拖窗与点窗外</string>
-		</dict>
 	</array>
 	<key>title</key>
 	<string>其他杂项功能</string>

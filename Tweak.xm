@@ -1155,7 +1155,7 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // 5.2 托管悬浮窗的主人。视图全部用苹果的类，不再加自定义视图子类。
 // v42：它同时是浮窗設定卡片的 UITableView 資料源/代理（卡片的表
 // 格、開關、滑桿、分段控制都走它，不另加自訂類）。
-@interface GHLSSLauncher : NSObject <UIGestureRecognizerDelegate>
+@interface GHLSSLauncher : NSObject <UIGestureRecognizerDelegate, UIScrollViewDelegate>
 - (void)handleEdgeSwipe:(UIScreenEdgePanGestureRecognizer *)recognizer;
 - (void)handleDoraemonButtonDrag:(UIPanGestureRecognizer *)recognizer;
 - (void)handleDoraemonButtonLongPress:(UILongPressGestureRecognizer *)recognizer;
@@ -1217,6 +1217,16 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)handleGameToolboxRecord:(UIButton *)sender;
 - (CGFloat)addARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
 - (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
+// v43.19：啟動器新樣式——側邊欄／抽屜／橫向輪盤／磁貼（grid 已刪，不再調
+// addARCIconsForBids，那個函數留著不動）。
+- (CGFloat)addSidebarLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
+- (CGFloat)addDrawerLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
+- (CGFloat)addCarouselLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
+- (CGFloat)addTileLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
+- (void)handleSidebarCollapseButton:(UIButton *)sender;
+- (void)handleDrawerPan:(UIPanGestureRecognizer *)recognizer;
+- (void)carouselUpdateForScrollView:(UIScrollView *)scrollView;
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView;
 - (UIButton *)arcIconButtonForBundleID:(const char *)bid name:(const char *)name tag:(NSInteger)tag action:(SEL)action atCenter:(CGPoint)center size:(CGFloat)size withName:(BOOL)withName;
 // v43.2：圓環中央大設定齒輪。
 - (UIButton *)arcRadialGearButtonAtCenter:(CGPoint)center size:(CGFloat)size;
@@ -1242,6 +1252,9 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // v42：底部任務欄、ARC 設置入口、
 // 鍵盤上移、設定卡片（見下面卡片段；v53：懸浮球已拿掉）。
 - (void)handleTaskbarButton:(UIButton *)sender;
+// v43.16：任務欄芯片右上角紅 ×（關窗）、長按菜單。
+- (void)handleTaskbarCloseButton:(UIButton *)sender;
+- (void)handleTaskbarChipLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)openPairWithBundleIDs:(const char *)mainBid mainName:(const char *)mainName sideBid:(const char *)sideBid sideName:(const char *)sideName;
 - (void)openThreeScreenFromEdge;
 - (void)checkPendingPairOpen;
@@ -1261,6 +1274,13 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 static UIWindow *GHLSSStripWindow = nil;
 static UIWindow *GHLSSLauncherWindow = nil;
 static UIView *GHLSSLauncherContentView = nil; // v55：ARC 啟動器透明覆蓋層（只有 App 圖標，沒有面板）。
+// v43.19：抽屜下滑關閉記面板起點 Y；橫向輪盤記 scroll view／卡片／
+// 圓點／頁寬（scrollViewDidScroll 時按中心卡片縮放＋改圓點）。
+static CGFloat GHLSSDrawerPanelBaseY = 0;
+static UIScrollView *GHLSSCarouselScrollView = nil;
+static NSArray *GHLSSCarouselCards = nil;
+static UIPageControl *GHLSSCarouselPageControl = nil;
+static CGFloat GHLSSCarouselPageWidth = 0;
 static CGFloat GHLSSLauncherAnchorY = -1; // v55：啟動器弧心 Y（哆啦A夢鈕中心或邊緣滑動手指位置）。
 static UIWindow *GHLSSLauncherBackdropWindow = nil;
 static char GHLSSAppPickerBids[256][128]; // v41：選 App 頁每一行的 bundleID（開關 tag = 行號）。
@@ -1474,6 +1494,7 @@ static NSArray *GHLSSReadIDList(const char *key);
 static void GHLSSWriteIDList(const char *key, NSArray *ids);
 // v70：先声明（下面定义；各处要用，先声明）。
 static int GHLSSReadExitAnimation(void);
+static int GHLSSReadLauncherStyle(void);
 static BOOL GHLSSReadLauncherStyleRadial(void);
 static CGFloat GHLSSReadWindowSizePercent(void);
 static void GHLSSHangWindowForIndex(int idx);
@@ -2302,11 +2323,31 @@ return GHLSSReadPrefsBool("enlargeOnExternalKeyboard", NO);
 // v54：外置鍵盤收起同時關閉浮窗（closeWindowOnExternalKeyboardHide，
 // 預設開）：只在外彈出模式下生效；內彈出收起時照舊只回原位。
 static BOOL GHLSSReadCloseWindowOnExternalKeyboardHide(void) {
-return GHLSSReadPrefsBool("closeWindowOnExternalKeyboardHide", YES);
+return GHLSSReadPrefsBool("closeWindowOnExternalKeyboardHide", NO);
 }
 // C7 底部任務欄（預設關；開了 2 秒內建欄，不用 respring）。
 static BOOL GHLSSReadTaskbarEnabled(void) {
 return GHLSSReadPrefsBool("taskbarEnabled", NO);
+}
+// v43.16 C：任務欄位置（bottom/top，預設 bottom）、透明度（0–1 乘子，
+// 預設 1.0＝現在樣子，套在 0.85 黑底上）、大小（0.7–1.3 倍，預設 1.0＝現在尺寸）。
+static BOOL GHLSSReadTaskbarIsTop(void) {
+char *v = GHLSSReadPrefsCString("taskbarPosition");
+BOOL top = (v && strcmp(v, "top") == 0);
+if (v) free(v);
+return top;
+}
+static CGFloat GHLSSReadTaskbarOpacity(void) {
+double v = GHLSSReadPrefsDouble("taskbarOpacity", 1.0);
+if (v < 0.0) v = 0.0;
+if (v > 1.0) v = 1.0;
+return (CGFloat)v;
+}
+static CGFloat GHLSSReadTaskbarScale(void) {
+double v = GHLSSReadPrefsDouble("taskbarScale", 1.0);
+if (v < 0.7) v = 0.7;
+if (v > 1.3) v = 1.3;
+return (CGFloat)v;
 }
 // C8 浮窗透明度：全域預設（0.5–1.0，預設 1.0）與每窗值（winOpacity_<bid>，
 // 沒設就走全域；調的是窗的 alpha）。
@@ -2415,15 +2456,23 @@ free(v);
 }
 return a;
 }
-// v70：啟動器樣式（launcherStyle 字串：grid／radial）。
-// v43.2：預設改圓環——沒設過（沒值）＝radial，明確選 grid 才走格狀；
-// 設過 radial 照舊 radial，髒值走格狀（跟舊行為一樣）。
-static BOOL GHLSSReadLauncherStyleRadial(void) {
+// v43.19：啟動器樣式五檔（launcherStyle 字串）：radial 圓環（預設）、
+// sidebar 側邊欄、drawer 抽屜、carousel 橫向輪盤、tile 磁貼。grid 已刪——
+// 存過的 "grid" 和未知值都當 radial（舊格狀用戶遷回圓環）。
+static int GHLSSReadLauncherStyle(void) {
 char *v = GHLSSReadPrefsCString("launcherStyle");
-if (!v) return YES;
-BOOL r = (strcmp(v, "radial") == 0);
+int s = 0;
+if (v) {
+if (strcmp(v, "sidebar") == 0) s = 1;
+else if (strcmp(v, "drawer") == 0) s = 2;
+else if (strcmp(v, "carousel") == 0) s = 3;
+else if (strcmp(v, "tile") == 0) s = 4;
 free(v);
-return r;
+}
+return s;
+}
+static BOOL GHLSSReadLauncherStyleRadial(void) {
+return GHLSSReadLauncherStyle() == 0;
 }
 // v70：浮窗大小百分比（windowSizePercent 50–100，預設 100（1.0.80 改回：
 // 55 太小，Lee 要上一版的尺寸；v43.3 曾照 S2 值改成 55）；夾住）。
@@ -4505,15 +4554,25 @@ GHLSSSettingsTaskbarWindow.hidden = YES;
 return;
 }
 UIView *root = GHLSSSettingsTaskbarWindow.rootViewController.view;
+// v43.16 C：位置／透明度／大小每次刷新都重套（設定一改 prefschanged
+// 就調 GHLSSUpdateTaskbar，立刻生效；2 秒輪詢也會重套，最多 2 秒）。
+CGFloat tbScale = GHLSSReadTaskbarScale();
+CGFloat tbBarH = 52.0 * tbScale;
+CGRect tbScreen = [UIScreen mainScreen].bounds;
+CGFloat tbY = GHLSSReadTaskbarIsTop() ? 8.0 : tbScreen.size.height - 8.0 - tbBarH;
+GHLSSSettingsTaskbarWindow.frame = CGRectMake(0, tbY, tbScreen.size.width, tbBarH);
+root.frame = CGRectMake(0, 0, tbScreen.size.width, tbBarH);
+root.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85 * GHLSSReadTaskbarOpacity()];
+root.layer.cornerRadius = 16.0 * tbScale;
 for (UIView *sub in [root.subviews copy]) [sub removeFromSuperview];
 int count = 0;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (!GHLSSCacheWindows[i]) continue;
 const char *bid = GHLSSCacheBundleIDs[i];
 if (!bid || bid[0] == '\0') continue;
-CGFloat x = 8.0 + count * 44.0;
+CGFloat x = 8.0 * tbScale + count * 44.0 * tbScale;
 UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-btn.frame = CGRectMake(x, 8, 36, 36);
+btn.frame = CGRectMake(x, 8.0 * tbScale, 36.0 * tbScale, 36.0 * tbScale);
 btn.tag = i;
 // v54：任務欄浮窗 App 快照——每顆按鈕顯示該 App 宿主窗的快照（探針：
 // 宿主層不一定抓得到快照，抓不到回退 App 圖標）；藏著的窗不抓（快照是空的）。
@@ -4527,8 +4586,8 @@ snapView = [hostWin snapshotViewAfterScreenUpdates:NO];
 } @catch (NSException *e) { (void)e; snapView = nil; }
 }
 if (snapView) {
-snapView.frame = CGRectMake(0, 0, 36, 36);
-snapView.layer.cornerRadius = 8.0;
+snapView.frame = CGRectMake(0, 0, 36.0 * tbScale, 36.0 * tbScale);
+snapView.layer.cornerRadius = 8.0 * tbScale;
 snapView.layer.masksToBounds = YES;
 snapView.userInteractionEnabled = NO;
 [btn addSubview:snapView];
@@ -4544,16 +4603,37 @@ if (icon) {
 btn.backgroundColor = [UIColor grayColor];
 }
 }
-btn.imageView.layer.cornerRadius = 8.0;
+btn.imageView.layer.cornerRadius = 8.0 * tbScale;
 btn.imageView.layer.masksToBounds = YES;
 [btn addTarget:GHLSSLauncherShared action:@selector(handleTaskbarButton:) forControlEvents:UIControlEventTouchUpInside];
+// v43.16 B：芯片長按菜單（設為主窗／收成小卡／關閉）。長按認出時會取消
+// 按鈕的觸摸，所以長按不會誤觸點按切主窗；快點則在長按認出前就觸發切主窗。
+UILongPressGestureRecognizer *tbLP = [[UILongPressGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleTaskbarChipLongPress:)];
+[btn addGestureRecognizer:tbLP];
 [root addSubview:btn];
+// v43.16 B：芯片右上角紅 ×（關窗）。× 是 root 的子視圖（不是 btn 的，
+// 不然超出 btn 邊界的上半截點不到），後加所以在最上層；點 × 只走關窗，
+// 不會觸發芯片的切主窗（UIButton 子視圖自己吃掉觸摸）。
+UIButton *tbClose = [UIButton buttonWithType:UIButtonTypeCustom];
+tbClose.frame = CGRectMake(x + 36.0 * tbScale - 7.0 * tbScale, 8.0 * tbScale - 7.0 * tbScale, 14.0 * tbScale, 14.0 * tbScale);
+tbClose.tag = i;
+tbClose.backgroundColor = [UIColor redColor];
+tbClose.layer.cornerRadius = 7.0 * tbScale;
+tbClose.layer.borderWidth = 1.0;
+tbClose.layer.borderColor = [UIColor whiteColor].CGColor;
+[tbClose setTitle:[NSString stringWithCString:"\xC3\x97" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[tbClose setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+tbClose.titleLabel.font = [UIFont boldSystemFontOfSize:10.0 * tbScale];
+[tbClose addTarget:GHLSSLauncherShared action:@selector(handleTaskbarCloseButton:) forControlEvents:UIControlEventTouchUpInside];
+[root addSubview:tbClose];
 BOOL isOpen = !GHLSSCacheWindows[i].hidden && !GHLSSCacheMinimized[i];
 BOOL isMain = (i == GHLSSActiveAppIndex);
 if (isOpen || GHLSSCacheMinimized[i]) {
-UIView *dot = [[UIView alloc] initWithFrame:CGRectMake(x + 26, 8, 10, 10)];
+// v43.16 B：狀態點移到芯片右下角——右上角讓給紅 ×，不然兩個疊在一起。
+// 顏色不變：金點主窗、綠點已開。
+UIView *dot = [[UIView alloc] initWithFrame:CGRectMake(x + 26.0 * tbScale, 8.0 * tbScale + 36.0 * tbScale - 10.0 * tbScale, 10.0 * tbScale, 10.0 * tbScale)];
 dot.backgroundColor = isMain ? [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0] : [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:1.0];
-dot.layer.cornerRadius = 5.0;
+dot.layer.cornerRadius = 5.0 * tbScale;
 dot.layer.borderWidth = 1.0;
 dot.layer.borderColor = [UIColor whiteColor].CGColor;
 [root addSubview:dot];
@@ -4563,15 +4643,15 @@ count++;
 // v50：任務欄末尾「全部收起」鈕（有窗才顯示；點一下把所有看得見的
 // 浮窗都收成貼邊小卡，走低電量同一套收窗迴圈）。
 if (count > 0) {
-CGFloat bx = 8.0 + count * 44.0;
+CGFloat bx = 8.0 * tbScale + count * 44.0 * tbScale;
 UIButton *dockAllBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-dockAllBtn.frame = CGRectMake(bx, 8, 56, 36);
+dockAllBtn.frame = CGRectMake(bx, 8.0 * tbScale, 56.0 * tbScale, 36.0 * tbScale);
 dockAllBtn.tag = 99;
 dockAllBtn.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-dockAllBtn.layer.cornerRadius = 8.0;
+dockAllBtn.layer.cornerRadius = 8.0 * tbScale;
 [dockAllBtn setTitle:[NSString stringWithCString:"全部收起" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
 [dockAllBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-dockAllBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+dockAllBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11.0 * tbScale];
 [dockAllBtn addTarget:GHLSSLauncherShared action:@selector(handleTaskbarButton:) forControlEvents:UIControlEventTouchUpInside];
 [root addSubview:dockAllBtn];
 }
@@ -4845,6 +4925,14 @@ return YES;
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
 if (gestureRecognizer.view == GHLSSDoraemonButton) return YES;
 if ([touch.view isKindOfClass:[UIButton class]]) return NO;
+// v43.19：新樣式的面板（9101 側邊欄／9102 抽屜／9103 輪盤 scroll view／
+// 9104 磁貼卡）裡面的空白處點下去不收起啟動器（面板自己接手勢；點面板
+// 外面才收）。格狀／圓環沒有面板，行為不變。
+UIView *tv = touch.view;
+while (tv) {
+if (tv.tag == 9101 || tv.tag == 9102 || tv.tag == 9103 || tv.tag == 9104) return NO;
+tv = tv.superview;
+}
 return YES;
 }
 
@@ -7867,6 +7955,59 @@ if (!GHLSSCacheWindows[idx]) return;
 GHLSSUpdateTaskbar();
 }
 
+// v43.16 B：任務欄芯片右上角紅 ×——先升為主窗再走現有關窗路
+//（closeHostedWindow 自己調 GHLSSUpdateTaskbar，芯片跟著消失）。
+- (void)handleTaskbarCloseButton:(UIButton *)sender {
+NSInteger idx = sender.tag;
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheWindows[idx]) return;
+[self promoteWindowToMainIndex:(int)idx];
+[self closeHostedWindow];
+char buf[96];
+snprintf(buf, sizeof(buf), "v43.16 taskbar close chip %d", (int)idx);
+GHLSSLogLine(buf);
+}
+
+// v43.16 B：芯片長按菜單——設為主窗／收成小卡／關閉，三個都走現有路
+//（點芯片的切主窗路、minimizeHostedWindow、closeHostedWindow）。
+// 只在 Began 認出一次；長按認出會取消按鈕觸摸，不會誤觸切主窗。
+- (void)handleTaskbarChipLongPress:(UILongPressGestureRecognizer *)recognizer {
+if (recognizer.state != UIGestureRecognizerStateBegan) return;
+NSInteger idx = recognizer.view.tag;
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheWindows[idx]) return;
+UIViewController *vc = GHLSSSettingsTaskbarWindow.rootViewController;
+if (!vc) return;
+UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+UIAlertAction *mainAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"设为主窗" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+(void)a;
+[self promoteWindowToMainIndex:(int)idx];
+GHLSSUpdateTaskbar();
+}];
+UIAlertAction *dockAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"收成小卡" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+(void)a;
+[self promoteWindowToMainIndex:(int)idx];
+[self minimizeHostedWindow];
+GHLSSUpdateTaskbar();
+}];
+UIAlertAction *closeAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"关闭" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
+(void)a;
+[self promoteWindowToMainIndex:(int)idx];
+[self closeHostedWindow];
+}];
+UIAlertAction *cancelAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"取消" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleCancel handler:nil];
+[sheet addAction:mainAct];
+[sheet addAction:dockAct];
+[sheet addAction:closeAct];
+[sheet addAction:cancelAct];
+sheet.popoverPresentationController.sourceView = recognizer.view;
+sheet.popoverPresentationController.sourceRect = recognizer.view.bounds;
+[vc presentViewController:sheet animated:YES completion:nil];
+char buf[96];
+snprintf(buf, sizeof(buf), "v43.16 taskbar long press chip %d", (int)idx);
+GHLSSLogLine(buf);
+}
+
 // v42：ARC 裡的「設置」——收起 ARC，開浮窗設定卡片。
 
 
@@ -8730,6 +8871,20 @@ UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithS
 }
 }
 
+// v43.19：遞迴收啟動器裡的按鈕——新樣式的按鈕在 scroll view／面板裡面，
+// 不是 contentView 的直接子視圖；面板容器（9101 側邊欄／9102 抽屜／
+// 9103 輪盤 scroll view／9104 磁貼卡／9105 輪盤圓點）一起淡出。
+static void GHLSSCollectLauncherFlyers(UIView *view, NSMutableArray *flyers, NSMutableArray *panels) {
+for (UIView *sub in view.subviews) {
+if ([sub isKindOfClass:[UIButton class]]) {
+[flyers addObject:sub];
+} else {
+if (sub.tag == 9101 || sub.tag == 9102 || sub.tag == 9103 || sub.tag == 9104 || sub.tag == 9105) [panels addObject:sub];
+GHLSSCollectLauncherFlyers(sub, flyers, panels);
+}
+}
+}
+
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherVisible = NO;
@@ -8740,11 +8895,11 @@ GHLSSLauncherVisible = NO;
 // GHLSSLauncherVisible 守衛），不會把新開的啟動器藏掉。
 BOOL toolbox = (GHLSSGameModeActive && GHLSSReadGameModeEnabled());
 NSMutableArray *flyers = nil;
+NSMutableArray *panels = nil;
 if (!toolbox && GHLSSLauncherContentView) {
 flyers = [NSMutableArray array];
-for (UIView *sub in [GHLSSLauncherContentView subviews]) {
-if ([sub isKindOfClass:[UIButton class]]) [flyers addObject:sub];
-}
+panels = [NSMutableArray array];
+GHLSSCollectLauncherFlyers(GHLSSLauncherContentView, flyers, panels);
 }
 UIWindow *dismissWin = GHLSSLauncherWindow;
 UIWindow *dismissBgWin = GHLSSLauncherBackdropWindow;
@@ -8768,6 +8923,7 @@ btn.center = CGPointMake(c.x + dx / len * 140.0, c.y + dy / len * 140.0);
 btn.alpha = 0.0;
 btn.transform = CGAffineTransformMakeScale(0.6, 0.6);
 }
+for (UIView *panel in panels) panel.alpha = 0.0;
 if (dismissBgRoot) dismissBgRoot.alpha = 0.0;
 } completion:^(BOOL finished) {
 (void)finished;
@@ -8776,6 +8932,7 @@ if (GHLSSLauncherWindow == dismissWin) GHLSSLauncherWindow.hidden = YES;
 if (dismissBgWin) dismissBgWin.hidden = YES;
 }
 if (dismissBgRoot) dismissBgRoot.alpha = 1.0;
+for (UIView *panel in panels) panel.alpha = 1.0;
 GHLSSLogLine("v57 launcher dismissed");
 }];
 }
@@ -8847,6 +9004,10 @@ GHLSSLogLine("v57 launcher built");
 GHLSSLoadCustomApps();
 if (!GHLSSLauncherContentView) return;
 for (UIView *sub in [GHLSSLauncherContentView.subviews copy]) [sub removeFromSuperview];
+// v43.19：橫向輪盤的靜態指標清掉（舊 scroll view 已拆掉，下次重建再填）。
+GHLSSCarouselScrollView = nil;
+GHLSSCarouselCards = nil;
+GHLSSCarouselPageControl = nil;
 // v63：遊戲工具箱——遊戲模式激活時顯示精簡工具箱，取代正常的置頂／最近／
 // 全部三段；沒激活時 ARC 保持原樣，一點不動。
 if (GHLSSGameModeActive && GHLSSReadGameModeEnabled()) {
@@ -8896,19 +9057,31 @@ return;
 // v43.4：啟動器裡的「分屏」「三屏」工具鈕已拿掉（皇上 2026-11-18 說沒必要留），
 // 只排 App 圖標。
 GHLSSLogLine("v43.4 launcher no tool buttons");
-// v70：啟動器樣式——radial 時圖標排成圓環（見下面 addRadialARCIconsForBids），
-// 否則走原來的格狀弧圈（addARCIconsForBids）。
-// v72：樣式分支記一行（radial／grid），下次日誌證明讀值有沒有到。
-BOOL radialStyle = GHLSSReadLauncherStyleRadial();
+// v43.19：啟動器樣式五檔——0 圓環（預設，見 addRadialARCIconsForBids）、
+// 1 側邊欄、2 抽屜、3 橫向輪盤、4 磁貼（見下面四個新函數）。grid 已刪，
+// 讀值處已把 "grid"／未知值當 radial（見 GHLSSReadLauncherStyle）。
+// v72：樣式分支記一行，下次日誌證明讀值有沒有到。
+int launcherStyle = GHLSSReadLauncherStyle();
 {
+const char *styleName = "radial";
+if (launcherStyle == 1) styleName = "sidebar";
+else if (launcherStyle == 2) styleName = "drawer";
+else if (launcherStyle == 3) styleName = "carousel";
+else if (launcherStyle == 4) styleName = "tile";
 char sbuf[64];
-snprintf(sbuf, sizeof(sbuf), "v72 launcher style %s", radialStyle ? "radial" : "grid");
+snprintf(sbuf, sizeof(sbuf), "v43.19 launcher style %s", styleName);
 GHLSSLogLine(sbuf);
 }
-if (radialStyle) {
-[self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+if (launcherStyle == 1) {
+[self addSidebarLauncherIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+} else if (launcherStyle == 2) {
+[self addDrawerLauncherIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+} else if (launcherStyle == 3) {
+[self addCarouselLauncherIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+} else if (launcherStyle == 4) {
+[self addTileLauncherIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
 } else {
-[self addARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+[self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
 }
 GHLSSLogLine("v57 launcher icons only");
 }
@@ -9334,6 +9507,373 @@ snprintf(sbuf, sizeof(sbuf), "v43.2 radial icons=%d size=%d rings=%d", (int)tota
 GHLSSLogLine(sbuf);
 }
 return maxBottom + 12.0;
+}
+
+// v43.19：側邊欄式——邊緣滑出來（跟圓環／格狀一樣由邊緣滑動叫出，不常駐）。
+// 屏幕貼邊一條深色圓角豎欄（跟滑出方向走：左／右），圖標往下排，點一個開
+// 一個浮窗；裝不下就上下滾。頂上小箭頭點一下收起啟動器。
+- (CGFloat)addSidebarLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
+if (!bids || [bids count] == 0) return 0;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat screenW = screenBounds.size.width;
+CGFloat screenH = screenBounds.size.height;
+CGFloat icon = size;
+if (icon < 40.0) icon = 40.0;
+if (icon > 72.0) icon = 72.0;
+CGFloat gap = 8.0;
+CGFloat pad = 8.0;
+CGFloat barW = icon + pad * 2.0;
+NSInteger n = (NSInteger)[bids count];
+CGFloat contentH = 28.0 + n * (icon + gap) - gap + pad;
+CGFloat maxBarH = screenH - 48.0;
+CGFloat barH = contentH > maxBarH ? maxBarH : contentH;
+BOOL slideLeft = GHLSSIsARCSlideLeft();
+CGFloat barX = slideLeft ? 4.0 : screenW - barW - 4.0;
+CGFloat barY = (screenH - barH) / 2.0;
+UIView *bar = [[UIView alloc] initWithFrame:CGRectMake(barX, barY, barW, barH)];
+bar.tag = 9101;
+bar.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+bar.layer.cornerRadius = barW / 2.0;
+bar.layer.masksToBounds = YES;
+[GHLSSLauncherContentView addSubview:bar];
+UIButton *collapseBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+collapseBtn.frame = CGRectMake(0, 4.0, barW, 20.0);
+[collapseBtn setTitle:[NSString stringWithCString:(slideLeft ? "\xE2\x80\xBA" : "\xE2\x80\xB9") encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
+[collapseBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+collapseBtn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+[collapseBtn addTarget:self action:@selector(handleSidebarCollapseButton:) forControlEvents:UIControlEventTouchUpInside];
+[bar addSubview:collapseBtn];
+UIScrollView *sv = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 28.0, barW, barH - 28.0 - pad)];
+sv.showsVerticalScrollIndicator = NO;
+sv.showsHorizontalScrollIndicator = NO;
+[bar addSubview:sv];
+CGFloat y = 0;
+for (NSInteger i = 0; i < n; i++) {
+id item = [bids objectAtIndex:i];
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+if (!bid || bid[0] == '\0') continue;
+char nameBuf[128];
+GHLSSAppNameForBundleID(bid, nameBuf, sizeof(nameBuf));
+NSInteger tag = GHLSSAppIndexForBundleID(bid);
+if (tag < 0) continue;
+UIButton *btn = [self arcIconButtonForBundleID:bid name:nameBuf tag:tag action:action atCenter:CGPointMake(barW / 2.0, y + icon / 2.0) size:icon withName:NO];
+[sv addSubview:btn];
+y += icon + gap;
+}
+sv.contentSize = CGSizeMake(barW, y > 0 ? y - gap : 0);
+{
+char sbuf[96];
+snprintf(sbuf, sizeof(sbuf), "v43.19 sidebar icons=%d size=%d side=%s", (int)n, (int)icon, slideLeft ? "left" : "right");
+GHLSSLogLine(sbuf);
+}
+return barH;
+}
+
+- (void)handleSidebarCollapseButton:(UIButton *)sender {
+(void)sender;
+[self dismissLauncher];
+}
+
+// v43.19：抽屜式——底部半屏抽屜（高＝屏高 55%），頂上有拖動條和「全部 App」
+// 標題，裡面 4 列 App 格子（帶名字，可上下滾）。拖頂部拖動區往下滑超過
+// 120pt（或甩速夠快）就關抽屜，否則彈回；點抽屜外面也關（跟其他樣式一樣）。
+- (CGFloat)addDrawerLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
+if (!bids || [bids count] == 0) return 0;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat screenW = screenBounds.size.width;
+CGFloat screenH = screenBounds.size.height;
+CGFloat icon = size;
+if (icon < 40.0) icon = 40.0;
+if (icon > 72.0) icon = 72.0;
+CGFloat panelH = screenH * 0.55;
+CGFloat panelY = screenH - panelH;
+UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(0, panelY, screenW, panelH)];
+panel.tag = 9102;
+panel.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.97];
+panel.layer.cornerRadius = 24.0;
+panel.layer.masksToBounds = YES;
+[GHLSSLauncherContentView addSubview:panel];
+UIView *dragZone = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenW, 56.0)];
+dragZone.backgroundColor = [UIColor clearColor];
+[panel addSubview:dragZone];
+UIView *handle = [[UIView alloc] initWithFrame:CGRectMake((screenW - 36.0) / 2.0, 8.0, 36.0, 5.0)];
+handle.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.4];
+handle.layer.cornerRadius = 2.5;
+[dragZone addSubview:handle];
+UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20.0, 22.0, screenW - 40.0, 24.0)];
+title.text = [NSString stringWithCString:"全部 App" encoding:NSUTF8StringEncoding];
+title.textColor = [UIColor whiteColor];
+title.font = [UIFont boldSystemFontOfSize:17];
+[dragZone addSubview:title];
+UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleDrawerPan:)];
+[dragZone addGestureRecognizer:pan];
+CGFloat cols = 4.0;
+CGFloat margin = 16.0;
+CGFloat cellW = (screenW - margin * 2.0) / cols;
+CGFloat cellH = icon + 18.0;
+CGFloat gridTop = 56.0;
+UIScrollView *sv = [[UIScrollView alloc] initWithFrame:CGRectMake(0, gridTop, screenW, panelH - gridTop)];
+sv.showsVerticalScrollIndicator = NO;
+sv.showsHorizontalScrollIndicator = NO;
+[panel addSubview:sv];
+NSInteger n = (NSInteger)[bids count];
+NSInteger placed = 0;
+for (NSInteger i = 0; i < n; i++) {
+id item = [bids objectAtIndex:i];
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+if (!bid || bid[0] == '\0') continue;
+char nameBuf[128];
+GHLSSAppNameForBundleID(bid, nameBuf, sizeof(nameBuf));
+NSInteger tag = GHLSSAppIndexForBundleID(bid);
+if (tag < 0) continue;
+NSInteger row = placed / 4;
+NSInteger col = placed % 4;
+CGFloat cx = margin + cellW * col + cellW / 2.0;
+CGFloat cy = row * cellH + icon / 2.0;
+UIButton *btn = [self arcIconButtonForBundleID:bid name:nameBuf tag:tag action:action atCenter:CGPointMake(cx, cy) size:icon withName:YES];
+[sv addSubview:btn];
+placed++;
+}
+NSInteger rows = (placed + 3) / 4;
+sv.contentSize = CGSizeMake(screenW, rows * cellH);
+{
+char sbuf[96];
+snprintf(sbuf, sizeof(sbuf), "v43.19 drawer icons=%d size=%d rows=%d", (int)placed, (int)icon, (int)rows);
+GHLSSLogLine(sbuf);
+}
+return panelH;
+}
+
+- (void)handleDrawerPan:(UIPanGestureRecognizer *)recognizer {
+UIView *dragZone = recognizer.view;
+if (!dragZone) return;
+UIView *panel = dragZone.superview;
+if (!panel) return;
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+GHLSSDrawerPanelBaseY = panel.frame.origin.y;
+} else if (recognizer.state == UIGestureRecognizerStateChanged) {
+CGPoint t = [recognizer translationInView:panel.superview];
+CGFloat ny = GHLSSDrawerPanelBaseY + t.y;
+if (ny < GHLSSDrawerPanelBaseY) ny = GHLSSDrawerPanelBaseY;
+panel.frame = CGRectMake(panel.frame.origin.x, ny, panel.frame.size.width, panel.frame.size.height);
+} else if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled) {
+CGPoint v = [recognizer velocityInView:panel.superview];
+CGFloat dy = panel.frame.origin.y - GHLSSDrawerPanelBaseY;
+if (dy > 120.0 || v.y > 800.0) {
+[self dismissLauncher];
+} else {
+[UIView animateWithDuration:0.25 animations:^{
+panel.frame = CGRectMake(panel.frame.origin.x, GHLSSDrawerPanelBaseY, panel.frame.size.width, panel.frame.size.height);
+}];
+}
+}
+}
+
+// v43.19：橫向輪盤式——卡片左右滑（paging），中間那張最大（帶「點一下打開」），
+// 兩邊的小一點＋淡一點，下面有圓點和頁數。點卡片開浮窗。scroll view 框只有
+// 一頁寬、居中，clipsToBounds 關掉才看得到兩邊的卡片（兩邊卡片點不到，滑到
+// 中間再點）。
+- (CGFloat)addCarouselLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
+(void)size;
+if (!bids || [bids count] == 0) return 0;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat screenW = screenBounds.size.width;
+CGFloat screenH = screenBounds.size.height;
+CGFloat cardW = 200.0;
+CGFloat cardH = 280.0;
+CGFloat pageW = cardW + 20.0;
+NSInteger n = (NSInteger)[bids count];
+CGFloat svH = cardH + 20.0;
+CGFloat svY = (screenH - svH) / 2.0 - 20.0;
+UIScrollView *sv = [[UIScrollView alloc] initWithFrame:CGRectMake((screenW - pageW) / 2.0, svY, pageW, svH)];
+sv.tag = 9103;
+sv.pagingEnabled = YES;
+sv.clipsToBounds = NO;
+sv.showsHorizontalScrollIndicator = NO;
+sv.showsVerticalScrollIndicator = NO;
+sv.delegate = self;
+sv.contentSize = CGSizeMake(pageW * n, svH);
+[GHLSSLauncherContentView addSubview:sv];
+GHLSSCarouselScrollView = sv;
+GHLSSCarouselPageWidth = pageW;
+NSMutableArray *cards = [NSMutableArray array];
+for (NSInteger i = 0; i < n; i++) {
+id item = [bids objectAtIndex:i];
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+if (!bid || bid[0] == '\0') continue;
+char nameBuf[128];
+GHLSSAppNameForBundleID(bid, nameBuf, sizeof(nameBuf));
+NSInteger tag = GHLSSAppIndexForBundleID(bid);
+if (tag < 0) continue;
+CGFloat cx = pageW * i + pageW / 2.0;
+UIButton *card = [UIButton buttonWithType:UIButtonTypeCustom];
+card.frame = CGRectMake(cx - cardW / 2.0, 10.0, cardW, cardH);
+card.tag = tag;
+card.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+card.layer.cornerRadius = 20.0;
+[card addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+CGFloat bigIcon = 96.0;
+UIImage *icon = GHLSSAppIcon(bid);
+UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake((cardW - bigIcon) / 2.0, 44.0, bigIcon, bigIcon)];
+if (icon) {
+iconView.image = icon;
+} else {
+iconView.backgroundColor = [UIColor grayColor];
+}
+iconView.layer.cornerRadius = bigIcon * 0.22;
+iconView.layer.masksToBounds = YES;
+[card addSubview:iconView];
+UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 156.0, cardW, 24.0)];
+nameLabel.text = [NSString stringWithCString:nameBuf encoding:NSUTF8StringEncoding];
+nameLabel.textColor = [UIColor whiteColor];
+nameLabel.font = [UIFont boldSystemFontOfSize:18];
+nameLabel.textAlignment = NSTextAlignmentCenter;
+[card addSubview:nameLabel];
+UILabel *hintLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 186.0, cardW, 20.0)];
+hintLabel.text = [NSString stringWithCString:"点一下打开" encoding:NSUTF8StringEncoding];
+hintLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
+hintLabel.font = [UIFont systemFontOfSize:13];
+hintLabel.textAlignment = NSTextAlignmentCenter;
+[card addSubview:hintLabel];
+[sv addSubview:card];
+[cards addObject:card];
+}
+GHLSSCarouselCards = cards;
+UIPageControl *pc = [[UIPageControl alloc] initWithFrame:CGRectMake(0, svY + svH + 8.0, screenW, 20.0)];
+pc.tag = 9105;
+pc.numberOfPages = n;
+pc.currentPage = 0;
+pc.userInteractionEnabled = NO;
+[GHLSSLauncherContentView addSubview:pc];
+GHLSSCarouselPageControl = pc;
+[self carouselUpdateForScrollView:sv];
+{
+char sbuf[96];
+snprintf(sbuf, sizeof(sbuf), "v43.19 carousel icons=%d cards=%d", (int)n, (int)[cards count]);
+GHLSSLogLine(sbuf);
+}
+return cardH;
+}
+
+- (void)carouselUpdateForScrollView:(UIScrollView *)sv {
+if (!GHLSSCarouselCards) return;
+CGFloat cx = sv.contentOffset.x + sv.bounds.size.width / 2.0;
+for (UIView *card in GHLSSCarouselCards) {
+CGFloat d = fabs(card.center.x - cx);
+CGFloat t = d / GHLSSCarouselPageWidth;
+if (t > 1.0) t = 1.0;
+CGFloat scale = 1.0 - 0.18 * t;
+card.transform = CGAffineTransformMakeScale(scale, scale);
+card.alpha = 1.0 - 0.3 * t;
+}
+if (GHLSSCarouselPageControl) {
+NSInteger page = (NSInteger)lround(sv.contentOffset.x / GHLSSCarouselPageWidth);
+if (page < 0) page = 0;
+if (page >= (NSInteger)[GHLSSCarouselCards count]) page = (NSInteger)[GHLSSCarouselCards count] - 1;
+GHLSSCarouselPageControl.currentPage = page;
+}
+}
+
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+if (scrollView == GHLSSCarouselScrollView) [self carouselUpdateForScrollView:scrollView];
+}
+
+// v43.19：磁貼式——深色大卡片裡大方塊（第一個 App，2×2）加小方塊拼著排，
+// 都帶名字。25 個 App：大方塊 1 個＋小方塊 24 個＝7 行，卡片居中；太高就
+// 整體縮小。點方塊開浮窗（大方塊是第一個 App——置頂／最近排在最前面的那個）。
+- (CGFloat)addTileLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
+if (!bids || [bids count] == 0) return 0;
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat screenW = screenBounds.size.width;
+CGFloat screenH = screenBounds.size.height;
+CGFloat small = size;
+if (small < 40.0) small = 40.0;
+if (small > 72.0) small = 72.0;
+CGFloat gap = 8.0;
+CGFloat pad = 12.0;
+NSInteger n = (NSInteger)[bids count];
+NSInteger smallCount = n - 1;
+NSInteger rows = 2;
+if (smallCount > 4) rows += (smallCount - 4 + 3) / 4;
+CGFloat rowH = small + 18.0;
+CGFloat cardW = pad * 2.0 + small * 4.0 + gap * 3.0;
+CGFloat cardH = pad * 2.0 + rowH * rows;
+CGFloat maxCardH = screenH - 48.0;
+if (cardH > maxCardH) {
+CGFloat shrink = maxCardH / cardH;
+small *= shrink;
+rowH = small + 18.0;
+cardW = pad * 2.0 + small * 4.0 + gap * 3.0;
+cardH = pad * 2.0 + rowH * rows;
+}
+CGFloat cardX = (screenW - cardW) / 2.0;
+CGFloat cardY = (screenH - cardH) / 2.0;
+UIView *card = [[UIView alloc] initWithFrame:CGRectMake(cardX, cardY, cardW, cardH)];
+card.tag = 9104;
+card.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+card.layer.cornerRadius = 20.0;
+card.layer.masksToBounds = YES;
+[GHLSSLauncherContentView addSubview:card];
+CGFloat big = small * 2.0 + gap;
+NSInteger placed = 0;
+for (NSInteger i = 0; i < n; i++) {
+id item = [bids objectAtIndex:i];
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+if (!bid || bid[0] == '\0') continue;
+char nameBuf[128];
+GHLSSAppNameForBundleID(bid, nameBuf, sizeof(nameBuf));
+NSInteger tag = GHLSSAppIndexForBundleID(bid);
+if (tag < 0) continue;
+if (i == 0) {
+UIButton *bigBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+bigBtn.frame = CGRectMake(pad, pad, big, big);
+bigBtn.tag = tag;
+[bigBtn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+UIImage *icon = GHLSSAppIcon(bid);
+UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, big, big)];
+if (icon) {
+iconView.image = icon;
+} else {
+iconView.backgroundColor = [UIColor grayColor];
+}
+iconView.layer.cornerRadius = big * 0.22;
+iconView.layer.masksToBounds = YES;
+[bigBtn addSubview:iconView];
+UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(8.0, big - 24.0, big - 16.0, 18.0)];
+nameLabel.text = [NSString stringWithCString:nameBuf encoding:NSUTF8StringEncoding];
+nameLabel.textColor = [UIColor whiteColor];
+nameLabel.font = [UIFont boldSystemFontOfSize:13];
+[bigBtn addSubview:nameLabel];
+[card addSubview:bigBtn];
+} else {
+NSInteger s = placed;
+NSInteger row = 0;
+NSInteger col = 0;
+if (s < 4) {
+row = s / 2;
+col = 2 + (s % 2);
+} else {
+NSInteger t = s - 4;
+row = 2 + t / 4;
+col = t % 4;
+}
+CGFloat cx = pad + col * (small + gap) + small / 2.0;
+CGFloat cy = pad + row * rowH + small / 2.0;
+UIButton *btn = [self arcIconButtonForBundleID:bid name:nameBuf tag:tag action:action atCenter:CGPointMake(cx, cy) size:small withName:YES];
+[card addSubview:btn];
+placed++;
+}
+}
+{
+char sbuf[96];
+snprintf(sbuf, sizeof(sbuf), "v43.19 tile icons=%d small=%d rows=%d", (int)n, (int)placed, (int)rows);
+GHLSSLogLine(sbuf);
+}
+return cardH;
 }
 
 // v43.2：圓環中央大設定齒輪——深底白齒輪（SF Symbol gearshape.fill），
@@ -10001,6 +10541,8 @@ GHLSSApplySideWindowStyleNow();
 // 这里直接把感应带跟到新边（ recognizer 的 edges 一起改）；不用另加通知，
 // 复用 v43.13 已有的这一条注册。
 GHLSSUpdateStripPosition();
+// v43.16 C：任務欄位置／透明度／大小一改就重刷（新三行都帶 PostNotification）。
+GHLSSUpdateTaskbar();
 });
 if (prefsChangedResult == 0) {
 GHLSSLogLine("v43.13 prefsChanged notify registered");

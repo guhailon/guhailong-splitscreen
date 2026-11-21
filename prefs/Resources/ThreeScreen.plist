@@ -9,22 +9,6 @@
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>开的 App 出现在启动器里；原来 5 个（计算器、时钟、备忘录、设置、照片）默认全开，别的 App 在这里或在启动器里点「＋」加进来（最多 25 个，自选 20 个）。已安装 App 清单在后台列举、缓存起来，设定页只读缓存；刚装的 App 可能要等一会儿才出现。</string>
-			<key>label</key>
-			<string>三屏以及启动器菜单 App</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSAppPickerListController</string>
-			<key>label</key>
-			<string>选择应用</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>排序</string>
 		</dict>
