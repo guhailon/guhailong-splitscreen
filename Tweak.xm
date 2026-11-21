@@ -1321,6 +1321,10 @@ static CGFloat GHLSSRestoreGateTargetAlpha = 1.0; // v71：淡入要回到的 al
 static BOOL GHLSSRestoreGateRebuilt = NO; // v72：这次门控已经重建过一次（只重建一次，不循环）。
 static BOOL GHLSSRestoreGateStuckLogged = NO; // v72：重建后还是卡 0 只记一行（不每 0.5 秒刷日志）。
 static BOOL GHLSSRestoreGateTimeoutDeferredLogged = NO; // v43.7：锁屏时门控超时延后只记一行（不每 0.5 秒刷日志）。
+static int GHLSSRestoreGateTimeoutDeferCount = 0; // v43.12：这次门控超时延后次数（满 6 次约 3 秒还卡 0 就直接重建，不再无限 defer；门控开始时清零）。
+// v43.12：lockToken 原本是 setup 函数里的局部变量（约 L9640），门控函数在前面
+// 用不到——提到文件级 static，setup 里直接用它注册，门控超时直接读它。
+static int lockToken = 0;
 static BOOL GHLSSRestoreGaveUp[GHLSS_APP_COUNT]; // v43.7：这扇窗重建一次还是卡 0、门控已停手（占位留着；下次手动恢复再试）。
 static int GHLSSRestoreGateMode = 0; // v72：门控模式——0 恢复（窗藏着，等就绪淡入显示）；1 已显示窗（promote／新窗，只盖占位、就绪淡出占位）。
 static UIView *GHLSSGatePlaceholders[GHLSS_APP_COUNT]; // v72：每窗一个载入占位（深灰底＋转圈＋App 名）。
@@ -4875,6 +4879,7 @@ GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
 GHLSSRestoreGateRebuilt = NO;
 GHLSSRestoreGateStuckLogged = NO;
 GHLSSRestoreGateTimeoutDeferredLogged = NO;
+GHLSSRestoreGateTimeoutDeferCount = 0;
 if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSRestoreGaveUp[idx] = NO; // v43.7：切窗是新的尝试，清掉停手旗标。
 GHLSSRestoreGateMode = 1; // 窗本来就看得见，只盖占位、就绪淡出占位。
 GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
@@ -6279,6 +6284,7 @@ GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
 GHLSSRestoreGateRebuilt = NO;
 GHLSSRestoreGateStuckLogged = NO;
 GHLSSRestoreGateTimeoutDeferredLogged = NO;
+GHLSSRestoreGateTimeoutDeferCount = 0;
 if (newCacheIdx >= 0 && newCacheIdx < GHLSS_APP_COUNT) GHLSSRestoreGaveUp[newCacheIdx] = NO; // v43.7：新 scene 是新的尝试，清掉停手旗标。
 GHLSSRestoreGateMode = 1;
 GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
@@ -6789,6 +6795,7 @@ GHLSSRestoreGateDeadline = GHLSSRestoreGateStart + 5.0;
 GHLSSRestoreGateRebuilt = NO;
 GHLSSRestoreGateStuckLogged = NO;
 GHLSSRestoreGateTimeoutDeferredLogged = NO;
+GHLSSRestoreGateTimeoutDeferCount = 0;
 if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSRestoreGaveUp[idx] = NO; // v43.7：拖调尺寸是新的尝试，清掉停手旗标。
 GHLSSRestoreGateMode = 1;
 GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
@@ -6904,12 +6911,27 @@ return;
 // 还没就绪——绝不直接显示黑窗，继续等。
 if (cs == 0 && now >= GHLSSRestoreGateDeadline) {
 if (!GHLSSRestoreGateRebuilt) {
-// v43.7：锁着不重建——锁屏时 scene 推不回前景，重建也起不来（28.log：
-// 时钟 scene 锁屏中重建、还是 0）；先记一行、0.5 秒后再看，等解锁再说。
-if (GHLSSScreenLocked) {
+// v43.12：门控超时先读真实锁屏状态——锁屏通知会乱跳（31.log：锁→解→锁→解
+// 连跑几轮，旗标 GHLSSScreenLocked 停在假的 YES 上，门控永远 defer、重建永不
+// 发生）。notify_get_state 读实时状态，不是锁就走重建；只有实时真是锁才 defer。
+// defer 满 6 次（约 3 秒）scene 还是 0 也直接重建——真锁着时重建也只是再得
+// 一个 0、走现成的 gave-up 路，不比卡住更坏。
+uint64_t liveLockState = 0;
+notify_get_state(lockToken, &liveLockState);
+if (GHLSSScreenLocked && liveLockState == 1) {
+GHLSSRestoreGateTimeoutDeferCount++;
+if (GHLSSRestoreGateTimeoutDeferCount >= 6) {
+char dbuf[128];
+snprintf(dbuf, sizeof(dbuf), "v43.12 restore gate defer cap reached, rebuilding scene (defer %d)", GHLSSRestoreGateTimeoutDeferCount);
+GHLSSLogLine(dbuf);
+[self rebuildStuckHostedScene];
+return;
+}
 if (!GHLSSRestoreGateTimeoutDeferredLogged) {
 GHLSSRestoreGateTimeoutDeferredLogged = YES;
-GHLSSLogLine("v72 restore gate timeout deferred, screen locked");
+char lbuf[160];
+snprintf(lbuf, sizeof(lbuf), "v72 restore gate timeout deferred, screen locked (live state %llu)", (unsigned long long)liveLockState);
+GHLSSLogLine(lbuf);
 }
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 [self showGatedRestoredWindowTick];
@@ -7002,6 +7024,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
     GHLSSRestoreGateRebuilt = YES;
     GHLSSRestoreGateStuckLogged = NO;
     GHLSSRestoreGateTimeoutDeferredLogged = NO;
+    GHLSSRestoreGateTimeoutDeferCount = 0;
     GHLSSRestoreGateMode = mode;
     GHLSSRestoreGateTargetAlpha = targetAlpha;
     GHLSSSizeGatePreMatched = GHLSSHostedSceneSizeMatchesWindow(); // v73：重建後現算一次（新 scene 建在正確尺寸上，通常已對上）。
@@ -7093,6 +7116,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
         GHLSSRestoreGateRebuilt = NO;
         GHLSSRestoreGateStuckLogged = NO;
         GHLSSRestoreGateTimeoutDeferredLogged = NO;
+        GHLSSRestoreGateTimeoutDeferCount = 0;
         GHLSSRestoreGateMode = 0;
         GHLSSSizeGatePreMatched = GHLSSHostedSceneSizeMatchesWindow(); // v73：決策時尺寸已對上就不用再等一輪 grace。
         GHLSSSizeGateMatchedOnce = NO;
@@ -7113,6 +7137,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
     GHLSSRestoreGateRebuilt = NO;
     GHLSSRestoreGateStuckLogged = NO;
     GHLSSRestoreGateTimeoutDeferredLogged = NO;
+    GHLSSRestoreGateTimeoutDeferCount = 0;
     GHLSSRestoreGateMode = 0;
     GHLSSSizeGatePreMatched = NO; // v73：還沒就緒，尺寸門等 tick 裡再判斷。
     GHLSSSizeGateMatchedOnce = NO;
@@ -9637,7 +9662,6 @@ GHLSSLogLine("v57 screen capture observer added");
 // 窗一个）——循环缓存数组，每窗都藏/显示、每窗的 scene 都推后台/
 // 推前景；贴边小卡锁屏时不藏。handler 保持极小，只调后台化函数 +
 // 藏窗/显示/推前景 + 记日志。
-int lockToken = 0;
 int lockNotifyResult = notify_register_dispatch("com.apple.springboard.lockstate", &lockToken, dispatch_get_main_queue(), ^(int token) {
 uint64_t lockState = 0;
 notify_get_state(token, &lockState);
