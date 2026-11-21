@@ -4790,6 +4790,9 @@ GHLSSLastSwipeStartY = -1;
 return;
 }
 if (recognizer.state != UIGestureRecognizerStateEnded) return;
+// v43.14：改边立刻生效（其一）——每次边缘滑动先按现值重算感应带位置
+//（设定改了、还没开过启动器时，带子先跟到新边；新边滑动本身见 3b）。
+GHLSSUpdateStripPosition();
 // v43.3：触发区——起手 Y 必须落在 [上方触发高度, 屏高 − 下方触发高度] 内，
 // 不然这次滑动不开启动器，也不计入 1x/2x 计数。感应带窗本身保持全高
 //（拖动手势拿它当固定参考坐标，改 frame 会量错手指位置），只在
@@ -5109,6 +5112,7 @@ GHLSSRestoreHungWindowForIndex((int)idx);
 static CGPoint GHLSSPeekPanStartCenter = {0, 0};
 static CGPoint GHLSSPeekPanStartPoint = {0, 0};
 static CGFloat GHLSSPeekPanTotalDy = 0;
+static CGFloat GHLSSPeekPanTotalDx = 0;
 static int GHLSSPeekPanIdx = -1;
 - (void)handleDockPeekPan:(UIPanGestureRecognizer *)recognizer {
 UIView *v = recognizer.view;
@@ -5122,6 +5126,7 @@ if (recognizer.state == UIGestureRecognizerStateBegan) {
 GHLSSPeekPanIdx = (int)idx;
 GHLSSPeekPanStartCenter = w.center;
 GHLSSPeekPanTotalDy = 0;
+GHLSSPeekPanTotalDx = 0;
 if (recognizer.numberOfTouches > 0) {
 GHLSSPeekPanStartPoint = [recognizer locationOfTouch:0 inView:refView];
 }
@@ -5132,7 +5137,10 @@ CGPoint p = [recognizer locationOfTouch:0 inView:refView];
 CGFloat dy = p.y - GHLSSPeekPanStartPoint.y;
 if (dy < 0) dy = 0;
 GHLSSPeekPanTotalDy = dy;
-w.center = CGPointMake(GHLSSPeekPanStartCenter.x, GHLSSPeekPanStartCenter.y + dy);
+// v43.14：侧滑小窗——横向也跟手（移边判定用总位移＋速度，见 Ended）。
+CGFloat dx = p.x - GHLSSPeekPanStartPoint.x;
+GHLSSPeekPanTotalDx = dx;
+w.center = CGPointMake(GHLSSPeekPanStartCenter.x + dx, GHLSSPeekPanStartCenter.y + dy);
 CGFloat alpha = 1.0 - dy / 300.0;
 if (alpha < 0.3) alpha = 0.3;
 w.alpha = alpha;
@@ -5140,7 +5148,18 @@ w.alpha = alpha;
 if (GHLSSPeekPanIdx != (int)idx) return;
 GHLSSPeekPanIdx = -1;
 CGPoint vel = [recognizer velocityInView:refView];
-if (recognizer.state == UIGestureRecognizerStateEnded && (GHLSSPeekPanTotalDy >= 60 || vel.y >= 700)) {
+// v43.14：侧滑小窗——横向位移占主导且够大（≥60pt 或横向速度 ≥700pt/s）
+// 就移到另一边（翻浮窗滑出方向设定，全部 peek 一起过去、位置与每 App
+// 尺寸照旧）；垂直下滑仍关掉；不够格就弹回原位。
+if (recognizer.state == UIGestureRecognizerStateEnded && fabs(GHLSSPeekPanTotalDx) > fabs(GHLSSPeekPanTotalDy) && (fabs(GHLSSPeekPanTotalDx) >= 60.0 || fabs(vel.x) >= 700.0)) {
+BOOL toLeft = !GHLSSIsFloatingWindowSlideLeft();
+GHLSSWritePrefsCString("floatingWindowSlideSide", toLeft ? "left" : "right");
+w.alpha = 1.0;
+GHLSSLayoutDockPeeks();
+char sbuf[96];
+snprintf(sbuf, sizeof(sbuf), "v43.14 peek side swipe moved to %s", toLeft ? "left" : "right");
+GHLSSLogLine(sbuf);
+} else if (recognizer.state == UIGestureRecognizerStateEnded && (GHLSSPeekPanTotalDy >= 60 || vel.y >= 700)) {
 GHLSSLogLine("v68 docked peek dragged down closed");
 [UIView animateWithDuration:0.2 animations:^{
 w.center = CGPointMake(GHLSSPeekPanStartCenter.x, GHLSSPeekPanStartCenter.y + 220);
@@ -9154,6 +9173,23 @@ caps[0] = (int)total;
 rings = 1;
 }
 }
+// v43.14：圆环版吃层数设定——层数＝最多几圈；图标装得下就用更少圈，
+// 不留空圈；缩到 40pt 下限还装不下才多开圈（不为守层数把图标缩到看不见）。
+{
+int maxRings = GHLSSReadARCLayerCount();
+if (rings > maxRings) {
+int capMax = 0;
+for (int r = 0; r < maxRings; r++) capMax += caps[r];
+if ((int)total <= capMax) {
+int geomRings = rings;
+for (int r = maxRings; r < 6; r++) { radii[r] = 0; caps[r] = 0; }
+rings = maxRings;
+char cbuf[128];
+snprintf(cbuf, sizeof(cbuf), "v43.14 radial layer cap %d, rings %d -> %d", maxRings, geomRings, rings);
+GHLSSLogLine(cbuf);
+}
+}
+}
 CGFloat maxBottom = 0;
 NSInteger idx = 0;
 for (int ring = 0; ring < rings; ring++) {
@@ -9850,6 +9886,10 @@ GHLSSLogLine("v43.5 keyboard hide notify register failed");
 int prefsChangedResult = notify_register_dispatch("com.guhailong.splitscreen.prefschanged", &prefsChangedToken, dispatch_get_main_queue(), ^(int token) {
 (void)token;
 GHLSSApplySideWindowStyleNow();
+// v43.14：改边立刻生效（其二）——edgeSwipeSide 一改就发 prefschanged，
+// 这里直接把感应带跟到新边（ recognizer 的 edges 一起改）；不用另加通知，
+// 复用 v43.13 已有的这一条注册。
+GHLSSUpdateStripPosition();
 });
 if (prefsChangedResult == 0) {
 GHLSSLogLine("v43.13 prefsChanged notify registered");
