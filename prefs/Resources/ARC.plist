@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>在这里选要出现在启动器里的 App，最多 12 个（固定 5 个＋自选 7 个）。</string>
+			<string>在这里选要出现在启动器里的 App，最多 25 个（固定 5 个＋自选 20 个）。</string>
 			<key>label</key>
 			<string>启动器 App</string>
 		</dict>
@@ -26,7 +26,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>边缘滑动、哆啦A梦钮都能叫出 ARC；浮窗也能从三屏设置里开。</string>
+			<string>边缘滑动、哆啦A梦钮都能叫出启动器；浮窗也能从多窗设置里开。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -40,13 +40,13 @@
 			<key>key</key>
 			<string>arcHideOnScreenshot</string>
 			<key>label</key>
-			<string>截图、录屏时，隐藏 Arc？</string>
+			<string>截图、录屏时，隐藏启动器？</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>录屏开始时藏 ARC；截图藏不了——截图完成的通知在截图之后才到，藏了也进不了那一张。哆啦A梦钮不藏。</string>
+			<string>录屏开始时藏启动器；截图藏不了——截图完成的通知在截图之后才到，藏了也进不了那一张。哆啦A梦钮不藏。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -63,14 +63,6 @@
 			<string>手势区域设置</string>
 		</dict>
 		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSGesturesListController</string>
-			<key>label</key>
-			<string>手势总览</string>
-		</dict>
-		<dict>
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>
@@ -82,7 +74,7 @@
 			<key>key</key>
 			<string>arcHaptics</string>
 			<key>label</key>
-			<string>arc震动反馈</string>
+			<string>启动器震动反馈</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -96,15 +88,15 @@
 			<key>key</key>
 			<string>arcTouchSound</string>
 			<key>label</key>
-			<string>arc触控音效</string>
+			<string>启动器触控音效</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>注意：横屏状态下，arc上应用操作都是以浮窗模式显示！横屏里三屏侧窗还没做，选三屏也会先按浮窗开。</string>
+			<string>注意：横屏状态下，启动器上应用操作都是以浮窗模式显示！横屏里三屏侧窗还没做，选三屏也会先按浮窗开。</string>
 			<key>label</key>
-			<string>arc菜单 app打开方式</string>
+			<string>启动器菜单 App 打开方式</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -118,7 +110,7 @@
 			<key>key</key>
 			<string>arcOpenMode</string>
 			<key>label</key>
-			<string>arc菜单 app打开方式</string>
+			<string>启动器菜单 App 打开方式</string>
 			<key>validTitles</key>
 			<array>
 				<string>全屏打开</string>
@@ -144,10 +136,10 @@
 			<key>detail</key>
 			<string>ARCButtons</string>
 			<key>label</key>
-			<string>arc-层数/按钮设置</string>
+			<string>启动器层数/按钮设置</string>
 		</dict>
 	</array>
 	<key>title</key>
-	<string>arc设置</string>
+	<string>启动器设置</string>
 </dict>
 </plist>

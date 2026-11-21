@@ -10,77 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.82（实验版 v82）</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>壁纸</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSCardBgCarouselListController</string>
-			<key>label</key>
-			<string>壁纸</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>三屏设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>ThreeScreen</string>
-			<key>label</key>
-			<string>三屏设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>ARC设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>ARC</string>
-			<key>label</key>
-			<string>arc设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>浮窗设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>Floating</string>
-			<key>label</key>
-			<string>浮窗设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>其他杂项功能</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>Other</string>
-			<key>label</key>
-			<string>其他杂项功能</string>
+			<string>SeaDragon Split v1.0.83（实验版 v83）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -101,6 +31,82 @@
 			<string>enabled</string>
 			<key>label</key>
 			<string>启用分屏</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>壁纸</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSCardBgCarouselListController</string>
+			<key>label</key>
+			<string>壁纸</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>多窗设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>ThreeScreen</string>
+			<key>label</key>
+			<string>多窗设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>启动器设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>ARC</string>
+			<key>label</key>
+			<string>启动器设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>浮窗设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Floating</string>
+			<key>label</key>
+			<string>浮窗设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>其他功能</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Other</string>
+			<key>label</key>
+			<string>其他功能</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>游戏模式</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -215,30 +221,8 @@
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>配置方案</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSProfilesListController</string>
-			<key>label</key>
-			<string>配置方案</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSGesturesListController</string>
-			<key>label</key>
-			<string>手势总览</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>备份和导出都写到设置目录里的固定文件（备份：GuHaiLongSplitScreen-backup.plist；导出：GuHaiLongSplitScreen-export.plist）；导入读导出文件、恢复读备份文件；重置清掉全部设置（不删备份），改完 2 秒内／下次开窗生效，不用重启用户空间。</string>
+			<string>备份和导出都写到设置目录里的固定文件（备份：GuHaiLongSplitScreen-backup.plist；导出：GuHaiLongSplitScreen-export.plist）；导入读导出文件、恢复读备份文件；改完 2 秒内／下次开窗生效，不用重启用户空间。</string>
 			<key>label</key>
 			<string>操作性功能</string>
 		</dict>
@@ -273,14 +257,6 @@
 			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>从备份文件恢复配置</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssResetConfig</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>重置为默认配置</string>
 		</dict>
 		<dict>
 			<key>action</key>

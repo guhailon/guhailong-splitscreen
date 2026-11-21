@@ -867,13 +867,14 @@ fclose(f);
 // v41：上限提到 12 個——前 5 個是測過的固定 App（計算器、時鐘、備忘錄、
 // 設置、照片），後 7 個是自選槽位（customApp1–7，bundle ID 存在 prefs
 // 裡，啟動時從 prefs 讀進來；見 GHLSSLoadCustomApps）。啟動器/ARC 最多
-// 同時開 12 個窗（每 App 一個 scene 緩存，v35 規則不變）。微信就是
-// 「任何 App」裡的一個，不用單獨加——用戶在 ARC 的「＋」或設定頁選
-// 它，就進一個自選槽位。
-// v43.6：上限提到 15 個——自選槽位 7 個→10 個（customApp1–10）；
-// 固定 5 個不動。啟動器/ARC 最多同時開 15 個窗。
-#define GHLSS_APP_COUNT 15
-#define GHLSS_CUSTOM_APP_COUNT 10
+// 同时开 25 个窗（每 App 一个 scene 缓存，v35 规则不变）。微信就是
+// 「任何 App」里的一个，不用单独加——用户在 ARC 的「＋」或设定页选
+// 它，就进一个自选槽位。
+// v43.6：上限提到 15 个——自选槽位 7 个→10 个（customApp1–10）；
+// v43.8：上限提到 25 个——自选槽位 10 个→20 个（customApp1–20）；
+// 固定 5 个不动。启动器/ARC 最多同时开 25 个窗。
+#define GHLSS_APP_COUNT 25
+#define GHLSS_CUSTOM_APP_COUNT 20
 static char GHLSSAppBundleIDs[GHLSS_APP_COUNT][128] = {
 "com.apple.calculator",
 "com.apple.mobiletimer",
@@ -903,7 +904,17 @@ static const char *GHLSSAppEnabledKeys[GHLSS_APP_COUNT] = {
 "customApp7Enabled",
 "customApp8Enabled",
 "customApp9Enabled",
-"customApp10Enabled"
+"customApp10Enabled",
+"customApp11Enabled",
+"customApp12Enabled",
+"customApp13Enabled",
+"customApp14Enabled",
+"customApp15Enabled",
+"customApp16Enabled",
+"customApp17Enabled",
+"customApp18Enabled",
+"customApp19Enabled",
+"customApp20Enabled"
 };
 // v41：自選槽位的 bundle ID 鍵（customAppNBundleID，存在同一個 prefs
 // domain；開關是上面對應的 customAppNEnabled）。
@@ -917,7 +928,17 @@ static const char *GHLSSCustomBundleIDKeys[GHLSS_CUSTOM_APP_COUNT] = {
 "customApp7BundleID",
 "customApp8BundleID",
 "customApp9BundleID",
-"customApp10BundleID"
+"customApp10BundleID",
+"customApp11BundleID",
+"customApp12BundleID",
+"customApp13BundleID",
+"customApp14BundleID",
+"customApp15BundleID",
+"customApp16BundleID",
+"customApp17BundleID",
+"customApp18BundleID",
+"customApp19BundleID",
+"customApp20BundleID"
 };
 // v40：记位置/大小的键前缀——一个 App 一个前缀，键 = "geo" + 前缀 +
 // 字段（例："geoCalculatorX"、"geoCalculatorScale"）。字段：X、Y（窗中心）、
@@ -2780,7 +2801,7 @@ return NULL;
 }
 return NULL;
 }
-// 把自選槽位（5–11）從 prefs 讀進 GHLSSAppBundleIDs/GHLSSAppNames。
+// 把自選槽位（5–24）從 prefs 讀進 GHLSSAppBundleIDs/GHLSSAppNames。
 // 槽位有 bundle ID 就填進去，名字從緩存檔查（查不到就用 bundle ID 最後一段）；
 // 槽位空就清掉。啟動時調一次，ARC 打開與選完 App 後也調（立刻生效）。
 static void GHLSSLoadCustomApps(void) {
@@ -8987,11 +9008,14 @@ return maxBottom + 12.0;
 
 // v43.2：圓環排布——給定圖標尺寸，算環半徑與每環容量（環半徑 R1＝齒輪半徑＋
 // 圖標半徑＋16；環距＝圖標＋14；最外環不超過 Rmax＝min(屏寬,屏高)/2 −
-// 圖標/2 − 12）。回傳總容量；radii／caps 只填用到的環，其餘清 0。
+// 圖標/2）。回傳總容量；radii／caps 只填用到的環，其餘清 0。
+// v43.8：Rmax 改成硬邊（原來再減 12pt 邊距）：單圈那條路自己另取 12pt
+// 邊距；多圈 fallback 時 25 個 App 要開到第 3 圈（半徑 182，40pt 圖標時
+// 硬邊是 187，12pt 邊距只到 175，第 3 圈會被攔住，25 個裝不下）。
 static int GHLSSRadialRingLayout(CGFloat iconSize, CGFloat gearSize, CGFloat radii[6], int caps[6]) {
 for (int i = 0; i < 6; i++) { radii[i] = 0; caps[i] = 0; }
 CGRect sb = [UIScreen mainScreen].bounds;
-CGFloat Rmax = MIN(sb.size.width, sb.size.height) / 2.0 - iconSize / 2.0 - 12.0;
+CGFloat Rmax = MIN(sb.size.width, sb.size.height) / 2.0 - iconSize / 2.0;
 CGFloat R1 = gearSize / 2.0 + iconSize / 2.0 + 16.0;
 CGFloat pitch = iconSize + 14.0;
 int total = 0;
@@ -9012,6 +9036,11 @@ return total;
 // 自適應縮小圖標，最小 40pt；有多少 App 排多少，不寫死 40 個）。
 // 中間一個大設定齒輪（76pt，點了開系統設定）。每環圖標均分 360°、從頂部
 // （−90°）開始，相鄰環錯半格（看起來更密）。
+// v43.8：单圈优先——全部图标先排 ONE 个圆圈（圆心屏幕中心、半径取 Rmax、
+// 从顶部 -90° 开始均分 360°；中央 76pt 大齿轮不动）。图标大小走 arcIconSize
+// 设定值；装不下就往小缩（每次减 4，最小 40pt，跟以前一样）；缩到 40pt
+// 还装不下（单圈约 20 个）才开多圈——多圈走原来的同心圆环逻辑
+//（GHLSSRadialRingLayout），25 个 App 时是 3 圈（2 圈在 40pt 下只装得下 22 个）。
 - (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
 if (!bids || bids.count == 0) return 0;
 NSInteger total = bids.count;
@@ -9021,18 +9050,29 @@ CGFloat gearSize = 76.0;
 CGFloat icon = size;
 if (icon < 40.0) icon = 40.0;
 if (icon > 72.0) icon = 72.0;
-// 自適應：先按設定圖標尺寸算容量，放不下全部就縮小（每次減 4，最小 40）。
+// v43.8 单圈优先：半径取 Rmax（留 12pt 边距），容量＝周长／间距；
+// 装不下就往小缩（每次减 4，最小 40），缩到底还装不下就不走单圈。
 CGFloat radii[6] = {0, 0, 0, 0, 0, 0};
 int caps[6] = {0, 0, 0, 0, 0, 0};
 int rings = 0;
-int capacity = 0;
 while (YES) {
-capacity = GHLSSRadialRingLayout(icon, gearSize, radii, caps);
-rings = 0;
-for (int r = 0; r < 6; r++) { if (caps[r] > 0) rings++; else break; }
-if (capacity >= total || icon <= 40.0) break;
+CGFloat rmax = MIN(screenBounds.size.width, screenBounds.size.height) / 2.0 - icon / 2.0 - 12.0;
+CGFloat pitch = icon + 14.0;
+int cap = (int)(2.0 * M_PI * rmax / pitch);
+if (cap >= total) {
+radii[0] = rmax;
+caps[0] = (int)total;
+rings = 1;
+break;
+}
+if (icon <= 40.0) break;
 icon -= 4.0;
 }
+if (rings == 0) {
+// v43.8 fallback：单圈装不下，走原来的多圈同心圆环逻辑。
+GHLSSRadialRingLayout(icon, gearSize, radii, caps);
+rings = 0;
+for (int r = 0; r < 6; r++) { if (caps[r] > 0) rings++; else break; }
 if (rings == 0) {
 // 兜底（不該發生）：單環放全部，半徑取 Rmax。
 CGFloat rmax = MIN(screenBounds.size.width, screenBounds.size.height) / 2.0 - icon / 2.0 - 12.0;
@@ -9040,6 +9080,7 @@ if (rmax < 40.0) rmax = 40.0;
 radii[0] = rmax;
 caps[0] = (int)total;
 rings = 1;
+}
 }
 CGFloat maxBottom = 0;
 NSInteger idx = 0;
@@ -9650,7 +9691,7 @@ GHLSSUpdateDimOverlay();
 GHLSSScreenLocked = NO;
 // v53：解鎖把藏起來的窗顯示回來（HiddenByLock 認），收著的窗不顯示出來
 //（還是一截 peek）。v43.7：推前景只給看得見的窗——收著的 peek 不在解鎖時推
-//（主线程一次推 15 个跨进程调用会卡住密码键盘，28.log 定案）；peek 交给
+//（主线程一次推 25 个跨进程调用会卡住密码键盘，28.log 定案）；peek 交给
 // 2 秒一轮的看门狗（contentState=1 推前景、0 盖占位），解锁后 2 秒内接手。
 BOOL anyRestored = NO;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {

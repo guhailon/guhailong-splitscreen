@@ -18,7 +18,7 @@
 			<key>key</key>
 			<string>arcIconSize</string>
 			<key>label</key>
-			<string>ARC 图标大小</string>
+			<string>启动器图标大小</string>
 			<key>max</key>
 			<real>72.0</real>
 			<key>min</key>
@@ -30,9 +30,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗里 App 图标排几圈同心弧，1–5 层，预设 2 层；改了下次开 ARC 生效。图标少于层数时不留空层。</string>
+			<string>浮窗里 App 图标排几圈同心弧，1–5 层，预设 2 层；改了下次开启动器生效。图标少于层数时不留空层。</string>
 			<key>label</key>
-			<string>ARC 层数</string>
+			<string>启动器层数</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -46,7 +46,7 @@
 			<key>key</key>
 			<string>arcLayerCount</string>
 			<key>label</key>
-			<string>ARC 层数</string>
+			<string>启动器层数</string>
 			<key>validTitles</key>
 			<array>
 				<string>1 层</string>
@@ -130,6 +130,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>arc-层数/按钮设置</string>
+	<string>启动器层数/按钮设置</string>
 </dict>
 </plist>
