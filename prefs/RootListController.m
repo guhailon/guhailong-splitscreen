@@ -954,9 +954,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.85");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.86");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.85。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.86。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -2988,6 +2988,13 @@ static BOOL GHLSSHandleLinkListTap(PSListController *controller, UITableView *ta
     if (spec.cellType != PSLinkListCell) return NO;
     NSArray *values = spec.properties[GHLSSRuntimeString("values")];
     NSArray *titles = spec.properties[GHLSSRuntimeString("titles")];
+    // v43.11：plist 載入的 LinkList 行用 validValues／validTitles，沒有 values 屬性
+    //（ThreeScreen 子頁、鍵盤彈出方式那些行就是這麼漏網的——30.log 6 次 no values）。
+    //讀不到才改讀 validValues／validTitles，讀到就推我們自己的頁。
+    if (!values || [values count] == 0) {
+        values = spec.properties[GHLSSRuntimeString("validValues")];
+        titles = spec.properties[GHLSSRuntimeString("validTitles")];
+    }
     if (!values || [values count] == 0) {
         GHLSSPrefsLogLine("v72 prefs-linklist no values, framework fallback");
         return NO;
@@ -3139,6 +3146,12 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
         PSSpecifier *parent = self.specifier;
         NSArray *values = parent ? parent.properties[GHLSSRuntimeString("values")] : nil;
         NSArray *titles = parent ? parent.properties[GHLSSRuntimeString("titles")] : nil;
+        // v43.11：跟攔截一樣，values／titles 讀不到改讀 validValues／validTitles
+        //（plist 行就是這個名字；建出來的選項行照舊只寫 values，寫值路只讀 values）。
+        if (!values || [values count] == 0) {
+            values = parent ? parent.properties[GHLSSRuntimeString("validValues")] : nil;
+            titles = parent ? parent.properties[GHLSSRuntimeString("validTitles")] : nil;
+        }
         NSString *key = parent ? parent.properties[GHLSSRuntimeString("key")] : nil;
         NSString *defaults = parent ? parent.properties[GHLSSRuntimeString("defaults")] : nil;
         id def = parent ? parent.properties[GHLSSRuntimeString("default")] : nil;
@@ -3200,6 +3213,27 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
     snprintf(buf, sizeof(buf), "v72 prefs-linklist %s = %s", keyC, valC);
     GHLSSPrefsLogLine(buf);
     [super setPreferenceValue:value specifier:specifier];
+}
+
+// v43.11：LinkList 選項行點按自己寫值——框架原生的 PSListController 不負責給
+// PSListItemCell 行寫值（那是 PSListItemsController 的活，我們在 v43.10 繞過了它），
+// 所以這頁以前只能看不能改（30.log：點選項 0 行寫值日誌）。取該行 values[0] 調
+// [self setPreferenceValue:values[0] specifier:spec]（上面 v72 記日誌＋繼承寫值＋
+// 同步），再 pop 回上一頁（原生 LinkList 點選後自動返回；挑選頁 viewDidAppear
+// 會 reloadSpecifiers＋按新間隔重開計時器，不用再補）。不是 PSListItemCell 的行
+// 或 values 讀不到就走 super。
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    if (spec && spec.cellType == PSListItemCell) {
+        NSArray *values = spec.properties[GHLSSRuntimeString("values")];
+        if (values && [values count] > 0) {
+            [tableView deselectRowAtIndexPath:indexPath animated:YES];
+            [self setPreferenceValue:[values objectAtIndex:0] specifier:spec];
+            [self.navigationController popViewControllerAnimated:YES];
+            return;
+        }
+    }
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
 }
 
 @end
@@ -3280,7 +3314,7 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.85\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.86\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("诊断信息已复制到剪贴板。")];
