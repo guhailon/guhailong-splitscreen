@@ -1325,6 +1325,9 @@ static int GHLSSRestoreGateTimeoutDeferCount = 0; // v43.12：这次门控超时
 // v43.12：lockToken 原本是 setup 函数里的局部变量（约 L9640），门控函数在前面
 // 用不到——提到文件级 static，setup 里直接用它注册，门控超时直接读它。
 static int lockToken = 0;
+// v43.13：設定變更通知令牌（設定頁 PostNotification 發
+// com.guhailong.splitscreen.prefschanged 時用）。
+static int prefsChangedToken = 0;
 static BOOL GHLSSRestoreGaveUp[GHLSS_APP_COUNT]; // v43.7：这扇窗重建一次还是卡 0、门控已停手（占位留着；下次手动恢复再试）。
 static int GHLSSRestoreGateMode = 0; // v72：门控模式——0 恢复（窗藏着，等就绪淡入显示）；1 已显示窗（promote／新窗，只盖占位、就绪淡出占位）。
 static UIView *GHLSSGatePlaceholders[GHLSS_APP_COUNT]; // v72：每窗一个载入占位（深灰底＋转圈＋App 名）。
@@ -2126,9 +2129,9 @@ static double GHLSSReadDoraemonButtonX(void) {
 return GHLSSReadPrefsDouble("doraemonButtonX", -1.0);
 }
 // ── v42：新設定鍵的讀法（全部走上面三個現成 helper） ──
-// B1 側窗寬度預設（narrow 25% / medium 30% / wide 40%，預設 medium）。
-// v58：側窗寬度滑桿（sideWidthPercent，20–50%，預設 30）——有值就蓋過
-// 預設（滑桿沒動過就不寫值、走預設；讀不到／超出範圍也走預設）。
+// B1 側窗寬度（滑桿 sideWidthPercent，20–50%，預設 30；v43.13 起三檔預設已刪）。
+// v43.13：側窗寬度只走滑桿（sideWidthPercent，20–50%，預設 30）；
+// 三檔預設（sideWidthPreset）已刪，讀不到／超出範圍走預設 30。
 static CGFloat GHLSSReadSideWidthFraction(void) {
 double pct = GHLSSReadPrefsDouble("sideWidthPercent", -1.0);
 if (pct >= 20.0 && pct <= 50.0) {
@@ -2137,20 +2140,13 @@ snprintf(sbuf, sizeof(sbuf), "v58 side width slider %.0f%%", pct);
 GHLSSLogLine(sbuf);
 return (CGFloat)(pct / 100.0);
 }
-char *v = GHLSSReadPrefsCString("sideWidthPreset");
-CGFloat f = 0.30;
-if (v) {
-if (strcmp(v, "narrow") == 0) f = 0.25;
-else if (strcmp(v, "wide") == 0) f = 0.40;
-free(v);
+return 0.30;
 }
-return f;
-}
-// B4 分隔線粗細（8/16/24，預設 16）與顏色（gold/gray/clear，預設 gold）。
+// B4 分隔線粗細（滑桿 4–32，預設 16）與顏色（金／灰／透明／黑／白／紅／藍／綠，預設金）。
 static CGFloat GHLSSReadSideDividerThickness(void) {
 double v = GHLSSReadPrefsDouble("sideDividerThickness", 16.0);
-if (v < 8) v = 8;
-if (v > 24) v = 24;
+if (v < 4) v = 4;
+if (v > 32) v = 32;
 return (CGFloat)v;
 }
 static int GHLSSReadSideDividerColor(void) {
@@ -2159,9 +2155,27 @@ int c = 0;
 if (v) {
 if (strcmp(v, "gray") == 0) c = 1;
 else if (strcmp(v, "clear") == 0) c = 2;
+else if (strcmp(v, "black") == 0) c = 3;
+else if (strcmp(v, "white") == 0) c = 4;
+else if (strcmp(v, "red") == 0) c = 5;
+else if (strcmp(v, "blue") == 0) c = 6;
+else if (strcmp(v, "green") == 0) c = 7;
 free(v);
 }
 return c;
+}
+// v43.13：分隔線顏色（0 金／1 灰／2 透明／3 黑／4 白／5 紅／6 藍／7 綠）。
+// 線 alpha 0.8、抓手 alpha 1.0；灰色沿用舊值（線 0.25、抓手 0.7）。
+static UIColor *GHLSSDividerUIColorForCode(int code, BOOL pill) {
+if (code == 1) return [[UIColor whiteColor] colorWithAlphaComponent:(pill ? 0.7 : 0.25)];
+if (code == 2) return [UIColor clearColor];
+CGFloat a = pill ? 1.0 : 0.8;
+if (code == 3) return [UIColor colorWithWhite:0.0 alpha:a];
+if (code == 4) return [UIColor colorWithWhite:1.0 alpha:a];
+if (code == 5) return [UIColor colorWithRed:0.9 green:0.2 blue:0.2 alpha:a];
+if (code == 6) return [UIColor colorWithRed:0.2 green:0.45 blue:0.95 alpha:a];
+if (code == 7) return [UIColor colorWithRed:0.2 green:0.75 blue:0.35 alpha:a];
+return [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:a];
 }
 // B5 邊緣滑動直接開三屏（預設關）。
 static BOOL GHLSSReadEdgeSwipeOpensThreeScreen(void) {
@@ -2188,6 +2202,39 @@ double v = GHLSSReadPrefsDouble("sideShadowRadius", 10.0);
 if (v < 0) v = 0;
 if (v > 30) v = 30;
 return (CGFloat)v;
+}
+// v43.13：側窗位置（拖動後記住的左上角佔屏比例，0–1；沒記過回 NO）。
+static BOOL GHLSSReadSideWindowSavedPos(CGFloat *outX, CGFloat *outY) {
+double x = GHLSSReadPrefsDouble("sideWindowPosX", -1.0);
+double y = GHLSSReadPrefsDouble("sideWindowPosY", -1.0);
+if (x < 0 || x > 1.0 || y < 0 || y > 1.0) return NO;
+if (outX) *outX = (CGFloat)x;
+if (outY) *outY = (CGFloat)y;
+return YES;
+}
+// v43.13：設定頁改了側窗圓角／陰影——已開的側窗（活動窗＋緩存裡的側窗）
+// 立刻重套，不用重開。由 prefsChanged Darwin 通知觸發（設定頁每個帶
+// PostNotification 的行一改就發 com.guhailong.splitscreen.prefschanged）。
+static void GHLSSApplySideWindowStyleToWindow(UIWindow *w, UIView *container) {
+if (!w) return;
+w.layer.cornerRadius = GHLSSReadSideCornerRadius();
+w.layer.shadowOpacity = GHLSSReadSideShadowEnabled() ? GHLSSReadSideShadowOpacity() : 0.0;
+w.layer.shadowRadius = GHLSSReadSideShadowRadius();
+if (container) container.layer.cornerRadius = GHLSSReadSideCornerRadius();
+}
+static void GHLSSApplySideWindowStyleNow(void) {
+BOOL any = NO;
+if (GHLSSHostedIsSideDock && GHLSSHostedWindow) {
+GHLSSApplySideWindowStyleToWindow(GHLSSHostedWindow, GHLSSHostedContainer);
+any = YES;
+}
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (GHLSSCacheIsSideDock[i] && GHLSSCacheWindows[i] && GHLSSCacheWindows[i] != GHLSSHostedWindow) {
+GHLSSApplySideWindowStyleToWindow(GHLSSCacheWindows[i], GHLSSCacheContainers[i]);
+any = YES;
+}
+}
+if (any) GHLSSLogLine("v43.13 side window style re-applied");
 }
 // C1 浮窗大小預設（small 280x600 / medium 350x757 / large 414x800，預設 medium；
 // 計算器在 medium 時仍用自己的 320x693，見 buildHostedWindow）。
@@ -2281,10 +2328,10 @@ if (v < 10) v = 10;
 if (v > 30) v = 30;
 return v;
 }
-// 三屏設置：三屏模式開關（預設關；v52 起只啟用三屏功能，不再讓每次開窗都走側窗）、
-// 關三屏同時關側邊小窗（預設關，按 FV 截圖）；ARC 永遠開（v52 取消總開關）。
+// 三屏設置：v43.13 起三屏模式開關已刪，三屏預設開；關三屏同時關側邊小窗
+// （預設關，按 FV 截圖）；ARC 永遠開（v52 取消總開關）。
 static BOOL GHLSSReadThreeScreenEnabled(void) {
-return GHLSSReadPrefsBool("threeScreenEnabled", NO);
+return YES;
 }
 static BOOL GHLSSReadCloseThreeScreenAlsoClosesSide(void) {
 return GHLSSReadPrefsBool("closeThreeScreenAlsoClosesSide", NO);
@@ -4776,9 +4823,9 @@ return;
 double now = CFAbsoluteTimeGetCurrent();
 if (now - GHLSSLastSwipeTime < 2.0) {
 GHLSSLastSwipeTime = 0;
-GHLSSLogLine("v43.4 edge swipe 2nd, opening split pair");
+GHLSSLogLine("v43.13 edge swipe 2nd, opening three screen");
 [self dismissLauncher];
-[self openSplitScreenFromEdge];
+[self openThreeScreenFromEdge];
 } else {
 GHLSSLastSwipeTime = now;
 GHLSSLogLine("v57 edge swipe 1st, armed");
@@ -5792,6 +5839,18 @@ if (sideH < 200.0) sideH = 200.0;
 if (sideW > screenBounds.size.width) sideW = screenBounds.size.width;
 if (sideX < 0) sideX = 0;
 if (sideX + sideW > screenBounds.size.width) sideX = screenBounds.size.width - sideW;
+// v43.13：拖過的側窗位置（左上角佔屏比例）優先於左右預設；沒記過
+// 才走 windowPosition 左／右貼邊。夾回全可見。
+CGFloat savedPX = 0, savedPY = 0;
+if (GHLSSReadSideWindowSavedPos(&savedPX, &savedPY)) {
+sideX = savedPX * screenBounds.size.width;
+topY = savedPY * screenBounds.size.height;
+if (sideX < 0) sideX = 0;
+if (sideX + sideW > screenBounds.size.width) sideX = screenBounds.size.width - sideW;
+if (topY < topInset) topY = topInset;
+if (topY + sideH > bottomLimit) topY = bottomLimit - sideH;
+GHLSSLogLine("v43.13 side dock saved pos used");
+}
 winW = sideW;
 winH = sideH;
 hostedContentSize = CGSizeMake(sideW, sideH);
@@ -6118,21 +6177,9 @@ GHLSSHostedSideDividerThickness = divThickness;
 int divColor = GHLSSReadSideDividerColor();
 CGFloat divX = dockLeft ? (winW - divThickness) : 0;
 UIView *divider = [[UIView alloc] initWithFrame:CGRectMake(divX, 0, divThickness, winH)];
-if (divColor == 0) {
-divider.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:0.8];
-} else if (divColor == 1) {
-divider.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.25];
-} else {
-divider.backgroundColor = [UIColor clearColor];
-}
+divider.backgroundColor = GHLSSDividerUIColorForCode(divColor, NO);
 UIView *divPill = [[UIView alloc] initWithFrame:CGRectMake((divThickness - 4.0) / 2.0, winH / 2.0 - 20, 4, 40)];
-if (divColor == 0) {
-divPill.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-} else if (divColor == 1) {
-divPill.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
-} else {
-divPill.backgroundColor = [UIColor clearColor];
-}
+divPill.backgroundColor = GHLSSDividerUIColorForCode(divColor, YES);
 divPill.layer.cornerRadius = 2.0;
 [divider addSubview:divPill];
 UIPanGestureRecognizer *divDrag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleSideDividerDrag:)];
@@ -7502,6 +7549,15 @@ dragWindow.center = CGPointMake(snapX, snapY);
 if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT) {
 GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 }
+// v43.13：拖的是側窗——記住左上角佔屏比例，下次開側窗恢復到這裡
+//（側窗不按 App 記 geo，單獨一組鍵；拖動開頭已切活動量到被拖的窗，
+// GHLSSHostedIsSideDock 就是被拖那扇的旗標）。
+if (GHLSSHostedIsSideDock) {
+CGRect f = dragWindow.frame;
+GHLSSWritePrefsDouble("sideWindowPosX", (double)(f.origin.x / screenBounds.size.width));
+GHLSSWritePrefsDouble("sideWindowPosY", (double)(f.origin.y / screenBounds.size.height));
+GHLSSLogLine("v43.13 side window pos saved");
+}
 // v63：遊戲模式下拖完記 per-game 位置（只記位置；拖的是哪個窗就記哪個）。
 if (dragIdx >= 0 && dragIdx < GHLSS_APP_COUNT) {
 GHLSSSaveGameWindowPosForIndex(dragIdx);
@@ -7905,21 +7961,9 @@ UIViewController *divVC = [[UIViewController alloc] init];
 UIView *divRoot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, divFrame.size.width, divFrame.size.height)];
 CGFloat divThickness = divFrame.size.width;
 int divColor = GHLSSReadSideDividerColor();
-if (divColor == 0) {
-divRoot.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:0.8];
-} else if (divColor == 1) {
-divRoot.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.25];
-} else {
-divRoot.backgroundColor = [UIColor clearColor];
-}
+divRoot.backgroundColor = GHLSSDividerUIColorForCode(divColor, NO);
 UIView *divPill = [[UIView alloc] initWithFrame:CGRectMake((divThickness - 4.0) / 2.0, divFrame.size.height / 2.0 - 20, 4, 40)];
-if (divColor == 0) {
-divPill.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-} else if (divColor == 1) {
-divPill.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
-} else {
-divPill.backgroundColor = [UIColor clearColor];
-}
+divPill.backgroundColor = GHLSSDividerUIColorForCode(divColor, YES);
 divPill.layer.cornerRadius = 2.0;
 [divRoot addSubview:divPill];
 UIPanGestureRecognizer *divDrag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleSplitDividerDrag:)];
@@ -9798,6 +9842,19 @@ if (kbHideResult == 0) {
 GHLSSLogLine("v43.5 keyboard hide notify registered");
 } else {
 GHLSSLogLine("v43.5 keyboard hide notify register failed");
+}
+// v43.13：設定變更通知——設定頁帶 PostNotification 的行一改就發
+// com.guhailong.splitscreen.prefschanged（Darwin 通知，跟鎖屏／鍵盤
+// 同一寫法；不要用 CFNotificationCenterAddObserver，會凍住 SpringBoard）。
+// 側窗開著就把圓角／陰影重套一次，不用重開側窗。
+int prefsChangedResult = notify_register_dispatch("com.guhailong.splitscreen.prefschanged", &prefsChangedToken, dispatch_get_main_queue(), ^(int token) {
+(void)token;
+GHLSSApplySideWindowStyleNow();
+});
+if (prefsChangedResult == 0) {
+GHLSSLogLine("v43.13 prefsChanged notify registered");
+} else {
+GHLSSLogLine("v43.13 prefsChanged notify register failed");
 }
 // v42：鍵盤監聽（NSNotificationCenter，不是被禁的
 // CFNotificationCenterAddObserver；探針：鍵盤通知由 App 行程發，
