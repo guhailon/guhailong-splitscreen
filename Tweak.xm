@@ -1316,6 +1316,7 @@ static BOOL GHLSSRestoreGateActive = NO; // v71：恢复门控进行中（窗藏
 //（v35「session 内永不销毁」只对卡死 case 开例外）；占位是深灰底＋转圈＋App 名，绝不是全黑。
 static NSTimeInterval GHLSSRestoreGateStart = 0; // v72：这次门控开始时间。
 static NSTimeInterval GHLSSRestoreGateDeadline = 0; // v72：重建时间点（开始＋5 秒；不是显示时间）。
+static NSTimeInterval GHLSSMinimizeTime = 0; // v43.17：这次收起的时间（点小卡 0.8 秒内不恢复，防误触）。
 static FBScene *GHLSSRestoreGateScene = nil; // v71：门控盯着的 scene（换了就取消门控）。
 static CGFloat GHLSSRestoreGateTargetAlpha = 1.0; // v71：淡入要回到的 alpha（游戏模式会调淡）。
 static BOOL GHLSSRestoreGateRebuilt = NO; // v72：这次门控已经重建过一次（只重建一次，不循环）。
@@ -5101,6 +5102,12 @@ GHLSSLogLine(buf);
 NSInteger idx = sender.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 if (!GHLSSCacheWindows[idx]) return;
+// v43.17：收起后 0.8 秒内点小卡不恢复——小卡正好贴在刚点的边上，
+// 手一抬或再点一下就误触恢复（§347 定案）。
+if (GHLSSMinimizeTime > 0 && ([NSDate timeIntervalSinceReferenceDate] - GHLSSMinimizeTime) < 0.8) {
+GHLSSLogLine("v43.17 peek tap ignored, just minimized");
+return;
+}
 GHLSSLogLine("v57 docked peek tapped");
 [self promoteWindowToMainIndex:(int)idx];
 }
@@ -6724,6 +6731,7 @@ if (GHLSSCacheWindows[idx]) GHLSSLoadCacheToActive(idx);
 // v70：收起前先清懸掛狀態（點按層拿掉、旗標清掉；窗接著就縮成 peek，不用還原 frame）。
 if (idx >= 0 && idx < GHLSS_APP_COUNT) GHLSSClearHungStateForIndex(idx);
 GHLSSHostedMinimized = YES;
+GHLSSMinimizeTime = [NSDate timeIntervalSinceReferenceDate];
 // v50：收成小卡時震一下（ARC 震動反饋開關，預設開；自動 peek 切窗
 // 不走這裡，不會每次切窗都震）。
 if (GHLSSReadARCHaptics()) {
