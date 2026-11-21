@@ -64,6 +64,28 @@ static BOOL GHLSSKBReadPrefsBool(const char *key, BOOL defaultValue) {
     return result;
 }
 
+// v43.18：讀一個 prefs double（沒設就回預設值），外置鍵盤圓角用。
+static double GHLSSKBReadPrefsDouble(const char *key, double defaultValue) {
+    if (!key) return defaultValue;
+    CFStringRef domain = CFStringCreateWithCString(NULL, GHLSS_KB_DOMAIN, kCFStringEncodingUTF8);
+    CFStringRef keyRef = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+    double result = defaultValue;
+    if (domain && keyRef) {
+        CFPreferencesAppSynchronize(domain);
+        CFPropertyListRef v = CFPreferencesCopyAppValue(keyRef, domain);
+        if (v) {
+            if (CFGetTypeID(v) == CFNumberGetTypeID()) {
+                double d = 0;
+                if (CFNumberGetValue((CFNumberRef)v, kCFNumberDoubleType, &d)) result = d;
+            }
+            CFRelease(v);
+        }
+    }
+    if (domain) CFRelease(domain);
+    if (keyRef) CFRelease(keyRef);
+    return result;
+}
+
 static char *GHLSSKBReadPrefsCString(const char *key) {
     if (!key) return NULL;
     CFStringRef domain = CFStringCreateWithCString(NULL, GHLSS_KB_DOMAIN, kCFStringEncodingUTF8);
@@ -108,13 +130,14 @@ static void GHLSSKBWritePrefsCString(const char *key, const char *value) {
     if (keyRef) CFRelease(keyRef);
 }
 
-// v43.5：當方向彈出方式（跟 SpringBoard 側同一語義）：0＝浮窗內彈出，
-// 1＝外彈出。先讀分向鍵，沒存過讀舊鍵 keyboardPopupMode，再沒有
-// 豎屏內彈出／橫屏外彈出（S2 鍵盤模式是外置）。
+// v43.18：鍵盤模式合一（跟 SpringBoard 側同一語義）：0＝浮窗內彈出，
+// 1＝外彈出。先讀單鍵 keyboardMode；沒有讀分向舊鍵；再讀舊單鍵
+// keyboardPopupMode；最後預設豎屏內彈出／橫屏外彈出照舊。
 static int GHLSSKBReadKeyboardPopupMode(void) {
     CGRect sb = [UIScreen mainScreen].bounds;
     BOOL landscape = sb.size.width > sb.size.height;
-    char *mode = GHLSSKBReadPrefsCString(landscape ? "keyboardPopupModeLandscape" : "keyboardPopupModePortrait");
+    char *mode = GHLSSKBReadPrefsCString("keyboardMode");
+    if (!mode) mode = GHLSSKBReadPrefsCString(landscape ? "keyboardPopupModeLandscape" : "keyboardPopupModePortrait");
     if (!mode) mode = GHLSSKBReadPrefsCString("keyboardPopupMode");
     int m = landscape ? 1 : 0;
     if (mode) {
@@ -214,6 +237,16 @@ static UIWindow *GHLSSKBDragTarget = nil;
             (int)oldFrame.size.width, (int)oldFrame.size.height, (int)oldFrame.origin.x, (int)oldFrame.origin.y,
             (int)newFrame.size.width, (int)newFrame.size.height, (int)newFrame.origin.x, (int)newFrame.origin.y);
         GHLSSKBLogLine(buf);
+    }
+    // v43.18：外置鍵盤圓角——每次 show 都重套一次（系統可能重置）。
+    // 0 就是不設；跑到這裡時殺開關開著且模式是外置（上面三道門已過）。
+    double kbRadius = GHLSSKBReadPrefsDouble("externalKeyboardCornerRadius", 30.0);
+    if (kbRadius > 0) {
+        kbWindow.layer.cornerRadius = (CGFloat)kbRadius;
+        kbWindow.layer.masksToBounds = YES;
+        char rbuf[128];
+        snprintf(rbuf, sizeof(rbuf), "v43.18 kb-helper keyboard corner radius %d", (int)kbRadius);
+        GHLSSKBLogLine(rbuf);
     }
     // 橫屏拖外置鍵盤：只在橫屏＋開關開著時掛手勢（鍵盤窗還活著就一直掛著，
     // 手勢裡每次都重讀開關，關了就不動）。

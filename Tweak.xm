@@ -2271,14 +2271,14 @@ return GHLSSReadPrefsBool("enabled", NO);
 static BOOL GHLSSReadKeyboardAvoidEnabled(void) {
 return GHLSSReadPrefsBool("keyboardAvoidEnabled", YES);
 }
-// v43.5：浮窗鍵盤彈出方式分豎屏／橫屏（Keyboard.plist 新鍵
-// keyboardPopupModePortrait／keyboardPopupModeLandscape；舊鍵
-// keyboardPopupMode 只當遷移 fallback：新鍵沒存過就讀舊鍵，舊鍵
-// 也沒有就豎屏內彈出／橫屏外彈出（S2 鍵盤模式是外置）。0＝浮窗內彈出
+// v43.18：鍵盤模式合一——先讀單鍵 keyboardMode；沒有讀分向舊鍵
+// keyboardPopupModePortrait／keyboardPopupModeLandscape；再讀舊單鍵
+// keyboardPopupMode；最後預設豎屏內彈出／橫屏外彈出照舊。0＝浮窗內彈出
 //（鍵盤出現在浮窗內／浮窗為鍵盤上移）；1＝外彈出（鍵盤出現在浮窗外、
 // 浮窗不為它上移；真出浮窗外要開真外置鍵盤實驗開關，見鍵盤助手）。
 static int GHLSSReadKeyboardPopupModeForOrientation(BOOL landscape) {
-char *mode = GHLSSReadPrefsCString(landscape ? "keyboardPopupModeLandscape" : "keyboardPopupModePortrait");
+char *mode = GHLSSReadPrefsCString("keyboardMode");
+if (!mode) mode = GHLSSReadPrefsCString(landscape ? "keyboardPopupModeLandscape" : "keyboardPopupModePortrait");
 if (!mode) mode = GHLSSReadPrefsCString("keyboardPopupMode");
 int m = landscape ? 1 : 0;
 if (mode) {
@@ -2290,6 +2290,14 @@ return m;
 // v43.5：橫屏鍵盤彈起放大浮窗（landscapeEnlargeOnKeyboard，預設開，照 S2）。
 static BOOL GHLSSReadLandscapeEnlargeOnKeyboard(void) {
 return GHLSSReadPrefsBool("landscapeEnlargeOnKeyboard", YES);
+}
+// v43.18：內置模式豎屏放大開關（enlargeOnKeyboardPortrait，預設開）。
+static BOOL GHLSSReadEnlargeOnKeyboardPortrait(void) {
+return GHLSSReadPrefsBool("enlargeOnKeyboardPortrait", YES);
+}
+// v43.18：外置模式放大開關（enlargeOnExternalKeyboard，預設關）。
+static BOOL GHLSSReadEnlargeOnExternalKeyboard(void) {
+return GHLSSReadPrefsBool("enlargeOnExternalKeyboard", NO);
 }
 // v54：外置鍵盤收起同時關閉浮窗（closeWindowOnExternalKeyboardHide，
 // 預設開）：只在外彈出模式下生效；內彈出收起時照舊只回原位。
@@ -2809,6 +2817,65 @@ if (domain) CFRelease(domain);
 if (keyRef) CFRelease(keyRef);
 }
 
+// v43.18：這個 prefs 鍵有沒有存過值（BOOL 鍵用 CString 讀不到，用這個判）。
+static BOOL GHLSSPrefsHasKey(const char *key) {
+if (!key) return NO;
+CFStringRef domain = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen", kCFStringEncodingUTF8);
+CFStringRef keyRef = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+BOOL has = NO;
+if (domain && keyRef) {
+CFPreferencesAppSynchronize(domain);
+CFPropertyListRef v = CFPreferencesCopyAppValue(keyRef, domain);
+if (v) { has = YES; CFRelease(v); }
+}
+if (domain) CFRelease(domain);
+if (keyRef) CFRelease(keyRef);
+return has;
+}
+
+// v43.18：鍵盤模式合一，一次性遷移——keyboardMode 沒設過時按舊值寫：
+// 豎屏或橫屏任一是 outer 就寫 outer，否則寫 inner。皇上現在兩檔都
+// 是 outer，遷移後還是 outer，不許悄悄翻回內置（外彈鍵盤出不來的
+// 毛病還在查，蓋住不算修好）。設過就不再動（用戶之後自己改的優先）。
+static void GHLSSMigrateKeyboardModeOnce(void) {
+static BOOL migrated = NO;
+if (migrated) return;
+migrated = YES;
+char *existing = GHLSSReadPrefsCString("keyboardMode");
+if (existing) {
+free(existing);
+return;
+}
+BOOL outer = NO;
+char *portrait = GHLSSReadPrefsCString("keyboardPopupModePortrait");
+if (portrait) {
+if (strcmp(portrait, "outer") == 0) outer = YES;
+free(portrait);
+}
+char *landscape = GHLSSReadPrefsCString("keyboardPopupModeLandscape");
+if (landscape) {
+if (strcmp(landscape, "outer") == 0) outer = YES;
+free(landscape);
+}
+if (!outer) {
+char *legacy = GHLSSReadPrefsCString("keyboardPopupMode");
+if (legacy) {
+if (strcmp(legacy, "outer") == 0) outer = YES;
+free(legacy);
+}
+}
+GHLSSWritePrefsCString("keyboardMode", outer ? "outer" : "inner");
+// v43.18（父代理補）：遷到外置時，外置放大開關跟舊橫屏放大走——
+// 皇上現在橫屏放大是開的，遷移後外置放大也開著（新開關預設關，只管
+// 全新安裝；已經設過新開關的不動）。
+if (outer && !GHLSSPrefsHasKey("enlargeOnExternalKeyboard")) {
+GHLSSWritePrefsBool("enlargeOnExternalKeyboard", GHLSSReadLandscapeEnlargeOnKeyboard());
+}
+char buf[128];
+snprintf(buf, sizeof(buf), "v43.18 keyboard mode migrated to %s", outer ? "outer" : "inner");
+GHLSSLogLine(buf);
+}
+
 // ── v41：已安裝 App 清單（ARC 的「＋」與設定頁選擇器共用） ──
 // 緩存檔：/var/mobile/Library/Preferences/GuHaiLongSplitScreen-apps.plist，
 // 內容是 NSArray<NSDictionary{bundleID, name}>。列舉在後台做（見下面
@@ -3215,7 +3282,7 @@ GHLSSLogLine("v57 foreground push failed");
 
 // v41：浮窗前後順序（主/副/副副）：最近帶到最前的在前。帶到最前/恢復/
 // 建新窗時更新；雙擊哆啦A夢輪切、ARC 升主窗都按這張表走。
-static int GHLSSFrontOrder[GHLSS_APP_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+static int GHLSSFrontOrder[GHLSS_APP_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
 static int GHLSSAppIndexForWindow(UIWindow *window) {
 if (!window) return -1;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
@@ -3229,7 +3296,14 @@ int pos = -1;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
 if (GHLSSFrontOrder[i] == idx) { pos = i; break; }
 }
-if (pos < 0) return;
+// v43.18：表裡沒有就插到最前面（後面依次後移，最後一個丟掉），
+// 不要直接 return——不然 12 號以後的自選 App 永遠進不了表，
+// 收起時 GHLSSLayoutDockPeeks 數不到它，窗縮不成小卡（33.log 定案）。
+if (pos < 0) {
+for (int i = GHLSS_APP_COUNT - 1; i > 0; i--) GHLSSFrontOrder[i] = GHLSSFrontOrder[i - 1];
+GHLSSFrontOrder[0] = idx;
+return;
+}
 for (int i = pos; i > 0; i--) GHLSSFrontOrder[i] = GHLSSFrontOrder[i - 1];
 GHLSSFrontOrder[0] = idx;
 }
@@ -8166,16 +8240,23 @@ if (kbHeight <= 0) return;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 BOOL landscape = screenBounds.size.width > screenBounds.size.height;
 int mode = GHLSSReadKeyboardPopupModeForOrientation(landscape);
-// 橫屏放大：先放大（放大後窗底已在鍵盤上方，不用再上移）；不認自動上移開關。
-if (landscape && GHLSSReadLandscapeEnlargeOnKeyboard()) {
+// v43.18：放大改走模式分流（取代橫屏放大不分內外先 return）——
+// 內置：豎屏看 enlargeOnKeyboardPortrait、橫屏看 landscapeEnlargeOnKeyboard；
+// 外置：看 enlargeOnExternalKeyboard。放大完 return（不上移，照現況）；
+// 外置且放大關著，照現況直接回（不放大不上移）。
+if (mode == 1) {
+if (GHLSSReadEnlargeOnExternalKeyboard()) {
+[self ghlssEnlargeWindowForKeyboardHeight:kbHeight];
+} else {
+GHLSSLogLine("v43.5 keyboard show outer mode no shift");
+}
+return;
+}
+if ((!landscape && GHLSSReadEnlargeOnKeyboardPortrait()) || (landscape && GHLSSReadLandscapeEnlargeOnKeyboard())) {
 [self ghlssEnlargeWindowForKeyboardHeight:kbHeight];
 return;
 }
 if (!GHLSSReadKeyboardAvoidEnabled()) return;
-if (mode == 1) {
-GHLSSLogLine("v43.5 keyboard show outer mode no shift");
-return;
-}
 if (GHLSSKeyboardShifted) return;
 CGRect winFrame = GHLSSHostedWindow.frame;
 CGFloat winBottom = winFrame.origin.y + winFrame.size.height;
@@ -9599,6 +9680,8 @@ GHLSSLogLine(dbuf);
 GHLSSHealStoredGeometryOnce();
 // v69：啟動時自愈一次——清掉已存的小窗尺寸（拖大過的 App 也回到 112×242）。
 GHLSSResetStoredPeekSizesOnce();
+// v43.18：鍵盤模式合一遷移一次（見 GHLSSMigrateKeyboardModeOnce）。
+GHLSSMigrateKeyboardModeOnce();
 // v41：自選 App 槽位從 prefs 讀進來（ARC 第一次打開就看得到）；
 // 已安裝 App 清單在後台列舉、寫緩存檔（不堵主線程），設定頁/ARC 只讀緩存。
 GHLSSLoadCustomApps();

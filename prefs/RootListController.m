@@ -954,9 +954,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.92");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.93");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.92。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.93。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -3104,6 +3104,28 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
             [safe addObject:group];
             _specifiers = safe;
         }
+        // v43.18：鍵盤模式下面兩行按模式動態換行——外置只留外置兩行
+        //（enlargeOnExternalKeyboard／externalKeyboardCornerRadius），
+        // 內置只留內置兩行（enlargeOnKeyboardPortrait／
+        // landscapeEnlargeOnKeyboard）。模式變了回這一頁時 viewWillAppear
+        // 已清快取重組（v71），讀到的就是新值。
+        if (targetPlist && [targetPlist isEqualToString:GHLSSRuntimeString("Keyboard")]) {
+            char *kmode = GHLSSPrefsCString("keyboardMode");
+            BOOL outerMode = (kmode && strcmp(kmode, "outer") == 0);
+            if (kmode) free(kmode);
+            NSMutableArray *kept = [NSMutableArray array];
+            for (PSSpecifier *sp in _specifiers) {
+                NSString *spKey = sp.properties[GHLSSRuntimeString("key")];
+                const char *kc = spKey ? [spKey UTF8String] : NULL;
+                if (!kc) { [kept addObject:sp]; continue; }
+                BOOL isOuterRow = (strcmp(kc, "enlargeOnExternalKeyboard") == 0) || (strcmp(kc, "externalKeyboardCornerRadius") == 0);
+                BOOL isInnerRow = (strcmp(kc, "enlargeOnKeyboardPortrait") == 0) || (strcmp(kc, "landscapeEnlargeOnKeyboard") == 0);
+                if (outerMode && isInnerRow) continue;
+                if (!outerMode && isOuterRow) continue;
+                [kept addObject:sp];
+            }
+            _specifiers = kept;
+        }
         char buf2[128];
         snprintf(buf2, sizeof(buf2), "v57 prefs-search plistpage exit count %lu", (unsigned long)[_specifiers count]);
         GHLSSPrefsLogLine(buf2);
@@ -3314,7 +3336,7 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.92\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.93\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("诊断信息已复制到剪贴板。")];

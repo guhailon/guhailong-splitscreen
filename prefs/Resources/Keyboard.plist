@@ -38,7 +38,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>竖屏键盘弹出方式</string>
+			<string>键盘模式</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -50,43 +50,13 @@
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
-			<string>keyboardPopupModePortrait</string>
+			<string>keyboardMode</string>
 			<key>label</key>
-			<string>竖屏键盘弹出方式</string>
+			<string>键盘模式</string>
 			<key>validTitles</key>
 			<array>
-				<string>浮窗内弹出</string>
-				<string>浮窗外弹出</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>inner</string>
-				<string>outer</string>
-			</array>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>横屏键盘弹出方式</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>outer</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>keyboardPopupModeLandscape</string>
-			<key>label</key>
-			<string>横屏键盘弹出方式</string>
-			<key>validTitles</key>
-			<array>
-				<string>浮窗内弹出</string>
-				<string>浮窗外弹出</string>
+				<string>内置键盘</string>
+				<string>外置键盘</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -100,19 +70,61 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>enlargeOnExternalKeyboard</string>
+			<key>label</key>
+			<string>输入时放大浮窗→外置键盘</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>30.0</real>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>externalKeyboardCornerRadius</string>
+			<key>label</key>
+			<string>外置键盘圆角</string>
+			<key>max</key>
+			<real>50.0</real>
+			<key>min</key>
+			<real>0.0</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>enlargeOnKeyboardPortrait</string>
+			<key>label</key>
+			<string>输入时放大浮窗→竖屏</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
 			<true/>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
 			<string>landscapeEnlargeOnKeyboard</string>
 			<key>label</key>
-			<string>横屏键盘弹出时放大浮窗</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>仅横屏生效；键盘弹出时浮窗放大到键盘上方空位，收起恢复原尺寸。</string>
+			<string>输入时放大浮窗→横屏</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
