@@ -23,6 +23,7 @@
 #import <Preferences/PSTableCell.h>
 #import <UIKit/UIKit.h>
 #import <PhotosUI/PhotosUI.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <objc/message.h>
 #import "../GHLSSUpdateCheck.h"
 
@@ -401,29 +402,6 @@ static UIImage *GHLSSPrefsResizeImageMax(UIImage *image, CGFloat maxDim) {
     return out;
 }
 
-// v43.9：横幅完整显示的模糊底——同一张图先缩到约 20px 宽再放大（平滑
-// 模糊），裁满横幅尺寸，再压暗 25%。不用 CoreImage，只用 UIKit。
-static UIImage *GHLSSPrefsBlurredBannerImage(UIImage *img, CGSize size) {
-    if (!img || size.width <= 0 || size.height <= 0) return nil;
-    CGFloat sw = 20.0;
-    CGFloat sh = sw * size.height / size.width;
-    if (sh < 1.0) sh = 1.0;
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(sw, sh), YES, 1.0);
-    [img drawInRect:CGRectMake(0, 0, sw, sh)];
-    UIImage *tiny = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    if (!tiny) return nil;
-    UIGraphicsBeginImageContextWithOptions(size, YES, 0.0);
-    CGFloat s = (size.width / tiny.size.width > size.height / tiny.size.height) ? size.width / tiny.size.width : size.height / tiny.size.height;
-    CGFloat dw = tiny.size.width * s, dh = tiny.size.height * s;
-    [tiny drawInRect:CGRectMake((size.width - dw) / 2.0, (size.height - dh) / 2.0, dw, dh)];
-    [[UIColor colorWithWhite:0.0 alpha:0.25] setFill];
-    UIRectFill(CGRectMake(0, 0, size.width, size.height));
-    UIImage *out = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return out;
-}
-
 // v62：每張槽位圖的顏色名（挑選頁下卡標籤「第 X 張 · 色」用；沒記的
 // 就只寫「第 X 張」）。key 是 cardBgColor0..5，跟槽位檔一起搬。
 static void GHLSSCardBgWriteColor(int slot, const char *color) {
@@ -763,12 +741,12 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @property (nonatomic, assign) BOOL wallPickerModeAdjust;
 @end
 
-@interface GuHaiLongSplitScreenRootListController : PSListController
+@interface GuHaiLongSplitScreenRootListController : PSListController <UIDocumentPickerDelegate>
 @property (nonatomic, strong) UIImageView *ghlssBannerView;
-@property (nonatomic, strong) UIImageView *ghlssBannerBgView;
 @property (nonatomic, strong) UIView *ghlssBannerContainer;
 @property (nonatomic, assign) BOOL ghlssBannerInstalled;
 @property (nonatomic, strong) NSTimer *ghlssBgTimer;
+@property (nonatomic, assign) int ghlssDocPickerKind;
 @end
 
 @implementation GuHaiLongSplitScreenRootListController
@@ -788,23 +766,17 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             CGFloat w = [UIScreen mainScreen].bounds.size.width;
             UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 200)];
             container.backgroundColor = [UIColor whiteColor];
-            // v43.9：完整顯示——底層是同一張圖的模糊放大版（裁滿＋壓暗），
-            // 上層是原圖 AspectFit 居中，整張都看得見。
-            UIImageView *bg = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, w, 200)];
-            bg.contentMode = UIViewContentModeScaleAspectFill;
-            bg.clipsToBounds = YES;
-            bg.backgroundColor = [UIColor whiteColor];
-            [container addSubview:bg];
+            // v54：圖改滿幅（0,0,w,200）去白邊（v53 是 (0,10,w,180)，上下各 10pt 白邊）。
+            // v43.10：完整顯示＋模糊底拿掉，橫幅改回原來裁滿（皇上 2026-11-21 真機測完定）。
             UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, w, 200)];
-            iv.contentMode = UIViewContentModeScaleAspectFit;
+            iv.contentMode = UIViewContentModeScaleAspectFill;
             iv.clipsToBounds = YES;
-            iv.backgroundColor = [UIColor clearColor];
+            iv.backgroundColor = [UIColor whiteColor];
             iv.userInteractionEnabled = YES;
             [container addSubview:iv];
             UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(ghlssBannerTapped:)];
             [iv addGestureRecognizer:tap];
-            // v43.9：恢复默认钮拿掉（皇上定：删后没有一键清回白卡的路）。
-            self.ghlssBannerBgView = bg;
+            // v43.10：恢复默认钮保持拿掉（皇上 2026-11-21 定：不要改回去）。
             self.ghlssBannerView = iv;
             self.ghlssBannerContainer = container;
             [self ghlssRefreshBannerPreview];
@@ -830,7 +802,6 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
                 CGFloat w = tv.bounds.size.width;
                 if (w <= 0) w = [UIScreen mainScreen].bounds.size.width;
                 self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, 200);
-                self.ghlssBannerBgView.frame = CGRectMake(0, 0, w, 200);
                 self.ghlssBannerView.frame = CGRectMake(0, 0, w, 200);
                 tv.tableHeaderView = self.ghlssBannerContainer;
                 self.ghlssBannerInstalled = YES;
@@ -857,8 +828,6 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     @try {
         UIImage *img = [UIImage imageWithContentsOfFile:GHLSSCardBgPath()];
         self.ghlssBannerView.image = img;
-        // v43.9：底層跟著換同一張圖的模糊版（沒圖就清空）。
-        self.ghlssBannerBgView.image = GHLSSPrefsBlurredBannerImage(img, self.ghlssBannerView.bounds.size);
     } @catch (NSException *e) {
         GHLSSPrefsLogLine("v57 prefs-banner: refresh EXCEPTION");
     }
@@ -985,9 +954,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.84");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.85");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.84。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.85。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1113,6 +1082,38 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
     return ok;
 }
 
+// v43.10：備份／導出成功後直接把檔案遞給皇上——分享表帶檔案 URL，
+// 當場存到文件／傳出去／隔空投送，不用自己去文件找。分享表關掉後
+// 再彈提示寫清完整路徑（兩個 modal 不能疊著彈，分享表先開）。
+- (void)ghlssShareConfigFile:(NSString *)path title:(NSString *)title what:(NSString *)what restoreRow:(NSString *)restoreRow {
+    NSURL *url = [NSURL fileURLWithPath:path];
+    if (!url) {
+        [self ghlssShowAlertWithTitle:title message:GHLSSRuntimeString("文件路径不对，分享打不开。")];
+        return;
+    }
+    UIActivityViewController *share = [[UIActivityViewController alloc] initWithActivityItems:[NSArray arrayWithObject:url] applicationActivities:nil];
+    __weak typeof(self) weakSelf = self;
+    share.completionWithItemsHandler = ^(UIActivityType activityType, BOOL completed, NSArray *returnedItems, NSError *activityError) {
+        (void)activityType; (void)completed; (void)returnedItems; (void)activityError;
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        char msgBuf[768];
+        snprintf(msgBuf, sizeof(msgBuf), "%s在 %s。刚才的分享表可以直接把文件存到文件、发出去或隔空投送，不用自己去文件找。想换配置时，点「%s」挑这个文件就能用。", [what UTF8String], [path UTF8String], [restoreRow UTF8String]);
+        [strongSelf ghlssShowAlertWithTitle:title message:GHLSSRuntimeString(msgBuf)];
+    };
+    @try {
+        [self presentViewController:share animated:YES completion:nil];
+    } @catch (NSException *e) {
+        const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v43.10 prefs-config share EXCEPTION %s", reason);
+        GHLSSPrefsLogLine(buf);
+        char msgBuf[768];
+        snprintf(msgBuf, sizeof(msgBuf), "分享表打不开，文件在 %s，自己去文件找。", [path UTF8String]);
+        [self ghlssShowAlertWithTitle:title message:GHLSSRuntimeString(msgBuf)];
+    }
+}
+
 // 備份配置：live 設定現取值寫一份到備份檔（v43.8）。
 - (void)ghlssBackupConfig:(PSSpecifier *)specifier {
     (void)specifier;
@@ -1130,7 +1131,8 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
         char buf[512];
         snprintf(buf, sizeof(buf), "v57 prefs-config backup: wrote %lu keys, %llu bytes to %s", (unsigned long)count, bytes, [dst UTF8String]);
         GHLSSPrefsLogLine(buf);
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已备份配置") message:GHLSSRuntimeString("备份在 GuHaiLongSplitScreen-backup.plist，恢复时读这个文件。")];
+        // v43.10：成功後直接把檔案遞給皇上（分享表），不用自己去文件找。
+        [self ghlssShareConfigFile:dst title:GHLSSRuntimeString("已备份配置") what:GHLSSRuntimeString("备份") restoreRow:GHLSSRuntimeString("从备份文件恢复配置")];
     } else {
         GHLSSPrefsLogLine("v57 prefs-config backup: write failed");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("备份失败") message:GHLSSRuntimeString("复制配置文件时出错。")];
@@ -1194,19 +1196,92 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
         char buf[512];
         snprintf(buf, sizeof(buf), "v57 prefs-config export: wrote %lu keys, %llu bytes to %s", (unsigned long)count, bytes, [dst UTF8String]);
         GHLSSPrefsLogLine(buf);
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导出配置") message:GHLSSRuntimeString("导出在 GuHaiLongSplitScreen-export.plist，导入时读这个文件。")];
+        // v43.10：成功後直接把檔案遞給皇上（分享表），不用自己去文件找。
+        [self ghlssShareConfigFile:dst title:GHLSSRuntimeString("已导出配置") what:GHLSSRuntimeString("导出") restoreRow:GHLSSRuntimeString("从文件中导入配置")];
     } else {
         GHLSSPrefsLogLine("v57 prefs-config export: write failed");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导出失败") message:GHLSSRuntimeString("复制配置文件时出错。")];
     }
 }
 
-// 從文件中導入配置：讀導出檔，蓋掉現在的設定檔。
+// v43.10：恢復／導入共用——把字典逐鍵寫進 live prefs（走 CFPreferences，
+// cfprefsd 快取才更新；直接換檔看著像沒反應，v43 教訓）。
+- (void)ghlssApplyConfigDict:(NSDictionary *)dict sourceDescription:(NSString *)src title:(NSString *)title {
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) {
+        for (NSString *key in dict) {
+            CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)[dict objectForKey:key], domain);
+        }
+        CFPreferencesAppSynchronize(domain);
+        CFRelease(domain);
+    }
+    [self reloadSpecifiers];
+    char buf[512];
+    snprintf(buf, sizeof(buf), "v43.10 prefs-config apply: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
+    GHLSSPrefsLogLine(buf);
+    [self ghlssShowAlertWithTitle:title message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
+}
+
+// v43.10：文件挑選器——恢復／導入讓皇上自己挑配置文件（想換成別的
+// 配置也能用，不只限於原來那一個固定備份檔）。用 initForOpeningContentTypes:
+// asCopy:YES（等於舊 Import 模式：系統把挑中的檔拷一份進容器再給我們讀，
+// 不用管 security-scoped resource；舊 initWithDocumentTypes:inMode: 在
+// iOS 14 起已棄用，-Werror 會直接報錯）。彈不出來就走舊固定路徑
+//（見下面兩個 FromFixedPath）。
+- (void)ghlssPresentDocPickerForKind:(int)kind {
+    self.ghlssDocPickerKind = kind;
+    @try {
+        UTType *plistType = [UTType typeWithIdentifier:GHLSSRuntimeString("com.apple.property-list")];
+        NSArray *types = [NSArray arrayWithObjects:plistType, nil];
+        UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types asCopy:YES];
+        picker.delegate = self;
+        [self presentViewController:picker animated:YES completion:nil];
+    } @catch (NSException *e) {
+        const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v43.10 prefs-config docpicker EXCEPTION %s, fixed-path fallback", reason);
+        GHLSSPrefsLogLine(buf);
+        if (kind == 0) [self ghlssRestoreConfigFromFixedPath];
+        else [self ghlssImportConfigFromFixedPath];
+    }
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    (void)controller;
+    NSURL *url = ([urls count] > 0) ? [urls objectAtIndex:0] : nil;
+    if (!url) {
+        GHLSSPrefsLogLine("v43.10 prefs-config docpicker: no url");
+        return;
+    }
+    NSString *path = [url path];
+    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:path];
+    if (!dict) {
+        char buf[512];
+        snprintf(buf, sizeof(buf), "v43.10 prefs-config docpicker: unreadable %s", [path UTF8String]);
+        GHLSSPrefsLogLine(buf);
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导入失败") message:GHLSSRuntimeString("挑的配置文件读不出来（要 .plist 配置文件）。")];
+        return;
+    }
+    BOOL isRestore = (self.ghlssDocPickerKind == 0);
+    [self ghlssApplyConfigDict:dict sourceDescription:path title:GHLSSRuntimeString(isRestore ? "已从备份恢复配置" : "已导入配置")];
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    (void)controller;
+    GHLSSPrefsLogLine("v43.10 prefs-config docpicker: cancelled");
+}
+
+// 從文件中導入配置：先彈文件挑選器，讓皇上自己挑配置文件。
 // v43：不再直接換檔案——直接換檔不會動 cfprefsd 的快取，reload 後開關還是舊值，
 // 看著就像沒反應。改成讀出字典、逐鍵用 CFPreferencesSetAppValue 寫進去，快取才會更新。
 - (void)ghlssImportConfig:(PSSpecifier *)specifier {
     (void)specifier;
     GHLSSPrefsLogLine("v57 prefs-config import entry");
+    [self ghlssPresentDocPickerForKind:1];
+}
+
+// v43.10：挑選器彈不出來時的 fallback——讀固定導出檔（舊做法）。
+- (void)ghlssImportConfigFromFixedPath {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSExportFilePath();
     if (![fm fileExistsAtPath:src]) {
@@ -1222,26 +1297,19 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导入失败") message:GHLSSRuntimeString("导出的配置文件读不出来。")];
         return;
     }
-    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-    if (domain) {
-        for (NSString *key in dict) {
-            CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)[dict objectForKey:key], domain);
-        }
-        CFPreferencesAppSynchronize(domain);
-        CFRelease(domain);
-    }
-    [self reloadSpecifiers];
-    char buf[512];
-    snprintf(buf, sizeof(buf), "v57 prefs-config import: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
-    GHLSSPrefsLogLine(buf);
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已导入配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
+    [self ghlssApplyConfigDict:dict sourceDescription:src title:GHLSSRuntimeString("已导入配置")];
 }
 
-// 從備份文件恢復配置：讀備份檔，蓋掉現在的設定檔。
+// 從備份文件恢復配置：先彈文件挑選器，讓皇上自己挑配置文件。
 // v43：同導入，改走 CFPreferences 逐鍵寫入（見上）。
 - (void)ghlssRestoreConfig:(PSSpecifier *)specifier {
     (void)specifier;
     GHLSSPrefsLogLine("v57 prefs-config restore entry");
+    [self ghlssPresentDocPickerForKind:0];
+}
+
+// v43.10：挑選器彈不出來時的 fallback——讀固定備份檔（舊做法）。
+- (void)ghlssRestoreConfigFromFixedPath {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSBackupFilePath();
     if (![fm fileExistsAtPath:src]) {
@@ -1257,19 +1325,7 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("恢复失败") message:GHLSSRuntimeString("备份文件读不出来。")];
         return;
     }
-    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-    if (domain) {
-        for (NSString *key in dict) {
-            CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)[dict objectForKey:key], domain);
-        }
-        CFPreferencesAppSynchronize(domain);
-        CFRelease(domain);
-    }
-    [self reloadSpecifiers];
-    char buf[512];
-    snprintf(buf, sizeof(buf), "v57 prefs-config restore: applied %lu keys from %s", (unsigned long)[dict count], [src UTF8String]);
-    GHLSSPrefsLogLine(buf);
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已从备份恢复配置") message:GHLSSRuntimeString("配置已恢复，请重新启动 SpringBoard 生效。")];
+    [self ghlssApplyConfigDict:dict sourceDescription:src title:GHLSSRuntimeString("已从备份恢复配置")];
 }
 
 // v42：布局預設——點一下一次換整套設定（各預設改哪些 key，
@@ -2246,6 +2302,11 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
 @implementation GHLSSCardBgCarouselListController
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    // v43.10：輪播間隔行是 PSLinkListCell——這裡以前沒攔 LinkList 點按，
+    // 點了就走到框架原生的 PSListItemsController（v72 證明它生成／快取／
+    // 渲染子清單會出錯，鍵盤子清單只剩一個選項），皇上真機上間隔改不動
+    // 就是這個原因。跟主頁一樣先攔下來、推我們自己的 GHLSSLinkListController。
+    if (GHLSSHandleLinkListTap(self, tableView, indexPath)) return;
     if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
     [super tableView:tableView didSelectRowAtIndexPath:indexPath];
 }
@@ -3219,7 +3280,7 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.84\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.85\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("诊断信息已复制到剪贴板。")];

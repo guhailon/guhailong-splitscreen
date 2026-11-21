@@ -8102,7 +8102,10 @@ GHLSSKeyboardEnlarged = NO;
 GHLSSLogLine("v43.5 window restored after keyboard hide (enlarge)");
 }
 - (void)ghlssHandleKeyboardHideBundleID:(const char *)bid {
-if (!GHLSSHostedWindow) return;
+// v43.10：最小化守衛（跟 show 路對稱）——鍵盤彈起上移後窗被收成小卡，
+// shift 旗標還在；收起時不能把滿窗框推到小卡窗上（內容還停在小卡縮放，
+// 其餘全黑，半黑）。直接清旗標走人，不要動窗框。
+if (!GHLSSHostedWindow || GHLSSHostedMinimized) { GHLSSKeyboardShifted = NO; return; }
 if (bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0) return;
 // 放大中先恢復尺寸（放大時 shift 沒跑，恢復尺寸就夠了，不關窗）。
 if (GHLSSKeyboardEnlarged) {

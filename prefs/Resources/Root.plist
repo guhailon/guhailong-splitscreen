@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.84（实验版 v84）</string>
+			<string>SeaDragon Split v1.0.85（实验版 v85）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -222,7 +222,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>备份和导出都写到设置目录里的固定文件（备份：GuHaiLongSplitScreen-backup.plist；导出：GuHaiLongSplitScreen-export.plist）；导入读导出文件、恢复读备份文件；改完 2 秒内／下次开窗生效，不用重启用户空间。</string>
+			<string>备份和导出先写到设置目录里的固定文件（备份：GuHaiLongSplitScreen-backup.plist；导出：GuHaiLongSplitScreen-export.plist），成功后直接分享给你，不用自己去文件找；导入和恢复会让你挑配置文件，想换成别的配置也能用。改完 2 秒内／下次开窗生效，不用重启用户空间。</string>
 			<key>label</key>
 			<string>操作性功能</string>
 		</dict>
