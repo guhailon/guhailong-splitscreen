@@ -518,6 +518,17 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @property (nonatomic, assign) int ghlssDocPickerKind;
 @end
 
+// v43.36：首页内嵌歌词墙改成整页 9:16 高——播放器是按整页 9:16 设计的
+// （stage 高 = min(100dvh, 100vw*16/9)），480pt 头把它压扁，3D 墙只剩
+// 一条、歌单也被挤得点不开。h = 宽 * 16 / 9，封顶屏幕高（皇上 iPhone 11
+// 屏宽 430 → 764pt）。viewDidLoad／viewDidAppear 两处共用这一个公式。
+static CGFloat GHLSSInlineLyricWallHeight(CGFloat w) {
+    CGFloat h = w * 16.0 / 9.0;
+    CGFloat maxH = [UIScreen mainScreen].bounds.size.height;
+    if (h > maxH) h = maxH;
+    return h;
+}
+
 @implementation GuHaiLongSplitScreenRootListController
 
 // v43：記進了哪一頁（PlistPage 繼承這裡，類名是 GHLSSPlistPageController，
@@ -527,7 +538,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     char buf[160];
     snprintf(buf, sizeof(buf), "v57 prefs-page: %s", [NSStringFromClass([self class]) UTF8String]);
     GHLSSPrefsLogLine(buf);
-    // v43.30：設定主頁頂上直接嵌整个 3D 立体歌词墙播放器（480pt 高的
+    // v43.30：設定主頁頂上直接嵌整个 3D 立体歌词墙播放器（整页 9:16 高的
     // WKWebView 头，跟歌词墙那栏同一份 lyricwall/index.html，不是两套
     // 播放器；触摸进墙里，不再点横幅进详情页）。只挂在設定主頁本身
     //（isMemberOfClass），子頁（GHLSSPlistPageController 繼承這裡）不掛。
@@ -538,7 +549,8 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         if (self.ghlssInlineLyricView || self.ghlssBannerContainer) return;
         @try {
             CGFloat w = [UIScreen mainScreen].bounds.size.width;
-            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 480)];
+            CGFloat h = GHLSSInlineLyricWallHeight(w);
+            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
             // v43.35：底色跟页面 #17112b 一致，有缝也不露黑。
             container.backgroundColor = [UIColor colorWithRed:23.0/255.0 green:17.0/255.0 blue:43.0/255.0 alpha:1.0];
             container.clipsToBounds = YES;
@@ -547,7 +559,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             WKWebView *wv = nil;
             if (htmlPath) {
                 WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
-                wv = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, w, 480) configuration:config];
+                wv = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, w, h) configuration:config];
                 wv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
                 // v43.35：同上，跟页面底色一致。
                 wv.backgroundColor = [UIColor colorWithRed:23.0/255.0 green:17.0/255.0 blue:43.0/255.0 alpha:1.0];
@@ -557,7 +569,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
                 [wv loadFileURL:fileURL allowingReadAccessToURL:dirURL];
                 [container addSubview:wv];
             } else {
-                UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, w, 480)];
+                UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, w, h)];
                 lb.text = GHLSSRuntimeString("歌词墙文件没找到，请重装一次插件再试。");
                 lb.font = [UIFont systemFontOfSize:15];
                 lb.textColor = [UIColor grayColor];
@@ -590,8 +602,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             @try {
                 CGFloat w = tv.bounds.size.width;
                 if (w <= 0) w = [UIScreen mainScreen].bounds.size.width;
-                self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, 480);
-                if (self.ghlssInlineLyricView) self.ghlssInlineLyricView.frame = CGRectMake(0, 0, w, 480);
+                CGFloat h = GHLSSInlineLyricWallHeight(w);
+                self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, h);
+                if (self.ghlssInlineLyricView) self.ghlssInlineLyricView.frame = CGRectMake(0, 0, w, h);
                 tv.tableHeaderView = self.ghlssBannerContainer;
                 self.ghlssBannerInstalled = YES;
                 GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: header mounted");
@@ -604,7 +617,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
 }
 
-// v43.30：主页嵌了整个歌词墙（480pt WKWebView 头）：离开主页时暂停内嵌
+// v43.30：主页嵌了整个歌词墙（整页 9:16 高的 WKWebView 头）：离开主页时暂停内嵌
 // 播放器（停声音＋停渲染），防主页墙与详情页墙同时出声；回来时只恢复
 // 渲染，不自动续播（声音等用户再点播放）。
 - (void)viewWillAppear:(BOOL)animated {
@@ -684,9 +697,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.108");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.109");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.108。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.109。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1995,7 +2008,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.108\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.109\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {
@@ -2213,7 +2226,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
                     NSString *txt = [GHLSSRuntimeString("iOS ") stringByAppendingString:(ver ? ver : GHLSSRuntimeString("?"))];
                     [spec setProperty:txt forKey:GHLSSRuntimeString("valueText")];
                 } else if ([vk isEqualToString:GHLSSRuntimeString("pluginVersion")]) {
-                    [spec setProperty:GHLSSRuntimeString("1.0.108") forKey:GHLSSRuntimeString("valueText")];
+                    [spec setProperty:GHLSSRuntimeString("1.0.109") forKey:GHLSSRuntimeString("valueText")];
                 }
             }
             _specifiers = loaded;
