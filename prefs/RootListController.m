@@ -1685,10 +1685,11 @@ static UIImage *GHLSSAppIconForBundleID(NSString *bid) {
 // v43：子頁要跳的 plist 白名單（15 份真實檔案；不在裡面的
 // 名字一律不載，免得 loadSpecifiersFromPlistName 拿到壞名字）。
 // v50：Advanced 刪了（去重）、Status 新加。
-// v43.32：SplitDetail 新加（1.0.107 分屏細節頁）。
+// v43.32：SplitDetail 新加（1.0.107 分屏細節頁）；Trigger 新加
+//（1.0.107 觸發設置頁，ARC／邊緣／懸浮條三套）。
 static BOOL GHLSSPrefsIsKnownPlistName(const char *name) {
     if (!name || name[0] == '\0') return NO;
-    static const char *known[] = {"ARC", "ARCButtons", "Activation", "Banner", "Floating", "FloatingIcon", "GestureCustom", "Info", "Keyboard", "Other", "Root", "Scheduler", "Shadow", "SplitDetail", "Status", "Window"};
+    static const char *known[] = {"ARC", "ARCButtons", "Activation", "Banner", "Floating", "FloatingIcon", "GestureCustom", "Info", "Keyboard", "Other", "Root", "Scheduler", "Shadow", "SplitDetail", "Status", "Trigger", "Window"};
     size_t n = sizeof(known) / sizeof(known[0]);
     for (size_t i = 0; i < n; i++) {
         if (strcmp(name, known[i]) == 0) return YES;
@@ -1860,6 +1861,29 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
                 BOOL isInnerRow = (strcmp(kc, "enlargeOnKeyboardPortrait") == 0) || (strcmp(kc, "landscapeEnlargeOnKeyboard") == 0);
                 if (outerMode && isInnerRow) continue;
                 if (!outerMode && isOuterRow) continue;
+                [kept addObject:sp];
+            }
+            _specifiers = kept;
+        }
+        // v43.32：觸發方式下面三套按方式動態換行——ARC 只留 ARC 兩行
+        //（arcStartAngle／arcFanAngle），邊緣只留邊緣那套（觸發側／
+        // 滑幾次／左／右×豎／橫屏各三根滑桿），懸浮條只留懸浮條兩行
+        //（floatingBarY／floatingBarSize）；調試開關和觸發方式行本身
+        // 三套通用，一直留著。行和組頭都帶 ghlssTriggerSet 標記
+        //（arc／edge／bar），沒標記的都留。模式變了回這一頁時
+        // viewWillAppear 已清快取重組（v71），讀到的就是新值。
+        if (targetPlist && [targetPlist isEqualToString:GHLSSRuntimeString("Trigger")]) {
+            char *tmode = GHLSSPrefsCString("triggerMode");
+            const char *want = "edge";
+            if (tmode) {
+                if (strcmp(tmode, "arc") == 0) want = "arc";
+                else if (strcmp(tmode, "bar") == 0) want = "bar";
+                free(tmode);
+            }
+            NSMutableArray *kept = [NSMutableArray array];
+            for (PSSpecifier *sp in _specifiers) {
+                NSString *setTag = sp.properties[GHLSSRuntimeString("ghlssTriggerSet")];
+                if (setTag && strcmp([setTag UTF8String], want) != 0) continue;
                 [kept addObject:sp];
             }
             _specifiers = kept;
