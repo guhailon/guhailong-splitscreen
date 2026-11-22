@@ -119,10 +119,34 @@
 			<real>0.7</real>
 		</dict>
 		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>nobar</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>taskbarStyle</string>
+			<key>label</key>
+			<string>任务栏样式</string>
+			<key>validTitles</key>
+			<array>
+				<string>无底条（默认）</string>
+				<string>金边胶囊</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>nobar</string>
+				<string>gold</string>
+			</array>
+		</dict>
+		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>任务栏放底部或顶部；透明度 1.0 就是现在的样子，调低变透明；大小 1.0 就是现在的尺寸。改了立刻生效，不用 respring。</string>
+			<string>任务栏放底部或顶部；透明度 1.0 就是现在的样子，调低变透明；大小 1.0 就是现在的尺寸。样式无底条是图标直接浮著，金边胶囊是黑底细金边。改了立刻生效，不用 respring。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

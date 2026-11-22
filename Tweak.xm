@@ -1463,7 +1463,7 @@ static UIWindow *GHLSSSettingsTaskbarWindow = nil;
 static BOOL GHLSSLowBatteryDocked = NO;
 static int GHLSSPeriodicTickCount = 0;
 static BOOL GHLSSScreenLocked = NO; // v64：鎖屏旗標（看門狗用：鎖著時不推前景，不跟鎖屏回調打架）。
-static BOOL GHLSSTaskbarSnapshotLogged = NO; // v54：任務欄快照成功只記一行（見 GHLSSUpdateTaskbar）。
+// v54：任務欄快照已拿掉（v43.21 起芯片只顯示 App 圖標，不抓快照）。
 static BOOL GHLSSKeyboardShifted = NO;
 static CGRect GHLSSKeyboardSavedFrame = {{0, 0}, {0, 0}};
 static BOOL GHLSSKeyboardEnlarged = NO; // v43.5：橫屏放大中（鍵盤彈出時放大、收起恢復原尺寸）。
@@ -1663,6 +1663,45 @@ if (idx == GHLSSActiveAppIndex) {
 GHLSSClearActive();
 }
 GHLSSLogLine("v57 scene destroyed");
+}
+
+// v43.20: drop a cached entry WITHOUT destroying its scene (long-press direct
+// close). Unlike GHLSSDestroyCachedEntryAtIndex, never calls destroyScene and
+// never invalidates the presenter — the app process keeps running and the
+// scene stays alive in the system; reopening re-hosts the existing scene via
+// GHLSSExistingMainSceneForBundleID. Dropping the window pointer is what makes
+// the taskbar chip disappear (GHLSSUpdateTaskbar draws a chip for every
+// non-nil cache window). The window itself is already hidden by
+// closeHostedWindow's exit-animation completion.
+static void GHLSSDropCachedEntryKeepingScene(int idx) {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheScenes[idx] && !GHLSSCacheWindows[idx]) return;
+if (GHLSSCacheWindows[idx]) GHLSSCacheWindows[idx].hidden = YES;
+GHLSSCacheWindows[idx] = nil;
+GHLSSCacheScenes[idx] = nil;
+GHLSSCachePresenters[idx] = nil;
+GHLSSCacheLayerHostViews[idx] = nil;
+GHLSSCacheTopStrips[idx] = nil;
+GHLSSCacheContainers[idx] = nil;
+GHLSSCacheContentViews[idx] = nil;
+GHLSSGatePlaceholders[idx] = nil;
+GHLSSCacheResizeHandles[idx] = nil;
+GHLSSCacheSideDividers[idx] = nil;
+GHLSSCacheIsSideDock[idx] = NO;
+GHLSSPeekTapOverlays[idx] = nil;
+GHLSSCacheSceneIDs[idx] = nil;
+GHLSSCacheBundleIDs[idx][0] = '\0';
+GHLSSCachePids[idx] = 0;
+GHLSSCacheMinimized[idx] = NO;
+GHLSSCacheHiddenByLock[idx] = NO;
+GHLSSCacheScaleRatios[idx] = 1.0;
+GHLSSCacheScaleSliderBars[idx] = nil;
+GHLSSCacheScaleSliders[idx] = nil;
+GHLSSCacheScaleLabels[idx] = nil;
+GHLSSHideDockPeekForIndex(idx);
+if (idx == GHLSSActiveAppIndex) {
+GHLSSClearActive();
+}
 }
 
 // v53：GHLSSBackgroundHostedScene 已刪（關窗後不再把 scene 推後台，
@@ -2348,6 +2387,18 @@ double v = GHLSSReadPrefsDouble("taskbarScale", 1.0);
 if (v < 0.7) v = 0.7;
 if (v > 1.3) v = 1.3;
 return (CGFloat)v;
+}
+// v43.21：任務欄樣式（taskbarStyle 字串）：nobar 無底條（預設，B：
+// 圖標直接浮著，沒底沒框）／gold 金邊膠囊（C：黑底細金邊膠囊）。
+// 未知值當預設；切換走 prefschanged → GHLSSUpdateTaskbar 立刻生效。
+static int GHLSSReadTaskbarStyle(void) {
+char *v = GHLSSReadPrefsCString("taskbarStyle");
+int s = 0;
+if (v) {
+if (strcmp(v, "gold") == 0) s = 1;
+free(v);
+}
+return s;
 }
 // C8 浮窗透明度：全域預設（0.5–1.0，預設 1.0）與每窗值（winOpacity_<bid>，
 // 沒設就走全域；調的是窗的 alpha）。
@@ -4560,10 +4611,33 @@ CGFloat tbScale = GHLSSReadTaskbarScale();
 CGFloat tbBarH = 52.0 * tbScale;
 CGRect tbScreen = [UIScreen mainScreen].bounds;
 CGFloat tbY = GHLSSReadTaskbarIsTop() ? 8.0 : tbScreen.size.height - 8.0 - tbBarH;
-GHLSSSettingsTaskbarWindow.frame = CGRectMake(0, tbY, tbScreen.size.width, tbBarH);
-root.frame = CGRectMake(0, 0, tbScreen.size.width, tbBarH);
+// v43.21：先數有幾顆芯片，兩種樣式都讓窗貼著芯片排、居中放（無底條時
+// 透明窗不吃多餘觸摸，點窗外空白處才不會被透明窗擋住）。
+int tbCount = 0;
+for (int i = 0; i < GHLSS_APP_COUNT; i++) {
+if (!GHLSSCacheWindows[i]) continue;
+const char *b = GHLSSCacheBundleIDs[i];
+if (!b || b[0] == '\0') continue;
+tbCount++;
+}
+int tbStyle = GHLSSReadTaskbarStyle(); // 0＝nobar 無底條（預設），1＝gold 金邊膠囊
+CGFloat tbRowW = tbCount > 0 ? ((tbCount - 1) * 44.0 + 36.0) * tbScale : 0;
+CGFloat tbBarW = tbRowW + 16.0 * tbScale;
+CGFloat tbX = (tbScreen.size.width - tbBarW) / 2.0;
+GHLSSSettingsTaskbarWindow.frame = CGRectMake(tbX, tbY, tbBarW, tbBarH);
+root.frame = CGRectMake(0, 0, tbBarW, tbBarH);
+if (tbStyle == 1) {
+// gold：黑底膠囊＋細金邊。
 root.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85 * GHLSSReadTaskbarOpacity()];
 root.layer.cornerRadius = 16.0 * tbScale;
+root.layer.borderWidth = 1.0;
+root.layer.borderColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0].CGColor;
+} else {
+// nobar（預設）：沒底沒框，圖標直接浮著。
+root.backgroundColor = [UIColor clearColor];
+root.layer.cornerRadius = 0;
+root.layer.borderWidth = 0;
+}
 for (UIView *sub in [root.subviews copy]) [sub removeFromSuperview];
 int count = 0;
 for (int i = 0; i < GHLSS_APP_COUNT; i++) {
@@ -4574,40 +4648,25 @@ CGFloat x = 8.0 * tbScale + count * 44.0 * tbScale;
 UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
 btn.frame = CGRectMake(x, 8.0 * tbScale, 36.0 * tbScale, 36.0 * tbScale);
 btn.tag = i;
-// v54：任務欄浮窗 App 快照——每顆按鈕顯示該 App 宿主窗的快照（探針：
-// 宿主層不一定抓得到快照，抓不到回退 App 圖標）；藏著的窗不抓（快照是空的）。
-// 快照成功只記一行（不再重複記，免得每 2 秒刷屏）。
-UIImage *icon = nil;
-UIView *snapView = nil;
-UIWindow *hostWin = GHLSSCacheWindows[i];
-if (hostWin && !hostWin.hidden) {
-@try {
-snapView = [hostWin snapshotViewAfterScreenUpdates:NO];
-} @catch (NSException *e) { (void)e; snapView = nil; }
-}
-if (snapView) {
-snapView.frame = CGRectMake(0, 0, 36.0 * tbScale, 36.0 * tbScale);
-snapView.layer.cornerRadius = 8.0 * tbScale;
-snapView.layer.masksToBounds = YES;
-snapView.userInteractionEnabled = NO;
-[btn addSubview:snapView];
-if (!GHLSSTaskbarSnapshotLogged) {
-GHLSSTaskbarSnapshotLogged = YES;
-GHLSSLogLine("v57 taskbar snapshot ok");
-}
-} else {
-icon = GHLSSAppIcon(bid);
+// v43.21：芯片只顯示 App 圖標（跟啟動器圖標一樣），不再抓宿主窗快照。
+UIImage *icon = GHLSSAppIcon(bid);
 if (icon) {
 [btn setImage:icon forState:UIControlStateNormal];
 } else {
 btn.backgroundColor = [UIColor grayColor];
 }
+// v43.21：無底條時圖標浮著，加一點陰影才看得出是浮著的。
+if (tbStyle == 0) {
+btn.layer.shadowColor = [UIColor blackColor].CGColor;
+btn.layer.shadowOpacity = 0.35f;
+btn.layer.shadowRadius = 4.0 * tbScale;
+btn.layer.shadowOffset = CGSizeMake(0, 2.0 * tbScale);
 }
 btn.imageView.layer.cornerRadius = 8.0 * tbScale;
 btn.imageView.layer.masksToBounds = YES;
 [btn addTarget:GHLSSLauncherShared action:@selector(handleTaskbarButton:) forControlEvents:UIControlEventTouchUpInside];
-// v43.16 B：芯片長按菜單（設為主窗／收成小卡／關閉）。長按認出時會取消
-// 按鈕的觸摸，所以長按不會誤觸點按切主窗；快點則在長按認出前就觸發切主窗。
+// v43.20：芯片長按直接關窗（不彈菜單）。長按認出時會取消按鈕的觸摸，
+// 所以長按不會誤觸點按切主窗；快點則在長按認出前就觸發切主窗。
 UILongPressGestureRecognizer *tbLP = [[UILongPressGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleTaskbarChipLongPress:)];
 [btn addGestureRecognizer:tbLP];
 [root addSubview:btn];
@@ -4640,21 +4699,7 @@ dot.layer.borderColor = [UIColor whiteColor].CGColor;
 }
 count++;
 }
-// v50：任務欄末尾「全部收起」鈕（有窗才顯示；點一下把所有看得見的
-// 浮窗都收成貼邊小卡，走低電量同一套收窗迴圈）。
-if (count > 0) {
-CGFloat bx = 8.0 * tbScale + count * 44.0 * tbScale;
-UIButton *dockAllBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-dockAllBtn.frame = CGRectMake(bx, 8.0 * tbScale, 56.0 * tbScale, 36.0 * tbScale);
-dockAllBtn.tag = 99;
-dockAllBtn.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-dockAllBtn.layer.cornerRadius = 8.0 * tbScale;
-[dockAllBtn setTitle:[NSString stringWithCString:"全部收起" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[dockAllBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-dockAllBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11.0 * tbScale];
-[dockAllBtn addTarget:GHLSSLauncherShared action:@selector(handleTaskbarButton:) forControlEvents:UIControlEventTouchUpInside];
-[root addSubview:dockAllBtn];
-}
+// v43.20：「全部收起」鈕拿掉（任務欄只留芯片；收窗走點窗外／拖小卡）。
 GHLSSSettingsTaskbarWindow.hidden = (count == 0);
 }
 // v53：懸浮球已整個拿掉（建球函數刪除；只留一個哆啦A夢按鈕）。
@@ -7968,43 +8013,33 @@ snprintf(buf, sizeof(buf), "v43.16 taskbar close chip %d", (int)idx);
 GHLSSLogLine(buf);
 }
 
-// v43.16 B：芯片長按菜單——設為主窗／收成小卡／關閉，三個都走現有路
-//（點芯片的切主窗路、minimizeHostedWindow、closeHostedWindow）。
+// v43.20：長按芯片直接關窗——不彈菜單。最小化（小卡）的項直接關，不先
+// promote／恢復成大窗（不會閃黑窗）；可見主窗走現有關窗路。關完芯片消失。
+- (void)closeCachedEntryAtIndex:(int)idx {
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheWindows[idx]) return;
+// v43.20：先裝回活動量再關——closeHostedWindow 只認活動窗；裝回不顯示
+//（LoadCacheToActive 只搬指針，不推前景、不恢復），所以小卡不會閃回大窗。
+GHLSSLoadCacheToActive(idx);
+[self closeHostedWindow];
+// v43.20：把項從緩存拿掉（scene 留著——進程繼續跑，重開再托管現有 scene），
+// 任務欄只給非空緩存項畫芯片，拿掉芯片就消失。
+GHLSSDropCachedEntryKeepingScene(idx);
+GHLSSSaveRestoreList();
+GHLSSUpdateDimOverlay();
+GHLSSUpdateTaskbar();
+}
+
+// v43.20：芯片長按＝直接關掉那個 App，不彈菜單。
 // 只在 Began 認出一次；長按認出會取消按鈕觸摸，不會誤觸切主窗。
 - (void)handleTaskbarChipLongPress:(UILongPressGestureRecognizer *)recognizer {
 if (recognizer.state != UIGestureRecognizerStateBegan) return;
 NSInteger idx = recognizer.view.tag;
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 if (!GHLSSCacheWindows[idx]) return;
-UIViewController *vc = GHLSSSettingsTaskbarWindow.rootViewController;
-if (!vc) return;
-UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-UIAlertAction *mainAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"设为主窗" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-(void)a;
-[self promoteWindowToMainIndex:(int)idx];
-GHLSSUpdateTaskbar();
-}];
-UIAlertAction *dockAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"收成小卡" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-(void)a;
-[self promoteWindowToMainIndex:(int)idx];
-[self minimizeHostedWindow];
-GHLSSUpdateTaskbar();
-}];
-UIAlertAction *closeAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"关闭" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
-(void)a;
-[self promoteWindowToMainIndex:(int)idx];
-[self closeHostedWindow];
-}];
-UIAlertAction *cancelAct = [UIAlertAction actionWithTitle:[NSString stringWithCString:"取消" encoding:NSUTF8StringEncoding] style:UIAlertActionStyleCancel handler:nil];
-[sheet addAction:mainAct];
-[sheet addAction:dockAct];
-[sheet addAction:closeAct];
-[sheet addAction:cancelAct];
-sheet.popoverPresentationController.sourceView = recognizer.view;
-sheet.popoverPresentationController.sourceRect = recognizer.view.bounds;
-[vc presentViewController:sheet animated:YES completion:nil];
+[self closeCachedEntryAtIndex:(int)idx];
 char buf[96];
-snprintf(buf, sizeof(buf), "v43.16 taskbar long press chip %d", (int)idx);
+snprintf(buf, sizeof(buf), "v43.20 taskbar long press close chip %d", (int)idx);
 GHLSSLogLine(buf);
 }
 
@@ -10541,7 +10576,8 @@ GHLSSApplySideWindowStyleNow();
 // 这里直接把感应带跟到新边（ recognizer 的 edges 一起改）；不用另加通知，
 // 复用 v43.13 已有的这一条注册。
 GHLSSUpdateStripPosition();
-// v43.16 C：任務欄位置／透明度／大小一改就重刷（新三行都帶 PostNotification）。
+// v43.16 C：任務欄位置／透明度／大小一改就重刷（新三行都帶 PostNotification）；
+// v43.21：樣式也一樣（taskbarStyle 行帶 PostNotification，切換立刻生效）。
 GHLSSUpdateTaskbar();
 });
 if (prefsChangedResult == 0) {
