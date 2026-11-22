@@ -2309,6 +2309,11 @@ return GHLSSReadPrefsBool("enabled", NO);
 static BOOL GHLSSReadKeyboardAvoidEnabled(void) {
 return GHLSSReadPrefsBool("keyboardAvoidEnabled", YES);
 }
+// v43.33（1.0.108，路線 A 探針）：鍵盤圖層樹探針開關（Keyboard.plist 的
+// kbProbeEnabled，預設開；關了鍵盤彈出時不打圖層樹。只記日誌，不改行為）。
+static BOOL GHLSSReadKbProbeEnabled(void) {
+return GHLSSReadPrefsBool("kbProbeEnabled", YES);
+}
 // v43.18：鍵盤模式合一——先讀單鍵 keyboardMode；沒有讀分向舊鍵
 // keyboardPopupModePortrait／keyboardPopupModeLandscape；再讀舊單鍵
 // keyboardPopupMode；最後預設豎屏內彈出／橫屏外彈出照舊。0＝浮窗內彈出
@@ -7606,6 +7611,98 @@ GHLSSLogLine(buf);
 
 
 
+// ── v43.33（1.0.108，路線 A 探針）：鍵盤彈出時打當前 presentation 的圖層樹 ──
+// 背景：皇上的決定性測試已證明 presenter 路本身分不開鍵盤（scene 346×749、
+// 100% 縮放，系統鍵盤按整屏 430×359 排、超出 scene 被窗口裁掉）。FV 最可能
+// 的做法（路線 A）是 SpringBoard 側把鍵盤窗的 context 另外託管成一個獨立
+// 全寬窗口——鍵盤窗（UIRemoteKeyboardWindow／_UITextEffectsWindowHosted）
+// 有自己的 CAContext（自己的 context ID），機械上能另外託管，但前提是
+// SpringBoard 側拿得到這個 context ID。這個探針就是驗這個前提。
+// 只記日誌，不改任何行為：不藏、不動、不託管任何東西；不改任何 frame；
+// 不改鍵盤行為。開關 kbProbeEnabled（Keyboard.plist，預設開）。
+// 節流：一次彈出 WillShow 會連發幾次，2 秒內只打一次樹（鍵盤 hide 不清
+// 旗標——hide 可能漏，時間節流自己會恢復）。
+// 讀 contextId：CALayer 的私有方法，用 objc_msgSend＋sel_registerName 叫
+// （跟 GHLSSAppIcon 一樣的寫法，不連結私有框架）；拿不到就回 0。
+// CALayerHost 認法：NSClassFromString 拿類、isKindOfClass 比。
+// 屏幕坐標：window.layer convertRect:fromLayer:（管 transform）；算不出就留空。
+static double GHLSSKbProbeLastDump = 0;
+static int GHLSSKbProbeNodeCount = 0;
+static int GHLSSKbProbeHostCount = 0;
+static int GHLSSKbProbeKbCount = 0;
+static unsigned int GHLSSKbProbeContextIdForLayer(CALayer *layer) {
+if (!layer) return 0;
+unsigned int ctxId = 0;
+@try {
+SEL sel = sel_registerName("contextId");
+if ([layer respondsToSelector:sel]) {
+unsigned int (*msgSendCtx)(id, SEL) = (unsigned int (*)(id, SEL))objc_msgSend;
+ctxId = msgSendCtx(layer, sel);
+}
+} @catch (NSException *e) {
+(void)e;
+ctxId = 0;
+}
+return ctxId;
+}
+static void GHLSSKbProbeDumpLayer(CALayer *layer, int depth, CALayer *windowLayer, CGRect windowFrame) {
+if (!layer || depth > 5 || GHLSSKbProbeNodeCount >= 60) return;
+GHLSSKbProbeNodeCount++;
+const char *cls = class_getName([layer class]);
+CGRect f = layer.frame;
+unsigned int ctxId = GHLSSKbProbeContextIdForLayer(layer);
+BOOL isHost = NO;
+Class hostClass = NSClassFromString([NSString stringWithCString:"CALayerHost" encoding:NSUTF8StringEncoding]);
+if (hostClass && [layer isKindOfClass:hostClass]) isHost = YES;
+if (isHost) GHLSSKbProbeHostCount++;
+// KB?：寬約 430、高約 359、在 scene 下半——就是鍵盤窗的樣子。
+BOOL kbMaybe = (f.size.width >= 400.0 && f.size.width <= 460.0 && f.size.height >= 300.0 && f.size.height <= 400.0 && f.origin.y >= 500.0);
+if (kbMaybe) GHLSSKbProbeKbCount++;
+char sbuf[640];
+if (windowLayer) {
+CGRect scr = CGRectZero;
+BOOL scrOK = NO;
+@try {
+scr = [windowLayer convertRect:layer.bounds fromLayer:layer];
+scrOK = YES;
+} @catch (NSException *e) {
+(void)e;
+scrOK = NO;
+}
+if (scrOK) {
+snprintf(sbuf, sizeof(sbuf), "v43.33 kb-probe d=%d %s frame=%d,%d %dx%d scr=%d,%d %dx%d ctx=%u%s%s%s", depth, cls, (int)f.origin.x, (int)f.origin.y, (int)f.size.width, (int)f.size.height, (int)(scr.origin.x + windowFrame.origin.x), (int)(scr.origin.y + windowFrame.origin.y), (int)scr.size.width, (int)scr.size.height, ctxId, isHost ? " HOST" : "", kbMaybe ? " KB?" : "", layer.hidden ? " hidden" : "");
+} else {
+snprintf(sbuf, sizeof(sbuf), "v43.33 kb-probe d=%d %s frame=%d,%d %dx%d scr=? ctx=%u%s%s%s", depth, cls, (int)f.origin.x, (int)f.origin.y, (int)f.size.width, (int)f.size.height, ctxId, isHost ? " HOST" : "", kbMaybe ? " KB?" : "", layer.hidden ? " hidden" : "");
+}
+} else {
+snprintf(sbuf, sizeof(sbuf), "v43.33 kb-probe d=%d %s frame=%d,%d %dx%d scr=? ctx=%u%s%s%s", depth, cls, (int)f.origin.x, (int)f.origin.y, (int)f.size.width, (int)f.size.height, ctxId, isHost ? " HOST" : "", kbMaybe ? " KB?" : "", layer.hidden ? " hidden" : "");
+}
+GHLSSLogLine(sbuf);
+NSArray *subs = [layer.sublayers copy];
+for (CALayer *sub in subs) {
+GHLSSKbProbeDumpLayer(sub, depth + 1, windowLayer, windowFrame);
+}
+}
+static void GHLSSKbProbeDumpOnKeyboardShow(CGFloat kbHeight, const char *bid) {
+CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+if (now - GHLSSKbProbeLastDump < 2.0) return;
+GHLSSKbProbeLastDump = now;
+UIView *pv = (GHLSSHostedPresenter && GHLSSHostedPresenter.presentationView) ? GHLSSHostedPresenter.presentationView : nil;
+UIView *lh = GHLSSHostedLayerHostView;
+CGRect winFrame = GHLSSHostedWindow ? GHLSSHostedWindow.frame : CGRectZero;
+char hbuf[256];
+snprintf(hbuf, sizeof(hbuf), "v43.33 kb-probe show bid=%s kb=%d path=%s win=%d,%d %dx%d", (bid && bid[0] != '\0') ? bid : "-", (int)kbHeight, (pv && lh) ? "both" : (pv ? "presenter" : (lh ? "layerhost" : "none")), (int)winFrame.origin.x, (int)winFrame.origin.y, (int)winFrame.size.width, (int)winFrame.size.height);
+GHLSSLogLine(hbuf);
+GHLSSKbProbeNodeCount = 0;
+GHLSSKbProbeHostCount = 0;
+GHLSSKbProbeKbCount = 0;
+CALayer *windowLayer = GHLSSHostedWindow ? GHLSSHostedWindow.layer : nil;
+if (pv) GHLSSKbProbeDumpLayer(pv.layer, 0, windowLayer, winFrame);
+if (lh) GHLSSKbProbeDumpLayer(lh.layer, 0, windowLayer, winFrame);
+char fbuf[128];
+snprintf(fbuf, sizeof(fbuf), "v43.33 kb-probe done nodes=%d host=%d kb=%d", GHLSSKbProbeNodeCount, GHLSSKbProbeHostCount, GHLSSKbProbeKbCount);
+GHLSSLogLine(fbuf);
+}
 // v42：鍵盤彈出時浮窗自動上移（探針：鍵盤通知是 App 進程發的，
 // SpringBoard 這邊可能收不到——收到了才上移，收不到就不動，見 §115）。
 // 上移只動活動窗（鍵盤擋住它的底才移，移多少看鍵盤高度），收起回原位。
@@ -7620,6 +7717,9 @@ GHLSSLogLine(buf);
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 if (bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0) return;
 if (kbHeight <= 0) return;
+// v43.33（1.0.108，路線 A 探針）：鍵盤彈出時打一遍當前 presentation 的
+// 圖層樹（只記日誌，2 秒節流；開關 kbProbeEnabled 預設開）。
+if (GHLSSReadKbProbeEnabled()) GHLSSKbProbeDumpOnKeyboardShow(kbHeight, bid);
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 BOOL landscape = screenBounds.size.width > screenBounds.size.height;
 int mode = GHLSSReadKeyboardPopupModeForOrientation(landscape);
