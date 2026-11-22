@@ -4,9 +4,15 @@
 <dict>
 	<key>Filter</key>
 	<dict>
-		<key>Classes</key>
+		<key>Bundles</key>
 		<array>
-			<string>UIApplication</string>
+			<string>com.tencent.xin</string>
+			<string>com.tencent.mqq</string>
+		</array>
+		<key>Executables</key>
+		<array>
+			<string>WeChat</string>
+			<string>QQ</string>
 		</array>
 	</dict>
 </dict>

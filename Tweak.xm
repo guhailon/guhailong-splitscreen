@@ -9775,6 +9775,7 @@ return;
 static void GHLSSLicenseGateAndSetup(void);
 static void GHLSSLicenseCheckStart(void);
 static void GHLSSDeferredSetupRun(void);
+static char *GHLSSLicenseReadUDID(void);
 static BOOL GHLSSSetupRan = NO; // 延後 setup 跑過一次（重複跑會建兩套窗／重複登記通知）。
 static BOOL GHLSSLicenseCheckInFlight = NO; // 名單抓取進行中（不要重疊抓）。
 static BOOL GHLSSLicenseCheckDone = NO; // 名單抓取跑完過一次（跑完又沒授權就鎖住，不再循環抓；重新檢查按鈕會清掉它）。
@@ -9792,6 +9793,52 @@ GHLSSLicenseGateAndSetup();
 });
 if (licenseRecheckResult != 0) {
 GHLSSLogLine("v43.25 license recheck notify register failed");
+}
+// v43.26：設定頁要 UDID——設定頁進程（Preferences.app）沒有
+// com.apple.private.MobileGestalt 權限，直接讀回 NULL；改走 Darwin 通知問答：
+// 設定頁發 licenseUDIDRequest，SpringBoard 收到就用 GHLSSLicenseReadUDID 讀
+// （SpringBoard 讀得到，本來就用它做授權查驗），再用帶 userInfo 的 Darwin
+// 通知回 licenseUDIDReply（status＝ok 帶 UDID／unavailable 讀不到；2 秒沒回
+// ＝沒收到回覆，三種情況不要混成一種）。UDID 絕不寫日誌／prefs／檔案，
+// 回覆只走記憶體裡的 userInfo。回通知用 CFNotificationCenterPostNotification
+// （只發送，不在 SpringBoard 側登記觀察者——那個才會凍住 SpringBoard）。
+// 在 %ctor 登記（不是延後 setup）：沒授權鎖住時延後 setup 沒跑，但用戶正是
+// 沒授權才要 UDID 發給 Lee——這個問答鎖住時也要能回。
+int licenseUDIDRequestToken = 0;
+int licenseUDIDRequestResult = notify_register_dispatch("com.guhailong.splitscreen.licenseUDIDRequest", &licenseUDIDRequestToken, dispatch_get_main_queue(), ^(int token) {
+(void)token;
+char *udid = GHLSSLicenseReadUDID();
+const char *outcome = udid ? "ok" : "unavailable";
+CFMutableDictionaryRef info = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+if (info) {
+CFStringRef statusKey = CFStringCreateWithCString(NULL, "status", kCFStringEncodingUTF8);
+CFStringRef statusVal = CFStringCreateWithCString(NULL, outcome, kCFStringEncodingUTF8);
+if (statusKey && statusVal) CFDictionarySetValue(info, statusKey, statusVal);
+if (statusKey) CFRelease(statusKey);
+if (statusVal) CFRelease(statusVal);
+if (udid) {
+CFStringRef udidKey = CFStringCreateWithCString(NULL, "udid", kCFStringEncodingUTF8);
+CFStringRef udidVal = CFStringCreateWithCString(NULL, udid, kCFStringEncodingUTF8);
+if (udidKey && udidVal) CFDictionarySetValue(info, udidKey, udidVal);
+if (udidKey) CFRelease(udidKey);
+if (udidVal) CFRelease(udidVal);
+free(udid);
+}
+CFStringRef replyName = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen.licenseUDIDReply", kCFStringEncodingUTF8);
+if (replyName) {
+CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), replyName, NULL, info, TRUE);
+CFRelease(replyName);
+}
+CFRelease(info);
+} else if (udid) {
+free(udid);
+}
+char udidReplyBuf[128];
+snprintf(udidReplyBuf, sizeof(udidReplyBuf), "v43.26 license UDID reply posted %s", outcome);
+GHLSSLogLine(udidReplyBuf);
+});
+if (licenseUDIDRequestResult != 0) {
+GHLSSLogLine("v43.26 license UDID request notify register failed");
 }
 GHLSSLicenseCheckStart();
 // v25 的 %ctor 和 v21/v22/v23/v24 一模一样，只做一行纯 C 调用：
@@ -9971,6 +10018,40 @@ GHLSSLogLine("v43.25 license check failed, setup skipped");
 return;
 }
 GHLSSLicenseCheckStart();
+}
+
+// v43.26：helper 載入標記——helper（沙盒 App）自己寫 prefs 可能寫不到全域
+// domain，改由 helper 發 Darwin 通知（名字裡帶 bid），SpringBoard 收到就把
+// kbHelperLoaded-<bid>＝時間戳寫進共用 prefs（SpringBoard 寫得到；狀態頁
+// GHLSSKbHelperMarkersText() 讀的就是這個 domain，不用改顯示格式）。
+// bid／suffix 只傳字串字面量（常駐），block 抓指標安全；不要在迴圈裡抓
+// 區域陣列變數。兩個後綴：helperLoaded（%ctor 載入時）／helperAlive
+// （App 啟動完成時）。只給微信／QQ 登記（過濾器改窄後 helper 只進這兩個）。
+static void GHLSSRegisterHelperLoadedNotify(const char *bid, const char *suffix) {
+if (!bid || !suffix) return;
+char notifyName[256];
+snprintf(notifyName, sizeof(notifyName), "com.guhailong.splitscreen.%s.%s", suffix, bid);
+int markerToken = 0;
+int markerResult = notify_register_dispatch(notifyName, &markerToken, dispatch_get_main_queue(), ^(int token) {
+(void)token;
+char keyBuf[192];
+snprintf(keyBuf, sizeof(keyBuf), "kbHelperLoaded-%s", bid);
+char valBuf[64];
+snprintf(valBuf, sizeof(valBuf), "%f", [NSDate timeIntervalSinceReferenceDate]);
+GHLSSWritePrefsCString(keyBuf, valBuf);
+char lbuf[256];
+snprintf(lbuf, sizeof(lbuf), "v43.26 kb-helper marker %s %s", suffix, bid);
+GHLSSLogLine(lbuf);
+});
+if (markerResult == 0) {
+char rbuf[256];
+snprintf(rbuf, sizeof(rbuf), "v43.26 kb-helper marker notify registered %s", notifyName);
+GHLSSLogLine(rbuf);
+} else {
+char rbuf[256];
+snprintf(rbuf, sizeof(rbuf), "v43.26 kb-helper marker notify register failed %s", notifyName);
+GHLSSLogLine(rbuf);
+}
 }
 
 static void GHLSSDeferredSetupRun(void) {
@@ -10294,6 +10375,13 @@ GHLSSLogLine("v43.5 keyboard hide notify registered");
 } else {
 GHLSSLogLine("v43.5 keyboard hide notify register failed");
 }
+// v43.26：helper 載入標記——四個通知（兩個 bid × 兩個後綴），收到就把
+// kbHelperLoaded-<bid> 寫進共用 prefs，狀態頁就看得到（見
+// GHLSSRegisterHelperLoadedNotify）。
+GHLSSRegisterHelperLoadedNotify("com.tencent.xin", "helperLoaded");
+GHLSSRegisterHelperLoadedNotify("com.tencent.xin", "helperAlive");
+GHLSSRegisterHelperLoadedNotify("com.tencent.mqq", "helperLoaded");
+GHLSSRegisterHelperLoadedNotify("com.tencent.mqq", "helperAlive");
 // v43.13：設定變更通知——設定頁帶 PostNotification 的行一改就發
 // com.guhailong.splitscreen.prefschanged（Darwin 通知，跟鎖屏／鍵盤
 // 同一寫法；不要用 CFNotificationCenterAddObserver，會凍住 SpringBoard）。

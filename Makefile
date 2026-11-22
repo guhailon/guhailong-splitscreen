@@ -13,10 +13,13 @@ TWEAK_NAME = GuHaiLongSplitScreen GHLSSKeyboardHelper
 
 GuHaiLongSplitScreen_FILES = Tweak.xm
 GuHaiLongSplitScreen_CFLAGS = -fobjc-arc
-# v43.5（1.0.80）：第二個 dylib——鍵盤助手，塞進 App 進程（Classes
-# UIApplication，見 GHLSSKeyboardHelper.plist；%ctor 裡再排掉
-# SpringBoard／抖音兩個包名／設定 App）。只橋接鍵盤通知＋移鍵盤窗，
-# 不進 SpringBoard。兩個 dylib 共用同一個 .deb。
+# v43.5（1.0.80）：第二個 dylib——鍵盤助手，塞進 App 進程（v43.26 改
+# Bundles=(com.tencent.xin, com.tencent.mqq)＋Executables=(WeChat, QQ)，
+# 見 GHLSSKeyboardHelper.plist；舊的 Classes=(UIApplication) 會被 ElleKit
+# 在進程啟動時只評估一次，類名過濾看時序，微信／QQ 從來沒載進去過。
+# %ctor 裡再排掉 SpringBoard／抖音兩個包名／設定 App——過濾器改窄之後
+# 這些排除走不到，但留著當防線，以後 Bundles 加 App 也不怕誤進）。
+# 只橋接鍵盤通知＋移鍵盤窗，不進 SpringBoard。兩個 dylib 共用同一個 .deb。
 # v24（5.2）建 scene 要用的私有框架：FBProcessManager / FBSceneManager /
 # FBApplicationProcessLaunchTransaction 在 FrontBoard；FBSMutableSceneDefinition /
 # FBSMutableSceneParameters / FBSSceneIdentity / FBSSceneClientIdentity /

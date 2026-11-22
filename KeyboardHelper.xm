@@ -31,6 +31,7 @@
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <notify.h>
+#import <os/log.h>
 #import <objc/runtime.h>
 #import <string.h>
 #import <stdio.h>
@@ -138,6 +139,54 @@ static void GHLSSKBWritePrefsCString(const char *key, const char *value) {
     if (keyRef) CFRelease(keyRef);
 }
 
+// v43.26：%ctor 標記三件套——helper 有沒有載進去，要在 App 進程外看得到：
+// (a) prefs 鍵 kbHelperLoaded-<bid> 照寫（best-effort：沙盒 App 寫全域
+// domain 可能寫不到）；(b) 寫一個 App 一定能寫的標記檔（TMPDIR 下，檔名帶
+// bid＋時間戳）＋一條 os_log；(c) Darwin 通知（名字裡帶 bid——Darwin 通知
+// 沒有 payload，只能這樣傳），SpringBoard 收到就把同一個鍵寫進共用 prefs，
+// 狀態頁就看得到。bid 為空整組跳過（41.log 遺留：不要寫 kbHelperLoaded-
+// 這種無用鍵）。source 是 "loaded"（%ctor）或 "launch"（App 啟動完成），
+// notifySuffix 是 "helperLoaded" 或 "helperAlive"。
+static void GHLSSKBReportLoaded(const char *bid, const char *source, const char *notifySuffix) {
+    if (!bid || bid[0] == '\0') return;
+    if (!source || source[0] == '\0') source = "loaded";
+    if (!notifySuffix || notifySuffix[0] == '\0') notifySuffix = "helperLoaded";
+    char tsBuf[64];
+    snprintf(tsBuf, sizeof(tsBuf), "%f", [NSDate timeIntervalSinceReferenceDate]);
+    // (a) prefs 鍵，best-effort。
+    {
+        char keyBuf[192];
+        snprintf(keyBuf, sizeof(keyBuf), "kbHelperLoaded-%s", bid);
+        GHLSSKBWritePrefsCString(keyBuf, tsBuf);
+    }
+    // (b) 標記檔＋os_log。TMPDIR 是 App 自己的 tmp，沙盒寫得到。
+    {
+        const char *tmpdir = getenv("TMPDIR");
+        if (tmpdir && tmpdir[0] != '\0') {
+            long long tsInt = (long long)[NSDate timeIntervalSinceReferenceDate];
+            char pathBuf[512];
+            snprintf(pathBuf, sizeof(pathBuf), "%sguhailong-kbhelper-%s-%s-%lld.txt", tmpdir, source, bid, tsInt);
+            FILE *f = fopen(pathBuf, "w");
+            if (f) {
+                fprintf(f, "bid=%s\nsource=%s\ntime=%s\n", bid, source, tsBuf);
+                fclose(f);
+            }
+        }
+        os_log(OS_LOG_DEFAULT, "guhailong kb-helper %{public}s %{public}s", source, bid);
+    }
+    // (c) Darwin 通知，bid 寫進名字裡。
+    {
+        char nameBuf[256];
+        snprintf(nameBuf, sizeof(nameBuf), "com.guhailong.splitscreen.%s.%s", notifySuffix, bid);
+        notify_post(nameBuf);
+    }
+    {
+        char lbuf[256];
+        snprintf(lbuf, sizeof(lbuf), "v43.26 kb-helper %s %s", source, bid);
+        GHLSSKBLogLine(lbuf);
+    }
+}
+
 // v43.18：鍵盤模式合一（跟 SpringBoard 側同一語義）：0＝浮窗內彈出，
 // 1＝外彈出。先讀單鍵 keyboardMode；沒有讀分向舊鍵；再讀舊單鍵
 // keyboardPopupMode；最後預設豎屏內彈出／橫屏外彈出照舊。
@@ -209,6 +258,7 @@ static UIWindow *GHLSSKBDragTarget = nil;
 + (instancetype)shared;
 - (void)handleKeyboardWillShow:(NSNotification *)note;
 - (void)handleKeyboardWillHide:(NSNotification *)note;
+- (void)handleAppDidFinishLaunching:(NSNotification *)note;
 - (void)handleKeyboardDrag:(UIPanGestureRecognizer *)recognizer;
 @end
 
@@ -324,6 +374,19 @@ static UIWindow *GHLSSKBDragTarget = nil;
     }
 }
 
+// v43.26：第二次標記——App 啟動完成時再發一次，證明 helper 活到 App 啟動
+// 完成（不是只在 %ctor 閃一下就死）。bid 為空跳過。
+- (void)handleAppDidFinishLaunching:(NSNotification *)note {
+    (void)note;
+    char bid[128] = {0};
+    NSString *bidStr = [[NSBundle mainBundle] bundleIdentifier];
+    if (bidStr) {
+        [bidStr getCString:bid maxLength:sizeof(bid) encoding:NSUTF8StringEncoding];
+    }
+    if (bid[0] == '\0') return;
+    GHLSSKBReportLoaded(bid, "launch", "helperAlive");
+}
+
 - (void)handleKeyboardDrag:(UIPanGestureRecognizer *)recognizer {
     UIWindow *kbWindow = (UIWindow *)recognizer.view;
     if (!kbWindow) return;
@@ -369,16 +432,12 @@ static UIWindow *GHLSSKBDragTarget = nil;
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     [nc addObserver:helper selector:@selector(handleKeyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
     [nc addObserver:helper selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
-    // v43.22: %ctor 標記——載入時寫 prefs 一個鍵＋記一行日誌，以後「helper 在不在」
-    // 看得見，不用再猜日誌（%ctor 本身以前不寫日誌，0 次只能證明 handler 沒跑過）。
-    {
-        char keyBuf[192];
-        snprintf(keyBuf, sizeof(keyBuf), "kbHelperLoaded-%s", bid);
-        char valBuf[64];
-        snprintf(valBuf, sizeof(valBuf), "%f", [NSDate timeIntervalSinceReferenceDate]);
-        GHLSSKBWritePrefsCString(keyBuf, valBuf);
-        char lbuf[192];
-        snprintf(lbuf, sizeof(lbuf), "v43.22 kb-helper loaded %s", bid);
-        GHLSSKBLogLine(lbuf);
+    // v43.26：第二次標記——App 啟動完成時再發一次（見 handleAppDidFinishLaunching:）。
+    [nc addObserver:helper selector:@selector(handleAppDidFinishLaunching:) name:UIApplicationDidFinishLaunchingNotification object:nil];
+    // v43.26：%ctor 標記三件套（見 GHLSSKBReportLoaded）：prefs 鍵 best-effort、
+    // TMPDIR 標記檔＋os_log、Darwin 通知（名字帶 bid）給 SpringBoard 寫共用
+    // prefs。bid 為空整組跳過，不寫 kbHelperLoaded- 無用鍵（41.log 遺留）。
+    if (bid[0] != '\0') {
+        GHLSSKBReportLoaded(bid, "loaded", "helperLoaded");
     }
 }
