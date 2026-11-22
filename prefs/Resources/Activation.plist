@@ -60,7 +60,7 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkCell</string>
+			<string>PSTitleValueCell</string>
 			<key>cellClass</key>
 			<string>GHLSSActivationRowCell</string>
 			<key>iconName</key>
@@ -72,7 +72,7 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkCell</string>
+			<string>PSTitleValueCell</string>
 			<key>cellClass</key>
 			<string>GHLSSActivationRowCell</string>
 			<key>iconName</key>
@@ -84,7 +84,7 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkCell</string>
+			<string>PSTitleValueCell</string>
 			<key>cellClass</key>
 			<string>GHLSSActivationRowCell</string>
 			<key>iconName</key>

@@ -858,14 +858,19 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
         try {
           renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         } catch (e) {
+          // v43.35 fail-soft：WebGL 建不起来也不抛（之前 throw e 会触发全局
+          // error 框「页面出错了…请刷新重试」，墙面空白）。降级：3D 水面不渲，
+          // 封面／歌单／控制／音频照常工作。
+          renderer = null;
           errBox.style.display = 'block';
           errBox.textContent = '这台设备不支持 WebGL，水面歌词墙没法流动起来。';
-          throw e;
         }
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.06;
-        container.appendChild(renderer.domElement);
+        if (renderer) {
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 1.06;
+          container.appendChild(renderer.domElement);
+        }
 
         var scene = new THREE.Scene();
         scene.fog = new THREE.Fog(0x453372, 16, 44);
@@ -874,13 +879,15 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
 
         var composer = null;
         var bloomPass = null;
-        try {
-          composer = new THREE.EffectComposer(renderer);
-          composer.addPass(new THREE.RenderPass(scene, camera));
-          bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(540, 960), 0.38, 0.55, 0.8);
-          composer.addPass(bloomPass);
-          composer.addPass(new THREE.OutputPass());
-        } catch (e) { composer = null; }
+        if (renderer) {
+          try {
+            composer = new THREE.EffectComposer(renderer);
+            composer.addPass(new THREE.RenderPass(scene, camera));
+            bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(540, 960), 0.38, 0.55, 0.8);
+            composer.addPass(bloomPass);
+            composer.addPass(new THREE.OutputPass());
+          } catch (e) { composer = null; }
+        }
 
         var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         var elapsed = 0;
@@ -1230,7 +1237,7 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           waterUniforms.uFogColor.value.set(w.mid);
           scene.fog.color.set(w.mid);
           if (bloomPass) bloomPass.strength = 0.30 + (wallIdx % 5) * 0.06;
-          renderer.toneMappingExposure = 1.0 + (wallIdx % 4) * 0.04;
+          if (renderer) renderer.toneMappingExposure = 1.0 + (wallIdx % 4) * 0.04;
           dust.material.color.set(w.dust);
           moonGlow.material.color.set(w.hor);
           sideTint.set(w.side); sideHot.set(w.dust); idleTint.set(w.pink);
@@ -1509,11 +1516,12 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
         var raycaster = new THREE.Raycaster();
         var parX = 0, parTarget = 0;
         var pDown = null;
-        var cvs = renderer.domElement;
+        var cvs = renderer ? renderer.domElement : null;
         function pointerNDC(e) {
           var r = cvs.getBoundingClientRect();
           return { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1, px: e.clientX, py: e.clientY };
         }
+        if (cvs) {
         cvs.addEventListener('pointerdown', function (e) {
           pDown = { x: e.clientX, y: e.clientY, t: performance.now() };
         });
@@ -1543,12 +1551,13 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           }
         });
         cvs.addEventListener('pointercancel', function () { pDown = null; parTarget = 0; });
+        }
 
         /* ---- 尺寸 ---- */
         function resize() {
           var w = container.clientWidth, h = container.clientHeight;
           if (!w || !h) return;
-          renderer.setSize(w, h);
+          if (renderer) renderer.setSize(w, h);
           if (composer) composer.setSize(w, h);
           camera.aspect = w / h;
           camera.updateProjectionMatrix();
@@ -1614,7 +1623,7 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
             camera.position.y = 2.05 + (reduced ? 0 : Math.sin(elapsed * 0.3) * 0.05);
             camera.lookAt(parX * 0.4, 1.42, 0);
 
-            if (composer) composer.render(); else renderer.render(scene, camera);
+            if (composer) composer.render(); else if (renderer) renderer.render(scene, camera);
           } catch (err) {
             errBox.style.display = 'block';
             errBox.textContent = '渲染出错：' + err.message;

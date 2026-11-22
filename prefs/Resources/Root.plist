@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.105（实验版 v105）</string>
+			<string>SeaDragon Split v1.0.108</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -45,20 +45,6 @@
 			<string>enabled</string>
 			<key>label</key>
 			<string>启用分屏</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>歌词墙</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSLyricWallListController</string>
-			<key>label</key>
-			<string>歌词墙播放器</string>
 		</dict>
 		<dict>
 			<key>cell</key>

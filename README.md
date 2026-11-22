@@ -1,4 +1,4 @@
-# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.105（实验版 v105）
+# 顾海龙集团分屏 — GuHaiLongSplitScreen v1.0.108
 
 > ⚠️ 本项目仍在创作阶段，未完成，不对外发布。未经顾海龙允许，任何人不得使用、复制、分发。
 
