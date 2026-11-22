@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>SeaDragon Split v1.0.102（实验版 v102）</string>
+			<string>SeaDragon Split v1.0.103（实验版 v103）</string>
 			<key>label</key>
 			<string>版本</string>
 		</dict>
@@ -40,9 +40,9 @@
 			<key>footerText</key>
 			<string>（读取中）</string>
 			<key>key</key>
-			<string>statusLicenseState</string>
+			<string>statusActivationState</string>
 			<key>label</key>
-			<string>授权状态</string>
+			<string>激活状态</string>
 		</dict>
 		<dict>
 			<key>cell</key>

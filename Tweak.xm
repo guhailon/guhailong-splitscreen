@@ -834,7 +834,6 @@
 #import <signal.h>
 #import <notify.h>
 #import <dlfcn.h>
-#import <CommonCrypto/CommonDigest.h>
 #import "GHLSSUpdateCheck.h"
 #import <AudioToolbox/AudioServices.h>
 
@@ -4018,8 +4017,11 @@ if (image) [GHLSSDoraemonButton setImage:image forState:UIControlStateNormal];
 // 感應帶。開關狀態變了才動手，沒變直接回（tick 便宜）。
 static BOOL GHLSSAppliedEnabledState = NO;
 static BOOL GHLSSAppliedEnabledValue = NO;
+// v43.28：激活码锁（定义在这里，GHLSSApplyEnabledState 和下面
+// %ctor 后的激活模块共用）——锁住时分屏开关就当关着。
+static BOOL GHLSSActivationLocked = NO;
 static void GHLSSApplyEnabledState(void) {
-BOOL enabled = GHLSSReadEnabled();
+BOOL enabled = GHLSSReadEnabled() && !GHLSSActivationLocked;
 if (GHLSSAppliedEnabledState && enabled == GHLSSAppliedEnabledValue) return;
 GHLSSAppliedEnabledState = YES;
 GHLSSAppliedEnabledValue = enabled;
@@ -9769,206 +9771,107 @@ return;
 
 @end
 
-// v43.25：UDID 綁定授權（Lee 2026-11-22 17:35 定，像 floatingView）——
-// 整個插件沒授權就不啟動；只有 Lee 能授權（名單放源站，只存 SHA256 雜湊）。
-// 前向聲明（%ctor 先用，定義在後面）。
-static void GHLSSLicenseGateAndSetup(void);
-static void GHLSSLicenseCheckStart(void);
+// v43.28：激活码（皇上 2026-11-22 定，设备授权整套取消后改走激活码，
+// 像黄白助手那样）——设置里输码，输对才能用插件；输错／没输锁住，
+// 只藏窗、不崩、不进安全模式。码的名单在源站 license/codes.json
+// （10 个码，第一个是主码；码只放名单文件，不要写死在代码里）。
+// 名单是异步抓的（NSURLSession，3 秒超时），抓不到不锁死；
+// 判断只在 setup 跑起来之后做，绝不在 %ctor 里同步跑
+// （1.0.102 就是 %ctor 同步跑 setup 进的安全模式）。
+// 锁法：复用 GHLSSApplyEnabledState——锁住时分屏开关就当关着，
+// 感应带／哆啦A夢鈕／已开浮窗全藏、启动器关掉；解锁时恢复。
 static void GHLSSDeferredSetupRun(void);
-static char *GHLSSLicenseReadUDID(void);
-static void GHLSSLicenseProbeKeys(void);
-static BOOL GHLSSSetupRan = NO; // 延後 setup 跑過一次（重複跑會建兩套窗／重複登記通知）。
-static BOOL GHLSSLicenseCheckInFlight = NO; // 名單抓取進行中（不要重疊抓）。
-static BOOL GHLSSLicenseCheckDone = NO; // 名單抓取跑完過一次（跑完又沒授權就鎖住，不再循環抓；重新檢查按鈕會清掉它）。
-static int GHLSSLicenseLastResult = -1; // 上次抓取結果：1 在名單、0 不在名單、-1 抓不到／解不開、-2 UDID 讀不到（v43.27：暫時放行，等讀得到再收緊）。
+static void GHLSSActivationCheckStart(void);
+
+static BOOL GHLSSSetupRan = NO; // 延后 setup 跑过一次（重复跑会建两套窗／重复登记通知）。
 
 %ctor {
-// v43.25：授權檢查在 %ctor 就啟動（非同步抓名單，不卡 SpringBoard 載入；
-// 5 秒後的延後 setup 進門前再由 GHLSSLicenseGateAndSetup 裁決）。
-// 重新檢查通知也在這裡登記（鎖住時延後 setup 沒跑，通知只能在這裡登記才接得到）。
-int licenseRecheckToken = 0;
-int licenseRecheckResult = notify_register_dispatch("com.guhailong.splitscreen.licenseRecheck", &licenseRecheckToken, dispatch_get_main_queue(), ^(int token) {
-(void)token;
-GHLSSLicenseCheckDone = NO;
-GHLSSLicenseGateAndSetup();
-});
-if (licenseRecheckResult != 0) {
-GHLSSLogLine("v43.25 license recheck notify register failed");
-}
-// v43.26：設定頁要 UDID——設定頁進程（Preferences.app）沒有
-// com.apple.private.MobileGestalt 權限，直接讀回 NULL；改走 Darwin 通知問答：
-// 設定頁發 licenseUDIDRequest，SpringBoard 收到就用 GHLSSLicenseReadUDID 讀
-// （v43.27 更正：實測 SpringBoard 也讀不到——46.log 5 次問答全回 unavailable，
-// 0 超時；最可能是 com.apple.private.MobileGestalt.AllowedProtectedKeys 白名單
-// 沒放行，授權查驗用的同一支讀法一樣讀不到），再用帶 userInfo 的 Darwin
-// 通知回 licenseUDIDReply（status＝ok 帶 UDID／unavailable 讀不到；2 秒沒回
-// ＝沒收到回覆，三種情況不要混成一種）。UDID 絕不寫日誌／prefs／檔案，
-// 回覆只走記憶體裡的 userInfo。回通知用 CFNotificationCenterPostNotification
-// （只發送，不在 SpringBoard 側登記觀察者——那個才會凍住 SpringBoard）。
-// 在 %ctor 登記（不是延後 setup）：沒授權鎖住時延後 setup 沒跑，但用戶正是
-// 沒授權才要 UDID 發給 Lee——這個問答鎖住時也要能回。
-int licenseUDIDRequestToken = 0;
-int licenseUDIDRequestResult = notify_register_dispatch("com.guhailong.splitscreen.licenseUDIDRequest", &licenseUDIDRequestToken, dispatch_get_main_queue(), ^(int token) {
-(void)token;
-char *udid = GHLSSLicenseReadUDID();
-GHLSSLicenseProbeKeys();
-const char *outcome = udid ? "ok" : "unavailable";
-CFMutableDictionaryRef info = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-if (info) {
-CFStringRef statusKey = CFStringCreateWithCString(NULL, "status", kCFStringEncodingUTF8);
-CFStringRef statusVal = CFStringCreateWithCString(NULL, outcome, kCFStringEncodingUTF8);
-if (statusKey && statusVal) CFDictionarySetValue(info, statusKey, statusVal);
-if (statusKey) CFRelease(statusKey);
-if (statusVal) CFRelease(statusVal);
-if (udid) {
-CFStringRef udidKey = CFStringCreateWithCString(NULL, "udid", kCFStringEncodingUTF8);
-CFStringRef udidVal = CFStringCreateWithCString(NULL, udid, kCFStringEncodingUTF8);
-if (udidKey && udidVal) CFDictionarySetValue(info, udidKey, udidVal);
-if (udidKey) CFRelease(udidKey);
-if (udidVal) CFRelease(udidVal);
-free(udid);
-}
-CFStringRef replyName = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen.licenseUDIDReply", kCFStringEncodingUTF8);
-if (replyName) {
-CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), replyName, NULL, info, TRUE);
-CFRelease(replyName);
-}
-CFRelease(info);
-} else if (udid) {
-free(udid);
-}
-char udidReplyBuf[128];
-snprintf(udidReplyBuf, sizeof(udidReplyBuf), "v43.26 license UDID reply posted %s", outcome);
-GHLSSLogLine(udidReplyBuf);
-});
-if (licenseUDIDRequestResult != 0) {
-GHLSSLogLine("v43.26 license UDID request notify register failed");
-}
-GHLSSLicenseCheckStart();
 // v25 的 %ctor 和 v21/v22/v23/v24 一模一样，只做一行纯 C 调用：
 // 5 秒后在主队列跑一个 block。不登记通知、不写日志、不读文件、
 // 不调系统日志、不建窗、不 hook。
 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
 dispatch_get_main_queue(), ^{
-GHLSSLicenseGateAndSetup();
+if (!GHLSSSetupRan) {
+GHLSSSetupRan = YES;
+GHLSSDeferredSetupRun();
+}
 });
 }
 
-// v43.25：UDID 綁定授權模組——流程：dylib 載入時非同步抓名單對驗（3 秒超時），
-// 結果寫 prefs 快取 licenseAuthorized（BOOL）＋licenseCheckedAt（double，時間戳）；
-// 離線時上次驗過的放行、從沒驗過的鎖住；Lee 把人從名單拿掉，
-// 下次抓到不在名單就清快取、下次鎖住。
-// 誠實提醒：客戶端查驗擋得住一般用戶，擋不住有心改 dylib 的人（floatingView 也一樣）。
-// UDID／雜湊絕不寫進日誌、prefs、或任何檔案——日誌只記授權／未授權／抓取失敗。
-// 讀真 UDID（MobileGestalt MGCopyAnswer，dlopen 現取，不連私有框架）。
-// identifierForVendor 不是 UDID，絕不用。讀不到回 NULL（v43.27：不再直接視為
-// 未授權——FetchAllowlist 回 -2，門控暫時放行，等讀得到再收緊）。
-// 回傳 malloc 的 C 字串，呼叫處 free；絕不要把它寫進日誌。
-static char *GHLSSLicenseReadUDID(void) {
-void *handle = dlopen("/System/Library/PrivateFrameworks/MobileGestalt.framework/MobileGestalt", RTLD_LAZY);
-if (!handle) { GHLSSLogLine("v43.27 license UDID read step dlopen failed"); return NULL; }
-typedef CFTypeRef (*GHLSSMGCopyAnswerFunc)(CFStringRef);
-GHLSSMGCopyAnswerFunc mgCopyAnswer = (GHLSSMGCopyAnswerFunc)dlsym(handle, "MGCopyAnswer");
-if (!mgCopyAnswer) { GHLSSLogLine("v43.27 license UDID read step dlsym failed"); return NULL; }
-CFStringRef keyRef = CFStringCreateWithCString(NULL, "UniqueDeviceID", kCFStringEncodingUTF8);
-if (!keyRef) { GHLSSLogLine("v43.27 license UDID read step keyRef failed"); return NULL; }
-CFTypeRef value = mgCopyAnswer(keyRef);
-CFRelease(keyRef);
-if (!value || CFGetTypeID(value) != CFStringGetTypeID()) {
-if (value) CFRelease(value);
-GHLSSLogLine("v43.27 license UDID read step MGCopyAnswer failed");
-return NULL;
-}
-CFIndex len = CFStringGetLength((CFStringRef)value);
-CFIndex maxBytes = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8) + 1;
-char *out = (char *)malloc(maxBytes);
-if (out && !CFStringGetCString((CFStringRef)value, out, maxBytes, kCFStringEncodingUTF8)) {
-free(out);
-out = NULL;
-}
-CFRelease(value);
-return out;
+// v43.28：激活状态写 prefs（设置页状态行／诊断信息读这个键）：
+// authorized 已激活、locked 未激活（码不对或没输）、checkFailed 名单
+// 读不到（暂不锁）。只写状态字，不写码本身。
+static void GHLSSActivationSetState(const char *state) {
+if (!state) return;
+GHLSSWritePrefsCString("activationState", state);
 }
 
-// v43.27：多鍵試讀（診斷用）——同一個 MGCopyAnswer 逐鍵問：UniqueDeviceID、
-// ProvisioningUniqueDeviceID、UniqueChipID、SerialNumber、DeviceClass（陽性對照）。
-// 只記各鍵有無回值（hit／miss），絕不記值。從 licenseUDIDRequest handler 和
-// FetchAllowlist 讀不到 UDID 時叫，幫 46.log 的「SpringBoard 也讀不到」定位是
-// 哪一層卡住（dlopen／dlsym／全鍵 miss／只有 DeviceClass 回）。
-static void GHLSSLicenseProbeKeys(void) {
-void *handle = dlopen("/System/Library/PrivateFrameworks/MobileGestalt.framework/MobileGestalt", RTLD_LAZY);
-if (!handle) { GHLSSLogLine("v43.27 license probe dlopen failed"); return; }
-typedef CFTypeRef (*GHLSSMGCopyAnswerFunc)(CFStringRef);
-GHLSSMGCopyAnswerFunc mgCopyAnswer = (GHLSSMGCopyAnswerFunc)dlsym(handle, "MGCopyAnswer");
-if (!mgCopyAnswer) { GHLSSLogLine("v43.27 license probe dlsym failed"); return; }
-static const char *probeKeys[] = {"UniqueDeviceID", "ProvisioningUniqueDeviceID", "UniqueChipID", "SerialNumber", "DeviceClass"};
-for (int i = 0; i < 5; i++) {
-CFStringRef keyRef = CFStringCreateWithCString(NULL, probeKeys[i], kCFStringEncodingUTF8);
-if (!keyRef) continue;
-CFTypeRef value = mgCopyAnswer(keyRef);
-CFRelease(keyRef);
-char probeBuf[96];
-snprintf(probeBuf, sizeof(probeBuf), "v43.27 license probe %s %s", probeKeys[i], value ? "hit" : "miss");
-GHLSSLogLine(probeBuf);
-if (value) CFRelease(value);
+static void GHLSSActivationApplyLock(void) {
+if (!GHLSSActivationLocked) {
+GHLSSActivationLocked = YES;
+GHLSSActivationSetState("locked");
+GHLSSLogLine("v43.28 activation locked");
 }
+GHLSSApplyEnabledState();
 }
 
-// v43.25：UDID 算 SHA256（小寫 hex，64 字）。out 至少 65 字元。
-static void GHLSSLicenseSHA256Hex(const char *input, char *out, size_t outSize) {
-if (!out || outSize == 0) return;
-out[0] = '\0';
-if (!input) return;
-unsigned char digest[CC_SHA256_DIGEST_LENGTH];
-CC_SHA256(input, (CC_LONG)strlen(input), digest);
-if (outSize < (size_t)(CC_SHA256_DIGEST_LENGTH * 2 + 1)) return;
-static const char hexDigits[] = "0123456789abcdef";
-for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
-out[i * 2] = hexDigits[(digest[i] >> 4) & 0xF];
-out[i * 2 + 1] = hexDigits[digest[i] & 0xF];
+static void GHLSSActivationApplyUnlock(void) {
+if (GHLSSActivationLocked) {
+GHLSSActivationLocked = NO;
+GHLSSActivationSetState("authorized");
+GHLSSLogLine("v43.28 activation authorized");
 }
-out[CC_SHA256_DIGEST_LENGTH * 2] = '\0';
+GHLSSApplyEnabledState();
 }
 
-// v43.25：抓名單對驗（非同步，3 秒超時）。回調一定在主隊列跑。
-// 結果：1 在名單；0 抓到但不在名單；-2 UDID 讀不到（v43.27：不再視為未授權，
-// 呼叫端不要寫 licenseAuthorized＝NO，門控暫時放行）；
-// -1 抓不到／解不開（網路、超時、JSON 壞掉——這種情況呼叫端不要動快取）。
-static void GHLSSLicenseFetchAllowlist(void (^completion)(int result)) {
-char *udid = GHLSSLicenseReadUDID();
-if (!udid) {
-GHLSSLicenseProbeKeys();
-GHLSSLogLine("v43.27 license UDID unreadable");
-if (completion) completion(-2);
+// v43.28：异步抓名单对码。结果：1 码在名单、0 码不在名单／没输码、
+// -1 抓不到／解不开（网络、超时、JSON 坏掉——这种不锁死，维持原状）。
+// 回调一定在主队列跑。码只放内存比对，绝不写日志。
+static void GHLSSActivationFetchAndCheck(void (^completion)(int result)) {
+char *code = GHLSSReadPrefsCString("activationCode");
+if (!code) {
+if (completion) completion(0);
 return;
 }
-char hashHex[65];
-GHLSSLicenseSHA256Hex(udid, hashHex, sizeof(hashHex));
-free(udid);
-if (hashHex[0] == '\0') {
-GHLSSLogLine("v43.27 license UDID unreadable");
-if (completion) completion(-2);
+// 去掉头尾空白（设置页输码时手滑多打了空格也认）。
+size_t len = strlen(code);
+while (len > 0 && (code[len - 1] == ' ' || code[len - 1] == '\n' || code[len - 1] == '\t' || code[len - 1] == '\r')) code[--len] = '\0';
+size_t start = 0;
+while (code[start] == ' ' || code[start] == '\n' || code[start] == '\t' || code[start] == '\r') start++;
+if (start > 0) memmove(code, code + start, strlen(code + start) + 1);
+if (code[0] == '\0') {
+free(code);
+if (completion) completion(0);
 return;
 }
-NSString *urlString = [NSString stringWithCString:"https://guhailong-repo.pages.dev/license/udids.json" encoding:NSUTF8StringEncoding];
+NSString *urlString = [NSString stringWithCString:"https://guhailong-repo.pages.dev/license/codes.json" encoding:NSUTF8StringEncoding];
 NSURL *url = [NSURL URLWithString:urlString];
 if (!url) {
+free(code);
 if (completion) completion(-1);
 return;
 }
 NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
 request.timeoutInterval = 3.0;
-NSString *wantHash = [NSString stringWithCString:hashHex encoding:NSUTF8StringEncoding];
 NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
 (void)response;
 int result = -1;
 if (!error && data) {
 @try {
 id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-if (parsed && [parsed isKindOfClass:[NSArray class]]) {
+NSArray *codes = nil;
+if (parsed && [parsed isKindOfClass:[NSDictionary class]]) {
+NSString *codesKey = [NSString stringWithCString:"codes" encoding:NSUTF8StringEncoding];
+id arr = [(NSDictionary *)parsed objectForKey:codesKey];
+if (arr && [arr isKindOfClass:[NSArray class]]) codes = (NSArray *)arr;
+} else if (parsed && [parsed isKindOfClass:[NSArray class]]) {
+codes = (NSArray *)parsed;
+}
+if (codes) {
 result = 0;
-for (id entry in (NSArray *)parsed) {
-if ([entry isKindOfClass:[NSString class]] && [(NSString *)entry isEqualToString:wantHash]) {
+NSString *wantCode = [NSString stringWithCString:code encoding:NSUTF8StringEncoding];
+for (id entry in codes) {
+if ([entry isKindOfClass:[NSString class]] && wantCode && [(NSString *)entry isEqualToString:wantCode]) {
 result = 1;
 break;
 }
@@ -9979,6 +9882,7 @@ break;
 result = -1;
 }
 }
+free(code);
 int finalResult = result;
 dispatch_async(dispatch_get_main_queue(), ^{
 if (completion) completion(finalResult);
@@ -9987,87 +9891,38 @@ if (completion) completion(finalResult);
 [task resume];
 }
 
-// v43.25：啟動授權檢查（非同步抓名單）。跑完把結果寫 prefs 快取，
-// 再叫一次門控（5 秒延後 setup 可能已經等在那裡，也可能還沒到）。
-// 抓不到（-1）不動快取，不要因為一次斷網就把付費用戶鎖掉。
-static void GHLSSLicenseCheckStart(void) {
-if (GHLSSLicenseCheckInFlight) return;
-GHLSSLicenseCheckInFlight = YES;
-GHLSSLicenseCheckDone = NO;
-GHLSSLicenseFetchAllowlist(^(int result) {
-GHLSSLicenseCheckInFlight = NO;
-GHLSSLicenseCheckDone = YES;
-GHLSSLicenseLastResult = result;
-if (result == 1) {
-GHLSSWritePrefsBool("licenseAuthorized", YES);
-GHLSSWritePrefsDouble("licenseCheckedAt", CFAbsoluteTimeGetCurrent());
-GHLSSLogLine("v43.25 license authorized");
-} else if (result == 0) {
-GHLSSWritePrefsBool("licenseAuthorized", NO);
-GHLSSLogLine("v43.25 license not authorized");
-} else if (result == -2) {
-// v43.27：UDID 讀不到——不要寫 licenseAuthorized＝NO，快取原地不動；
-// 門控那邊暫時放行（見 GHLSSLicenseGateAndSetup），等讀得到再收緊。
-GHLSSLogLine("v43.27 license UDID unreadable, cache untouched");
-} else {
-GHLSSLogLine("v43.25 license check failed");
-}
-GHLSSLicenseGateAndSetup();
-});
-}
+// v43.28：启动时／点「检查激活码」时跑一次对码（异步，不卡 SpringBoard）。
+// -1（抓不到名单）不锁死：只记日志、状态写 checkFailed，锁保持原状。
+static BOOL GHLSSActivationCheckInFlight = NO;
+static BOOL GHLSSActivationRecheckRegistered = NO;
 
-// v43.25：快取已授權時背景再對一次名單（Lee 拿掉人時下次鎖住；
-// 抓不到就不動快取，不要因為一次斷網就把付費用戶鎖掉；不叫門控，
-// setup 已經跑過了）。
-static void GHLSSLicenseRecheckInBackground(void) {
-if (GHLSSLicenseCheckInFlight) return;
-GHLSSLicenseCheckInFlight = YES;
-GHLSSLicenseFetchAllowlist(^(int result) {
-GHLSSLicenseCheckInFlight = NO;
+static void GHLSSActivationCheckStart(void) {
+if (GHLSSActivationCheckInFlight) return;
+if (!GHLSSActivationRecheckRegistered) {
+GHLSSActivationRecheckRegistered = YES;
+int recheckToken = 0;
+int recheckResult = notify_register_dispatch("com.guhailong.splitscreen.activationRecheck", &recheckToken, dispatch_get_main_queue(), ^(int token) {
+(void)token;
+GHLSSActivationCheckStart();
+});
+if (recheckResult != 0) {
+GHLSSLogLine("v43.28 activation recheck notify register failed");
+}
+}
+GHLSSActivationCheckInFlight = YES;
+GHLSSActivationFetchAndCheck(^(int result) {
+GHLSSActivationCheckInFlight = NO;
 if (result == 1) {
-GHLSSWritePrefsDouble("licenseCheckedAt", CFAbsoluteTimeGetCurrent());
+GHLSSActivationApplyUnlock();
 } else if (result == 0) {
-GHLSSWritePrefsBool("licenseAuthorized", NO);
-GHLSSLogLine("v43.25 license revoked");
-} else if (result == -2) {
-GHLSSLogLine("v43.27 license UDID unreadable, cache untouched");
+GHLSSActivationApplyLock();
 } else {
-GHLSSLogLine("v43.25 license recheck failed");
+GHLSSActivationSetState("checkFailed");
+GHLSSLogLine("v43.28 activation check failed, lock unchanged");
 }
 });
 }
 
-// v43.25：授權門——延後 setup 進門前裁決。快取已授權就直接跑 setup＋背景再對一次；
-// 還沒驗完就等抓取跑完（抓取回調會再叫門控）；驗完沒授權就鎖住（不跑 setup）。
-// v43.27：驗完是 -2（UDID 讀不到）時暫時放行——授權暫時失效，等讀得到再收緊。
-static void GHLSSLicenseGateAndSetup(void) {
-if (GHLSSSetupRan) return;
-if (GHLSSReadPrefsBool("licenseAuthorized", NO)) {
-GHLSSLogLine("v43.25 license cached authorized");
-GHLSSSetupRan = YES;
-GHLSSDeferredSetupRun();
-GHLSSLicenseRecheckInBackground();
-return;
-}
-if (GHLSSLicenseCheckInFlight) return;
-if (GHLSSLicenseCheckDone) {
-if (GHLSSLicenseLastResult == -2) {
-// v43.27：UDID 讀不到時暫時放行——授權暫時失效，等讀得到再收緊
-// （46.log 證實 SpringBoard 也讀不到，名單加了人也沒用，先讓插件能跑）。
-GHLSSLogLine("v43.27 license UDID unreadable, gate temporarily open");
-GHLSSSetupRan = YES;
-GHLSSDeferredSetupRun();
-return;
-}
-if (GHLSSLicenseLastResult == 0) {
-GHLSSLogLine("v43.25 license not authorized, setup skipped");
-} else {
-GHLSSLogLine("v43.25 license check failed, setup skipped");
-}
-return;
-}
-GHLSSLicenseCheckStart();
-}
 
 // v43.26：helper 載入標記——helper（沙盒 App）自己寫 prefs 可能寫不到全域
 // domain，改由 helper 發 Darwin 通知（名字裡帶 bid），SpringBoard 收到就把
@@ -10498,4 +10353,7 @@ GHLSSLogLine(nbuf);
 GHLSSApplyEnabledState();
 GHLSSSchedulePeriodicTick();
 GHLSSLogLine("v57 periodic tick scheduled");
+// v43.28：激活码检查从这里启动（setup 跑起来之后、异步读名单；
+// 绝不在 %ctor 里跑——1.0.102 的教训）。
+GHLSSActivationCheckStart();
 }

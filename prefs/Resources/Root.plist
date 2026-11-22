@@ -10,33 +10,33 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.102（实验版 v102）</string>
+			<string>SeaDragon Split v1.0.103（实验版 v103）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>（读取中）</string>
+			<string>输入激活码才能用分屏（找 Lee 要码）。输对后点下面「检查激活码」，通过了感应带和哆啦A梦钮就出来了；码不对或没输就锁住，只藏功能，不会闪退、不会进安全模式。</string>
+			<key>label</key>
+			<string>激活</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSTextFieldCell</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
-			<string>licenseGroup</string>
+			<string>activationCode</string>
 			<key>label</key>
-			<string>授权</string>
+			<string>激活码</string>
 		</dict>
 		<dict>
 			<key>action</key>
-			<string>ghlssCopyLicenseUDID</string>
+			<string>ghlssCheckActivation</string>
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>复制本机 UDID</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssRecheckLicense</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>重新检查授权</string>
+			<string>检查激活码</string>
 		</dict>
 		<dict>
 			<key>cell</key>

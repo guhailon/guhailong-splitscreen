@@ -13,10 +13,6 @@
 // 字串是坏的。所以这里一个写死的字串都不能用：名字、路径、键名
 // 全在运行时现做（CFStringCreateWithCString / stringWithCString），
 // 读写开关直接用 CFPreferences（v13 证实过这条路是通的）。
-// Darwin 通知：授權重查（licenseRecheck）和 UDID 問答（licenseUDIDRequest／
-// licenseUDIDReply）走 notify_post／notify_register_dispatch（SpringBoard 側）
-// 和 CFNotificationCenter（設定頁側只收回覆）；SpringBoard 側不登記
-// CFNotificationCenterAddObserver（會凍住 SpringBoard）。
 // v41：備份／導出／導入／恢復是真的做檔案（設定目錄裡的固定檔案），
 // 不是擺設；v43.8 起備份／導出改從 live 設定現取值建檔（重置已刪）。
 // v42：卡片頭像／背景圖用 PHPicker 選圖（iOS 14+，不用相冊權限）。
@@ -85,11 +81,26 @@ static BOOL GHLSSPrefsBool(const char *key, BOOL defaultValue) {
     return out;
 }
 
-// v43.25：授權狀態文字（讀快取 licenseAuthorized；設定頁只顯示快取狀態，
-// 真正的查驗在 dylib 載入時跑）。
-static NSString *GHLSSPrefsLicenseStatusText(void) {
-    BOOL authorized = GHLSSPrefsBool("licenseAuthorized", NO);
-    return authorized ? GHLSSRuntimeString("已授权") : GHLSSRuntimeString("未授权");
+// v43.28：先聲明（下面定義；激活狀態 helper 要讀字串，先用）。
+static char *GHLSSPrefsCString(const char *key);
+
+// v43.28：激活状态文字（读 dylib 写的 activationState 快取；
+// authorized 已激活、locked 未激活、checkFailed 名单读不到暂不锁，
+// 没值＝还没检查）。
+static NSString *GHLSSPrefsActivationStatusText(void) {
+    char *state = GHLSSPrefsCString("activationState");
+    NSString *out;
+    if (state && strcmp(state, "authorized") == 0) {
+        out = GHLSSRuntimeString("已激活");
+    } else if (state && strcmp(state, "locked") == 0) {
+        out = GHLSSRuntimeString("未激活（激活码不对或没输）");
+    } else if (state && strcmp(state, "checkFailed") == 0) {
+        out = GHLSSRuntimeString("名单读不到，暂不锁（检查网络／名单）");
+    } else {
+        out = GHLSSRuntimeString("未检查（启动后异步检查）");
+    }
+    if (state) free(state);
+    return out;
 }
 
 // 讀一個 prefs 字串（沒設就回 NULL，調用處要 free）。
@@ -152,126 +163,6 @@ static void GHLSSWritePrefsCString(const char *key, const char *value) {
 
 // 先聲明（下面定義；輪播 helper 要記日誌，先用）。
 static void GHLSSPrefsLogLine(const char *line);
-// v43.26：UDID 結算彈窗 helper（下面在 ghlssShowAlertWithTitle:message:
-// 定義之後定義；先聲明在這裡，結算函式才能調）。
-static void GHLSSPrefsLicenseUDIDShowAlert(id controller, NSString *title, NSString *message);
-
-// v43.26：本機 UDID 改向 SpringBoard 要（Darwin 通知問答）——設定頁進程
-// （Preferences.app）沒有 com.apple.private.MobileGestalt 權限，直接讀回
-// NULL（1.0.100 的寫法）；v43.27 更正：實測 SpringBoard 也讀不到
-// （46.log 5 次問答全回 unavailable），問答只是把讀不到的結果傳回來。
-// 流程：設定頁發 licenseUDIDRequest → SpringBoard 回 licenseUDIDReply
-// （userInfo：status＝ok 帶 udid／unavailable 讀不到）。UDID 只放記憶體快取，
-// 絕不寫 prefs／檔案／日誌。狀態：0 沒開始、1 等回覆、2 已拿到、3 讀不到、
-// 4 等不到回覆（2 秒超時）。回覆／超時都在主隊列結算，狀態只在主隊列改。
-static NSString *GHLSSPrefsLicenseUDIDCache = nil;
-static int GHLSSPrefsLicenseUDIDState = 0;
-static int GHLSSPrefsLicenseUDIDGeneration = 0;
-static BOOL GHLSSPrefsLicenseUDIDCopyPending = NO;
-static BOOL GHLSSPrefsLicenseUDIDObserverRegistered = NO;
-static __weak id GHLSSPrefsLicenseUDIDController = nil;
-
-static void GHLSSPrefsLicenseUDIDRefreshUI(void) {
-    id ctl = GHLSSPrefsLicenseUDIDController;
-    if (ctl) [ctl reloadSpecifiers];
-}
-
-// 複製那一下還在等回覆就先記下，讀到／讀不到／等不到時在這裡結算（只彈一次）。
-static void GHLSSPrefsLicenseUDIDSettlePendingCopy(void) {
-    if (!GHLSSPrefsLicenseUDIDCopyPending) return;
-    GHLSSPrefsLicenseUDIDCopyPending = NO;
-    id ctl = GHLSSPrefsLicenseUDIDController;
-    if (!ctl) return;
-    if (GHLSSPrefsLicenseUDIDState == 2 && GHLSSPrefsLicenseUDIDCache) {
-        [UIPasteboard generalPasteboard].string = GHLSSPrefsLicenseUDIDCache;
-        GHLSSPrefsLogLine("v43.26 prefs-license UDID copied");
-        GHLSSPrefsLicenseUDIDShowAlert(ctl, GHLSSRuntimeString("已复制"), GHLSSRuntimeString("本机 UDID 已复制到剪贴板，发给 Lee 授权。"));
-    } else if (GHLSSPrefsLicenseUDIDState == 3) {
-        GHLSSPrefsLogLine("v43.26 prefs-license UDID unavailable");
-        GHLSSPrefsLicenseUDIDShowAlert(ctl, GHLSSRuntimeString("读取失败"), GHLSSRuntimeString("本机 UDID 读不出来，SpringBoard 侧也读不到，请联系 Lee。"));
-    } else if (GHLSSPrefsLicenseUDIDState == 4) {
-        GHLSSPrefsLicenseUDIDShowAlert(ctl, GHLSSRuntimeString("未收到回复"), GHLSSRuntimeString("分屏插件没有回复，请确认插件已安装，稍后重进本页再试。"));
-    }
-}
-
-// 回覆回調（Darwin 通知，userInfo 帶 status＋udid）。回調可能不在主線程跑，
-// 只在這裡拆 userInfo，主隊列才改狀態／刷頁面／結算複製。
-static void GHLSSPrefsLicenseUDIDReplyCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    (void)center; (void)observer; (void)name; (void)object;
-    char statusBuf[32] = {0};
-    char udidBuf[128] = {0};
-    if (userInfo) {
-        CFStringRef statusKey = CFStringCreateWithCString(NULL, "status", kCFStringEncodingUTF8);
-        CFStringRef udidKey = CFStringCreateWithCString(NULL, "udid", kCFStringEncodingUTF8);
-        CFTypeRef statusVal = statusKey ? CFDictionaryGetValue(userInfo, statusKey) : NULL;
-        CFTypeRef udidVal = udidKey ? CFDictionaryGetValue(userInfo, udidKey) : NULL;
-        if (statusVal && CFGetTypeID(statusVal) == CFStringGetTypeID()) {
-            CFStringGetCString((CFStringRef)statusVal, statusBuf, sizeof(statusBuf), kCFStringEncodingUTF8);
-        }
-        if (udidVal && CFGetTypeID(udidVal) == CFStringGetTypeID()) {
-            CFStringGetCString((CFStringRef)udidVal, udidBuf, sizeof(udidBuf), kCFStringEncodingUTF8);
-        }
-        if (statusKey) CFRelease(statusKey);
-        if (udidKey) CFRelease(udidKey);
-    }
-    BOOL ok = (strcmp(statusBuf, "ok") == 0) && (udidBuf[0] != '\0');
-    NSString *udidObj = ok ? [NSString stringWithCString:udidBuf encoding:NSUTF8StringEncoding] : nil;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (GHLSSPrefsLicenseUDIDState != 1) return;
-        if (ok && udidObj) {
-            GHLSSPrefsLicenseUDIDCache = udidObj;
-            GHLSSPrefsLicenseUDIDState = 2;
-            GHLSSPrefsLogLine("v43.26 prefs-license UDID reply ok");
-        } else {
-            GHLSSPrefsLicenseUDIDState = 3;
-            GHLSSPrefsLogLine("v43.26 prefs-license UDID reply unavailable");
-        }
-        GHLSSPrefsLicenseUDIDRefreshUI();
-        GHLSSPrefsLicenseUDIDSettlePendingCopy();
-    });
-}
-
-// 沒拿到且不在等，就發一次請求（2 秒超時）。重進頁面會再試（狀態 3／4 時也重發）。
-static void GHLSSPrefsLicenseUDIDEnsureFetch(void) {
-    if (GHLSSPrefsLicenseUDIDState == 1 || GHLSSPrefsLicenseUDIDState == 2) return;
-    if (!GHLSSPrefsLicenseUDIDObserverRegistered) {
-        GHLSSPrefsLicenseUDIDObserverRegistered = YES;
-        CFStringRef replyName = CFStringCreateWithCString(NULL, "com.guhailong.splitscreen.licenseUDIDReply", kCFStringEncodingUTF8);
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, GHLSSPrefsLicenseUDIDReplyCallback, replyName, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        if (replyName) CFRelease(replyName);
-    }
-    GHLSSPrefsLicenseUDIDState = 1;
-    GHLSSPrefsLicenseUDIDGeneration++;
-    int gen = GHLSSPrefsLicenseUDIDGeneration;
-    notify_post("com.guhailong.splitscreen.licenseUDIDRequest");
-    GHLSSPrefsLogLine("v43.26 prefs-license UDID request posted");
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (gen != GHLSSPrefsLicenseUDIDGeneration) return;
-        if (GHLSSPrefsLicenseUDIDState != 1) return;
-        GHLSSPrefsLicenseUDIDState = 4;
-        GHLSSPrefsLogLine("v43.26 prefs-license UDID reply timeout");
-        GHLSSPrefsLicenseUDIDRefreshUI();
-        GHLSSPrefsLicenseUDIDSettlePendingCopy();
-    });
-}
-
-// 授權組頁尾文字（依 UDID 取得狀態走四種寫法；等回覆中顯示「正在读取…」）。
-static NSString *GHLSSPrefsLicenseUDIDFooterText(void) {
-    NSString *status = GHLSSPrefsLicenseStatusText();
-    NSString *head;
-    if (GHLSSPrefsLicenseUDIDState == 2 && GHLSSPrefsLicenseUDIDCache) {
-        head = [GHLSSRuntimeString("本机 UDID：") stringByAppendingString:GHLSSPrefsLicenseUDIDCache];
-    } else if (GHLSSPrefsLicenseUDIDState == 3) {
-        head = GHLSSRuntimeString("本机 UDID：读取失败（SpringBoard 侧也读不到 UDID）");
-    } else if (GHLSSPrefsLicenseUDIDState == 4) {
-        head = GHLSSRuntimeString("本机 UDID：未收到回复（分屏插件可能尚未加载，请稍后重进本页再试）");
-    } else {
-        head = GHLSSRuntimeString("本机 UDID：正在读取…");
-    }
-    return [[[head stringByAppendingString:GHLSSRuntimeString("\n授权状态：")] stringByAppendingString:status] stringByAppendingString:GHLSSRuntimeString("\n把 UDID 发给 Lee 授权，通过后点「重新检查授权」。")];
-}
-
-
 // v53：哆啦A夢鈕自訂圖的固定檔名（跟卡片頭像／背景同一個設定目錄；
 // dylib 那邊 GHLSSCustomDoraemonImagePath 寫死同一條路徑）。
 static NSString *GHLSSDoraemonIconPath(void) {
@@ -676,15 +567,6 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
 }
 
-// v43.26：每次進設定主頁，沒拿到 UDID 且不在等回覆，就向 SpringBoard 要一次。
-// 只在主頁本身（子頁繼承這裡，不用要）。
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
-    GHLSSPrefsLicenseUDIDController = self;
-    GHLSSPrefsLicenseUDIDEnsureFetch();
-}
-
 // v53：橫幅掛載（viewDidAppear 才碰 table；只掛設定主頁本身）。
 // v54：掛載前核對取到的表就是主表（dataSource 是自己才掛），寬度改這時重取。
 - (void)viewDidAppear:(BOOL)animated {
@@ -752,14 +634,6 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         @try {
             NSMutableArray *loaded = [self loadSpecifiersFromPlistName:GHLSSRuntimeString("Root") target:self];
             // v52：新手模式整個取消，不再過濾。
-            // v43.25：授權組頁尾——本機 UDID＋授權狀態＋一句話說明（沒授權也顯示，好讓用戶發給 Lee）。
-            for (PSSpecifier *spec in loaded) {
-                NSString *k = spec.properties[GHLSSRuntimeString("key")];
-                if ([k isKindOfClass:[NSString class]] && [k isEqualToString:GHLSSRuntimeString("licenseGroup")]) {
-                    NSString *txt = GHLSSPrefsLicenseUDIDFooterText();
-                    [spec setProperty:txt forKey:GHLSSRuntimeString("footerText")];
-                }
-            }
             _specifiers = loaded;
         } @catch (NSException *e) {
             const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
@@ -794,9 +668,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.102");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.103");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.102。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.103。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -804,32 +678,15 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     });
 }
 
-// v43.26：複製本機 UDID（沒授權也顯示、也能複製，好讓用戶發給 Lee）。
-// UDID 不再由設定頁自己讀（Preferences.app 沒有 MobileGestalt 權限，讀回
-// NULL）：向 SpringBoard 要（見 GHLSSPrefsLicenseUDIDEnsureFetch）。
-// 還在等回覆就先記下這次點按，讀到自動複製；讀不到／等不到就彈清楚的失敗訊息。
-- (void)ghlssCopyLicenseUDID:(PSSpecifier *)specifier {
+// v43.28：检查激活码（发 Darwin 通知给 dylib；dylib 收到就重抓名单对码，
+// 通过了就放行，不用重启用户空间；码本身存在 activationCode 键里）。
+- (void)ghlssCheckActivation:(PSSpecifier *)specifier {
     (void)specifier;
-    if (GHLSSPrefsLicenseUDIDState == 2 && GHLSSPrefsLicenseUDIDCache) {
-        [UIPasteboard generalPasteboard].string = GHLSSPrefsLicenseUDIDCache;
-        GHLSSPrefsLogLine("v43.26 prefs-license UDID copied");
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("本机 UDID 已复制到剪贴板，发给 Lee 授权。")];
-        return;
-    }
-    GHLSSPrefsLicenseUDIDCopyPending = YES;
-    GHLSSPrefsLicenseUDIDController = self;
-    GHLSSPrefsLicenseUDIDEnsureFetch();
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("正在读取") message:GHLSSRuntimeString("正在读取本机 UDID，读到后自动复制，请稍等。")];
+    notify_post("com.guhailong.splitscreen.activationRecheck");
+    GHLSSPrefsLogLine("v43.28 prefs-activation recheck posted");
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已发送") message:GHLSSRuntimeString("已发送检查，稍等几秒再看激活状态。")];
 }
 
-// v43.25：重新檢查授權（發 Darwin 通知給 dylib；dylib 收到就重抓名單對驗，
-// 通過了就啟動插件，不用重啟用戶空間）。
-- (void)ghlssRecheckLicense:(PSSpecifier *)specifier {
-    (void)specifier;
-    notify_post("com.guhailong.splitscreen.licenseRecheck");
-    GHLSSPrefsLogLine("v43.25 prefs-license recheck posted");
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已发送") message:GHLSSRuntimeString("已发送重新检查，稍等几秒再看授权状态。")];
-}
 
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
@@ -850,6 +707,8 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     NSString *defaultName = GHLSSRuntimeString("default");
     id def = specifier.properties[defaultName];
     if (def) return def;
+    // v43.28：激活码是文字行，没存过回空字串（回 @(NO) 会在输入框里显示成 0）。
+    if ([key isEqualToString:GHLSSRuntimeString("activationCode")]) return GHLSSRuntimeString("");
     return @(NO);
 }
 
@@ -908,14 +767,6 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             GHLSSPrefsLogLine("v57 prefs-config alert FAILED: no presenter");
         }
     });
-}
-
-// v43.26：UDID 結算彈窗 helper（結算函式在檔案前面，調不到這裡的
-// ghlssShowAlertWithTitle:message:——那個方法只定義在後面、主 @interface
-// 也沒宣告；包一層 C 函式，先聲明在檔案前面）。
-static void GHLSSPrefsLicenseUDIDShowAlert(id controller, NSString *title, NSString *message) {
-    if (!controller) return;
-    [controller ghlssShowAlertWithTitle:title message:message];
 }
 
 // v43.8：从 live 的 CFPreferences 现取值建档（备份／导出共用）——
@@ -1434,6 +1285,8 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
     NSString *defaultName = GHLSSRuntimeString("default");
     id def = specifier.properties[defaultName];
     if (def) return def;
+    // v43.28：激活码是文字行，没存过回空字串（回 @(NO) 会在输入框里显示成 0）。
+    if ([key isEqualToString:GHLSSRuntimeString("activationCode")]) return GHLSSRuntimeString("");
     return @(NO);
 }
 
@@ -2274,10 +2127,9 @@ static NSString *GHLSSKbHelperMarkersText(void) {
                     NSString *marks = GHLSSKbHelperMarkersText();
                     NSString *txt = marks ? [GHLSSRuntimeString("键盘助手已载入：") stringByAppendingString:marks] : GHLSSRuntimeString("键盘助手：未检测到已载入标记（helper 还没进过任何 App）");
                     [spec setProperty:txt forKey:GHLSSRuntimeString("footerText")];
-                } else if ([k isKindOfClass:[NSString class]] && [k isEqualToString:GHLSSRuntimeString("statusLicenseState")]) {
-                    // v43.25：狀態頁加一行授權狀態（讀快取 licenseAuthorized）。
-                    NSString *status = GHLSSPrefsLicenseStatusText();
-                    NSString *txt = [GHLSSRuntimeString("授权状态：") stringByAppendingString:status];
+                } else if ([k isKindOfClass:[NSString class]] && [k isEqualToString:GHLSSRuntimeString("statusActivationState")]) {
+                    NSString *status = GHLSSPrefsActivationStatusText();
+                    NSString *txt = [GHLSSRuntimeString("激活状态：") stringByAppendingString:status];
                     [spec setProperty:txt forKey:GHLSSRuntimeString("footerText")];
                 }
             }
@@ -2304,15 +2156,15 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.102\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.103\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {
         diag = [[diag stringByAppendingString:GHLSSRuntimeString("\n键盘助手已载入：")] stringByAppendingString:marks];
     }
-    // v43.25：診斷信息也帶上授權狀態。
-    NSString *licenseStatus = GHLSSPrefsLicenseStatusText();
-    diag = [[diag stringByAppendingString:GHLSSRuntimeString("\n授权状态：")] stringByAppendingString:licenseStatus];
+    // v43.28：诊断信息也带上激活状态。
+    NSString *activationStatus = GHLSSPrefsActivationStatusText();
+    diag = [[diag stringByAppendingString:GHLSSRuntimeString("\n激活状态：")] stringByAppendingString:activationStatus];
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("诊断信息已复制到剪贴板。")];

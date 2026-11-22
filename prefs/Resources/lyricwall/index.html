@@ -321,7 +321,7 @@
             <button class="track-row import-row" id="importRow" type="button">
               <span class="track-num">＋</span>
               <span class="track-info"><span class="track-name">导入歌词</span><br/>
-              <span class="track-sub">从 QQ音乐 / 网易云音乐 / 抖音 / 其他 APP 导入</span></span>
+              <span class="track-sub">从 QQ音乐 / 网易云音乐 / 抖音 / 酷我纯净版 / 酷我音乐 / 其他 APP 导入</span></span>
               <span class="track-tag">导入</span>
             </button>
           </div>
@@ -334,6 +334,8 @@
               <button type="button" class="src-btn" data-src="网易云音乐">网易云音乐</button>
               <button type="button" class="src-btn" data-src="抖音">抖音</button>
               <button type="button" class="src-btn" data-src="其他 APP">其他 APP</button>
+              <button type="button" class="src-btn" data-src="酷我纯净版">酷我纯净版</button>
+              <button type="button" class="src-btn" data-src="酷我音乐">酷我音乐</button>
             </div>
             <input class="import-title" id="importTitle" type="text" placeholder="歌名（不填就用文件名）" maxlength="60" />
             <textarea class="import-area" id="importArea" rows="6" placeholder="在这里粘贴歌词……&#10;支持带时间戳的 .lrc（[00:12.34]歌词），&#10;没有时间戳就按行平分 30 秒。"></textarea>
@@ -1147,10 +1149,10 @@
         });
         renderTrackList();
 
-        /* ================= 导入歌词：四个来源（QQ音乐／网易云音乐／抖音／其他 APP） =================
-           查到的结论（2026-11-22）：三个 APP 的歌词都不在本地留 .lrc 文件——QQ音乐走
+        /* ================= 导入歌词：六个来源（QQ音乐／网易云音乐／抖音／酷我纯净版／酷我音乐／其他 APP） =================
+           查到的结论（2026-11-22）：五个 APP 的歌词都不在本地留 .lrc 文件——QQ音乐走
            c.y.qq.com 在线取（base64／QRC 需解密），网易云走官方 API 回 JSON（lrc.lyric），
-           抖音根本没有本地歌词文件；且沙盒拦着，SpringBoard／设置页进程读不到别的 APP
+           抖音根本没有本地歌词文件；酷我纯净版／酷我音乐同样只有在线歌词，本地不留 .lrc 文件；且沙盒拦着，SpringBoard／设置页进程读不到别的 APP
            的容器。所以不做直读，只做用户导入：粘贴复制来的歌词，或选 .lrc／.txt 文件。
            导入后标来源、进歌单、走合成音；本次会话有效，关掉设置页就没了。 */
         function escHtml(s) {
