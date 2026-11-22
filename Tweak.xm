@@ -914,11 +914,6 @@ static CGFloat *GHLSSCacheScaleRatios = NULL;
 static UIView * __strong *GHLSSCacheScaleSliderBars = NULL;
 static UISlider * __strong *GHLSSCacheScaleSliders = NULL;
 static UILabel * __strong *GHLSSCacheScaleLabels = NULL;
-static GHLSSChar128 *GHLSSGameDimmedBids = NULL;
-static BOOL *GHLSSGameDimmedWasMinimized = NULL;
-static CGFloat *GHLSSGameSavedPosCX = NULL;
-static CGFloat *GHLSSGameSavedPosCY = NULL;
-static BOOL *GHLSSGameSavedPosValid = NULL;
 static int *GHLSSFrontOrder = NULL;
 static GHLSSChar128 *GHLSSLowBatteryDockedBids = NULL;
 // 動態陣列擴容（容量翻倍，32 起；所有按 App 槽位索引的陣列一起長；
@@ -960,11 +955,6 @@ GHLSS_GROW(GHLSSCacheScaleRatios, CGFloat);
 GHLSS_GROW_OBJ(GHLSSCacheScaleSliderBars, UIView *);
 GHLSS_GROW_OBJ(GHLSSCacheScaleSliders, UISlider *);
 GHLSS_GROW_OBJ(GHLSSCacheScaleLabels, UILabel *);
-GHLSS_GROW(GHLSSGameDimmedBids, GHLSSChar128);
-GHLSS_GROW(GHLSSGameDimmedWasMinimized, BOOL);
-GHLSS_GROW(GHLSSGameSavedPosCX, CGFloat);
-GHLSS_GROW(GHLSSGameSavedPosCY, CGFloat);
-GHLSS_GROW(GHLSSGameSavedPosValid, BOOL);
 GHLSS_GROW(GHLSSFrontOrder, int);
 GHLSS_GROW(GHLSSLowBatteryDockedBids, GHLSSChar128);
 #undef GHLSS_GROW
@@ -1260,17 +1250,10 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)dismissAppPicker;
 - (void)handleAppPickerToggle:(UISwitch *)sender;
 - (void)handleAppPickerDone:(id)sender;
-// v41：ARC 內容重建（三段/遊戲模式）、
-// 圖標長按置頂、遊戲模式開關、通知橫幅、全屏打開探針、
+// v41：ARC 內容重建（三段）、
+// 圖標長按置頂、通知橫幅、全屏打開探針、
 // 截圖錄屏隱藏 ARC。
 - (void)rebuildARCContent;
-// v63：遊戲工具箱（遊戲模式激活時 ARC 顯示的精簡工具箱，取代三段）。
-- (void)rebuildGameToolboxContent;
-- (UIButton *)gameToolboxRowWithTitle:(NSString *)title subtitle:(NSString *)subtitle icon:(UIImage *)icon frame:(CGRect)frame tag:(NSInteger)tag action:(SEL)action highlighted:(BOOL)highlighted;
-- (void)handleGameToolboxReturnToGame:(UIButton *)sender;
-- (void)handleGameToolboxApp:(UIButton *)sender;
-- (void)handleGameToolboxClearBackground:(UIButton *)sender;
-- (void)handleGameToolboxRecord:(UIButton *)sender;
 - (CGFloat)addARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
 - (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
 // v43.19：啟動器新樣式——側邊欄／抽屜／橫向輪盤／磁貼（grid 已刪，不再調
@@ -1388,7 +1371,7 @@ static NSTimeInterval GHLSSRestoreGateDeadline = 0; // v72：重建时间点（�
 static const NSTimeInterval GHLSSRestoreGateStuckZeroTimeout = 2.0; // v43.22：卡 0 熔斷（開始＋2 秒，約 4 個 tick，只針對 contentState==0；尺寸門維持 5 秒）。
 static NSTimeInterval GHLSSMinimizeTime = 0; // v43.17：这次收起的时间（点小卡 0.8 秒内不恢复，防误触）。
 static FBScene *GHLSSRestoreGateScene = nil; // v71：门控盯着的 scene（换了就取消门控）。
-static CGFloat GHLSSRestoreGateTargetAlpha = 1.0; // v71：淡入要回到的 alpha（游戏模式会调淡）。
+static CGFloat GHLSSRestoreGateTargetAlpha = 1.0; // v71：淡入要回到的 alpha。
 static BOOL GHLSSRestoreGateRebuilt = NO; // v72：这次门控已经重建过一次（只重建一次，不循环）。
 static BOOL GHLSSRestoreGateStuckLogged = NO; // v72：重建后还是卡 0 只记一行（不每 0.5 秒刷日志）。
 static BOOL GHLSSRestoreGateTimeoutDeferredLogged = NO; // v43.7：锁屏时门控超时延后只记一行（不每 0.5 秒刷日志）。
@@ -1494,9 +1477,6 @@ static int GHLSSActiveAppIndex = -1;
 
 // v38：默认 scaleRatio（下面定义；GHLSSLoadCacheToActive 要用，先声明）。
 static CGFloat GHLSSDefaultScaleRatioForBundleID(const char *bundleID);
-// v41：先声明（下面定义；GHLSSBringWindowToFront 要用，先声明）。
-static BOOL GHLSSReadGameModeEnabled(void);
-static BOOL GHLSSGameMinimalAnimationsActive(void);
 // v41：先声明（下面定义；GHLSSIsEdgeSwipeLeft 等讀值 helper 要用，先声明）。
 static BOOL GHLSSIsWindowPositionLeft(void);
 // v42：先声明（下面定义；%ctor 与各处要用，先声明）。
@@ -1753,11 +1733,8 @@ GHLSSClearActive();
 #define GHLSS_HOSTED_FRONT_LEVEL (UIWindowLevelAlert - 1.75)
 #define GHLSS_DOCK_LEVEL (UIWindowLevelAlert - 1.5)
 #define GHLSS_DIM_OVERLAY_LEVEL (UIWindowLevelAlert - 4.5)
-// v41：遊戲模式的層級——開著時浮窗釘在鎖屏之下允許的最高層級
-//（Alert - 0.5，底窗；主窗 Alert - 0.25），蓋過啟動器（1999）與其他
-// App；鎖屏（2000）仍在上面，密碼不受影響。
-#define GHLSS_GAME_BASE_LEVEL (UIWindowLevelAlert - 0.5)
-#define GHLSS_GAME_FRONT_LEVEL (UIWindowLevelAlert - 0.25)
+// v43.30：釘選窗的層級（Alert - 1.25，高於主窗與貼邊小卡，低於啟動器與鎖屏）。
+#define GHLSS_PINNED_LEVEL (UIWindowLevelAlert - 1.25)
 // v41：貼邊 peek 的尺寸（圖 1 的樣子：縮到邊緣、露出一截活內容）。
 // 寬 112、高 242，上下疊著排，間距 8。
 #define GHLSS_DOCK_PEEK_W 112.0
@@ -1843,23 +1820,13 @@ CGFloat scale = GHLSSDefaultScaleRatioForBundleID(bundleID);
 return GHLSSSceneFrameSizeForContentSizeAndScale(contentSize, scale);
 }
 
-// v56：遊戲模式自動觸發的執行時狀態（方案 A）。Active＝正在遊戲裡
-//（前台是清單裡的 App）；Saved*＝進遊戲前記住的值，出遊戲還原；
-// DimmedBids＝這次遊戲模式變淡＋收小＋禁觸摸的窗（出遊戲逐一還原）。
-static BOOL GHLSSGameModeActive = NO;
-static char GHLSSGameActiveBid[128] = {0};
-static CGFloat GHLSSGameSavedBrightness = -1;
-static float GHLSSGameSavedVolume = -1;
-static int GHLSSGameDimmedCount = 0;
-// v63：進遊戲前各窗的位置（只記中心；出遊戲只還原位置，尺寸永遠是
-// 固定尺寸）。
 
 // v63：某 App 的預設浮窗尺寸——固定尺寸（皇上 2026-11-16：照片量到約
 // 346×769pt，透視誤差 ±10pt；拉大拉小後續再做；v67 改 346×749，見上面）。
 // 一律開這個尺寸，不再
 // 讀 windowSizePreset（設定頁那行已藏起來）。例外：計算器永遠自己的
 // 320×693（內容就是窗）。橫屏：寬高對調
-// 再夾進屏幕（沿用 v56 遊戲模式的橫屏邏輯，現在不分遊戲模式都適用）。
+// 再夾進屏幕（橫屏時寬高對調）。
 // v70：浮窗大小滑桿——100% 就是 346×749，調小等比縮（寬高比鎖住）。
 static void GHLSSPresetSizeForBundleID(const char *bundleID, CGFloat *outW, CGFloat *outH) {
 CGFloat w = GHLSS_FIXED_WINDOW_W;
@@ -3343,20 +3310,17 @@ GHLSSLogLine(buf);
 // 仍在它之上；贴边小卡（Alert - 1.5）也在它之上（卡要一直看得见）。
 static void GHLSSBringWindowToFront(UIWindow *window) {
 if (!window) return;
-// v41：遊戲模式開著時，帶到最前的窗升到遊戲層級（Alert - 0.25），
-// 別的窗回遊戲底層級（Alert - 0.5）；關著時走原來的 1998.25 / 1998。
-BOOL gameMode = GHLSSReadGameModeEnabled();
 for (int i = 0; i < GHLSSAppCount; i++) {
 if (GHLSSCacheWindows[i] && GHLSSCacheWindows[i] != window && !GHLSSCacheMinimized[i]) {
-GHLSSCacheWindows[i].windowLevel = gameMode ? GHLSS_GAME_BASE_LEVEL : GHLSS_HOSTED_BASE_LEVEL;
+GHLSSCacheWindows[i].windowLevel = GHLSS_HOSTED_BASE_LEVEL;
 }
 }
-window.windowLevel = gameMode ? GHLSS_GAME_FRONT_LEVEL : GHLSS_HOSTED_FRONT_LEVEL;
-// v42：釘選的窗提到最上層（遊戲最前層級，比帶到最前的窗還高、
-// 別的窗蓋不住；收起的 peek 不提——peek 本來就在邊緣層級）。
+window.windowLevel = GHLSS_HOSTED_FRONT_LEVEL;
+// v42：釘選的窗提到最上層（比帶到最前的窗還高、別的窗蓋不住；
+// 收起的 peek 不提——peek 本來就在邊緣層級）。
 for (int i = 0; i < GHLSSAppCount; i++) {
 if (GHLSSCacheWindows[i] && GHLSSCacheWindows[i] != window && !GHLSSCacheMinimized[i] && !GHLSSCacheWindows[i].hidden && GHLSSCacheBundleIDs[i][0] != '\0' && GHLSSIsWindowPinned(GHLSSCacheBundleIDs[i])) {
-GHLSSCacheWindows[i].windowLevel = GHLSS_GAME_FRONT_LEVEL;
+GHLSSCacheWindows[i].windowLevel = GHLSS_PINNED_LEVEL;
 }
 }
 GHLSSSetActiveToWindow(window);
@@ -3539,8 +3503,7 @@ peekFrames[k] = targetFrame;
 // 滑到新位置，不直接跳過去。每扇窗各一個動畫塊，只抓窗指針（堆上）＋
 // 目標 frame（值拷貝），不抓 stack 上的 docked 陣列（塊是異步跑的，
 // 函數返回後 stack 陣列就沒了，抓了會野指針）。
-// v56：遊戲模式開著時動畫減到最少（0.01 秒直接到位，省電）。
-NSTimeInterval peekAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.6;
+NSTimeInterval peekAnimDur = 0.6;
 [UIView animateWithDuration:peekAnimDur delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
 peekWin.frame = targetFrame;
 } completion:nil];
@@ -4079,181 +4042,6 @@ NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEnc
 while ([ids count] > 5) [ids removeLastObject];
 GHLSSWriteIDList("recentAppIDs", ids);
 }
-// 遊戲模式開關（prefs 鍵 gameModeEnabled，ARC 裡的開關與設定頁同一份鍵）。
-static BOOL GHLSSReadGameModeEnabled(void) {
-return GHLSSReadPrefsBool("gameModeEnabled", NO);
-}
-// v56：遊戲模式自動觸發（方案 A）——遊戲 App 清單（gameAppBundleIDs，
-// 設定頁「選擇遊戲 App」寫，逗號分隔 bundleID）。
-static BOOL GHLSSIsGameAppBundleID(const char *bid) {
-if (!bid || bid[0] == '\0') return NO;
-NSArray *ids = GHLSSReadIDList("gameAppBundleIDs");
-if (!ids) return NO;
-NSString *bidStr = [NSString stringWithCString:bid encoding:NSUTF8StringEncoding];
-return [ids containsObject:bidStr];
-}
-// v56：遊戲模式追加開關（預設：記亮度音量開、清後台開、雙擊切遊戲／
-// 微信開、動畫最少開；勿擾聯動是探針，預設關）。
-static BOOL GHLSSReadGameRememberBrightnessVolume(void) {
-return GHLSSReadPrefsBool("gameRememberBrightnessVolume", YES);
-}
-static BOOL GHLSSReadGameClearBackground(void) {
-return GHLSSReadPrefsBool("gameClearBackground", YES);
-}
-static BOOL GHLSSReadGameDoubleTapSwitchWeChat(void) {
-return GHLSSReadPrefsBool("gameDoubleTapSwitchWeChat", YES);
-}
-static BOOL GHLSSReadGameMinimalAnimations(void) {
-return GHLSSReadPrefsBool("gameMinimalAnimations", YES);
-}
-static BOOL GHLSSReadGameDNDProbe(void) {
-return GHLSSReadPrefsBool("gameDNDProbe", NO);
-}
-// v63：清後台（進遊戲自動清＋工具箱手動清共用）：關掉其他非釘選浮窗
-//（遊戲本身不動、釘選的不動；關掉的不還原，跟 FV 清後台一樣）。
-// 遊戲模式開著時工具箱點「清後台」也走這裡（不看 gameClearBackground
-// 開關——點了就是要清）。
-static void GHLSSGameClearBackgroundWindows(const char *gameBid) {
-if (!GHLSSLauncherShared) return;
-for (int i = 0; i < GHLSSAppCount; i++) {
-if (!GHLSSCacheWindows[i] || GHLSSCacheWindows[i].hidden) continue;
-if (GHLSSCacheBundleIDs[i][0] == '\0') continue;
-if (gameBid && gameBid[0] != '\0' && strcmp(GHLSSCacheBundleIDs[i], gameBid) == 0) continue;
-if (GHLSSIsWindowPinned(GHLSSCacheBundleIDs[i])) continue;
-GHLSSLoadCacheToActive(i);
-[GHLSSLauncherShared closeHostedWindow];
-char buf[256];
-snprintf(buf, sizeof(buf), "v68 game cleared background %s", GHLSSCacheBundleIDs[i]);
-GHLSSLogLine(buf);
-}
-}
-// v63：這個 bundle ID 裝了沒有（工具箱微信／QQ 行用）：讀已安裝 App
-// 緩存檔（GHLSSCachedInstalledAppList）；緩存不存在／空時當作裝了
-//（寧可多顯示一行，點了走正常開窗流程；不要因緩存沒建好就藏掉）。
-static BOOL GHLSSIsAppInstalled(const char *bundleID) {
-if (!bundleID || bundleID[0] == '\0') return NO;
-NSArray *list = GHLSSCachedInstalledAppList();
-if (!list || [list count] == 0) return YES;
-NSString *bidStr = [NSString stringWithCString:bundleID encoding:NSUTF8StringEncoding];
-NSString *bidKey = [NSString stringWithCString:"bundleID" encoding:NSUTF8StringEncoding];
-for (id item in list) {
-if (![item isKindOfClass:[NSDictionary class]]) continue;
-NSString *itemBid = [(NSDictionary *)item objectForKey:bidKey];
-if (itemBid && [itemBid isEqualToString:bidStr]) return YES;
-}
-return NO;
-}
-// v63：每款遊戲記浮窗位置——只記位置（窗中心），不記尺寸（尺寸固定）。
-// 鍵：gameWinPos_<遊戲 bid>_<浮窗 bid>_CX／_CY。中心 0 視為沒記過
-//（夾取後中心最小也有幾十 pt，不會是 0）。
-static void GHLSSGameWindowPosKey(const char *gameBid, const char *winBid, const char *field, char *buf, size_t bufSize) {
-snprintf(buf, bufSize, "gameWinPos_%s_%s_%s", gameBid ? gameBid : "", winBid ? winBid : "", field ? field : "");
-}
-static void GHLSSSaveGameWindowPosForIndex(int idx) {
-if (idx < 0 || idx >= GHLSSAppCount) return;
-if (!GHLSSGameModeActive || GHLSSGameActiveBid[0] == '\0') return;
-UIWindow *w = GHLSSCacheWindows[idx];
-if (!w) return;
-const char *winBid = GHLSSCacheBundleIDs[idx];
-if (!winBid || winBid[0] == '\0') return;
-char key[256];
-CGPoint c = w.center;
-GHLSSGameWindowPosKey(GHLSSGameActiveBid, winBid, "CX", key, sizeof(key));
-GHLSSWritePrefsDouble(key, (double)c.x);
-GHLSSGameWindowPosKey(GHLSSGameActiveBid, winBid, "CY", key, sizeof(key));
-GHLSSWritePrefsDouble(key, (double)c.y);
-char buf[256];
-snprintf(buf, sizeof(buf), "v68 game window pos saved %s %s center %d,%d", GHLSSGameActiveBid, winBid, (int)c.x, (int)c.y);
-GHLSSLogLine(buf);
-}
-static BOOL GHLSSRestoreGameWindowPos(const char *gameBid, const char *winBid, CGFloat *outCX, CGFloat *outCY) {
-if (!gameBid || gameBid[0] == '\0' || !winBid || winBid[0] == '\0') return NO;
-char key[256];
-GHLSSGameWindowPosKey(gameBid, winBid, "CX", key, sizeof(key));
-double cx = GHLSSReadPrefsDouble(key, 0);
-GHLSSGameWindowPosKey(gameBid, winBid, "CY", key, sizeof(key));
-double cy = GHLSSReadPrefsDouble(key, 0);
-if (cx <= 0 || cy <= 0) return NO;
-if (outCX) *outCX = (CGFloat)cx;
-if (outCY) *outCY = (CGFloat)cy;
-return YES;
-}
-// v56：遊戲模式開著時浮窗動畫減到最少（直接到位）——動畫路徑統一問
-// 這裡，不要各處自己判斷。
-static BOOL GHLSSGameMinimalAnimationsActive(void) {
-return GHLSSGameModeActive && GHLSSReadGameModeEnabled() && GHLSSReadGameMinimalAnimations();
-}
-// v56：前台是哪個 App（SBMainWorkspace frontmostApplication，運行時
-// 探測 + respondsToSelector + @try；拿不到回 NULL，不閃退）。
-// 注意：浮窗 App 是不是算前台，要看真機日誌（v56 game frontmost）才定死。
-static const char *GHLSSFrontmostBundleID(void) {
-@try {
-Class wsClass = objc_getClass("SBMainWorkspace");
-if (!wsClass) return NULL;
-SEL sharedSel = NSSelectorFromString([NSString stringWithCString:"sharedInstance" encoding:NSUTF8StringEncoding]);
-if (![wsClass respondsToSelector:sharedSel]) return NULL;
-id ws = ((id (*)(id, SEL))objc_msgSend)((id)wsClass, sharedSel);
-if (!ws) return NULL;
-SEL frontSel = NSSelectorFromString([NSString stringWithCString:"frontmostApplication" encoding:NSUTF8StringEncoding]);
-if (![ws respondsToSelector:frontSel]) return NULL;
-id app = ((id (*)(id, SEL))objc_msgSend)(ws, frontSel);
-if (!app) return NULL;
-SEL bidSel = NSSelectorFromString([NSString stringWithCString:"bundleIdentifier" encoding:NSUTF8StringEncoding]);
-if (![app respondsToSelector:bidSel]) return NULL;
-NSString *bid = ((id (*)(id, SEL))objc_msgSend)(app, bidSel);
-if (!bid || [bid length] == 0) return NULL;
-static char buf[128];
-const char *c = [bid UTF8String];
-if (!c || c[0] == '\0') return NULL;
-strncpy(buf, c, sizeof(buf) - 1);
-buf[sizeof(buf) - 1] = '\0';
-return buf;
-} @catch (NSException *e) {
-(void)e;
-return NULL;
-}
-}
-// v56：讀目前音量（AVAudioSession outputVolume，運行時查找；
-// 拿不到回 -1，呼叫處當探針失敗處理，不要硬寫）。
-static float GHLSSGameReadVolume(void) {
-@try {
-Class cls = objc_getClass("AVAudioSession");
-if (!cls) return -1;
-SEL sharedSel = NSSelectorFromString([NSString stringWithCString:"sharedInstance" encoding:NSUTF8StringEncoding]);
-if (![cls respondsToSelector:sharedSel]) return -1;
-id session = ((id (*)(id, SEL))objc_msgSend)((id)cls, sharedSel);
-if (!session) return -1;
-SEL volSel = NSSelectorFromString([NSString stringWithCString:"outputVolume" encoding:NSUTF8StringEncoding]);
-if (![session respondsToSelector:volSel]) return -1;
-return ((float (*)(id, SEL))objc_msgSend)(session, volSel);
-} @catch (NSException *e) {
-(void)e;
-return -1;
-}
-}
-// v56：設音量（AVSystemController setVolumeTo:forCategory:，運行時查找；
-// 私有 API，探針——真機不可靠就記日誌、不硬稱。設不到只記日誌，不閃退）。
-static void GHLSSGameSetVolume(float v) {
-@try {
-Class cls = objc_getClass("AVSystemController");
-if (!cls) { GHLSSLogLine("v57 game volume probe: AVSystemController missing"); return; }
-SEL sharedSel = NSSelectorFromString([NSString stringWithCString:"sharedAVSystemController" encoding:NSUTF8StringEncoding]);
-if (![cls respondsToSelector:sharedSel]) { GHLSSLogLine("v57 game volume probe: no sharedAVSystemController"); return; }
-id controller = ((id (*)(id, SEL))objc_msgSend)((id)cls, sharedSel);
-if (!controller) { GHLSSLogLine("v57 game volume probe: no controller"); return; }
-SEL setSel = NSSelectorFromString([NSString stringWithCString:"setVolumeTo:forCategory:" encoding:NSUTF8StringEncoding]);
-if (!setSel || ![controller respondsToSelector:setSel]) { GHLSSLogLine("v57 game volume probe: no setVolumeTo"); return; }
-NSString *cat = [NSString stringWithCString:"Audio/Video" encoding:NSUTF8StringEncoding];
-((void (*)(id, SEL, float, id))objc_msgSend)(controller, setSel, v, cat);
-char buf[128];
-snprintf(buf, sizeof(buf), "v57 game volume set %.2f", v);
-GHLSSLogLine(buf);
-} @catch (NSException *e) {
-(void)e;
-GHLSSLogLine("v57 game volume probe exception");
-}
-}
-
 // ── v42 輔助函數（配對／恢復清單／任務欄／
 // 低電量／卡片圖片／定時 tick；全部在 %ctor 延後塊之前定義，
 // 供 %ctor 與各方法調用） ──
@@ -4494,158 +4282,7 @@ GHLSSSettingsTaskbarWindow.hidden = (count == 0);
 // v42：2 秒定時輪詢（設定 App 改開關不發通知給 SpringBoard，
 // dylib 不聽通知——每 2 秒自己讀一次 prefs 補狀態：
 // 任務欄；每 60 秒查一次電量。
-// v56：遊戲模式自動觸發——進遊戲（前台變成清單裡的 App）。
-// 1. 亮度音量：記住進遊戲前的值，按這款遊戲記住的值調（沒記過用當前值
-//    當預設，寫進 gameBrightness_<bid>／gameVolume_<bid>）；音量是探針。
-// 2. 勿擾聯動是探針——沒有可靠的 SpringBoard 側勿擾 API，只記日誌，不硬調。
-// 3. 浮窗：關掉其他非釘選浮窗（釘選豁免；關掉的不還原，跟 FV 清後台一樣）；
-//    剩下的變淡到 0.5、收小成 peek、不吃觸摸（只剩哆啦A夢鈕可點）。
-//    遊戲本身如果是浮窗，不動它。
-static void GHLSSGameModeApply(const char *gameBid) {
-if (!gameBid || !gameBid[0]) return;
-if (GHLSSGameModeActive && strcmp(GHLSSGameActiveBid, gameBid) == 0) return;
-GHLSSGameModeActive = YES;
-strncpy(GHLSSGameActiveBid, gameBid, sizeof(GHLSSGameActiveBid) - 1);
-GHLSSGameActiveBid[sizeof(GHLSSGameActiveBid) - 1] = '\0';
-char buf[256];
-snprintf(buf, sizeof(buf), "v57 game mode enter %s", gameBid);
-GHLSSLogLine(buf);
-if (GHLSSReadGameRememberBrightnessVolume()) {
-CGFloat curB = [UIScreen mainScreen].brightness;
-float curV = GHLSSGameReadVolume();
-GHLSSGameSavedBrightness = curB;
-GHLSSGameSavedVolume = curV;
-char bKey[160], vKey[160];
-snprintf(bKey, sizeof(bKey), "gameBrightness_%s", gameBid);
-snprintf(vKey, sizeof(vKey), "gameVolume_%s", gameBid);
-double savedB = GHLSSReadPrefsDouble(bKey, -1);
-double savedV = GHLSSReadPrefsDouble(vKey, -1);
-if (savedB < 0) { GHLSSWritePrefsDouble(bKey, (double)curB); savedB = (double)curB; }
-if (savedV < 0 && curV >= 0) { GHLSSWritePrefsDouble(vKey, (double)curV); savedV = (double)curV; }
-[UIScreen mainScreen].brightness = (CGFloat)savedB;
-if (savedV >= 0) GHLSSGameSetVolume((float)savedV);
-snprintf(buf, sizeof(buf), "v57 game brightness %.2f volume %.2f", savedB, savedV);
-GHLSSLogLine(buf);
-}
-if (GHLSSReadGameDNDProbe()) {
-GHLSSLogLine("v57 game dnd probe: no reliable SpringBoard-side DND API, skipped");
-}
-GHLSSGameDimmedCount = 0;
-for (int i = 0; i < GHLSSAppCount; i++) GHLSSGameSavedPosValid[i] = NO;
-if (GHLSSLauncherShared) {
-if (GHLSSReadGameClearBackground()) {
-GHLSSGameClearBackgroundWindows(gameBid);
-}
-for (int i = 0; i < GHLSSAppCount; i++) {
-if (!GHLSSCacheWindows[i] || GHLSSCacheWindows[i].hidden) continue;
-if (GHLSSCacheBundleIDs[i][0] == '\0') continue;
-if (strcmp(GHLSSCacheBundleIDs[i], gameBid) == 0) continue;
-// v63：進遊戲前先把這個窗的位置存一份（只記中心；出遊戲只還原位置，
-// 尺寸永遠是固定尺寸）。
-GHLSSGameSavedPosCX[i] = GHLSSCacheWindows[i].center.x;
-GHLSSGameSavedPosCY[i] = GHLSSCacheWindows[i].center.y;
-GHLSSGameSavedPosValid[i] = YES;
-GHLSSLoadCacheToActive(i);
-BOOL wasMin = GHLSSHostedMinimized;
-if (!wasMin) [GHLSSLauncherShared minimizeHostedWindow];
-GHLSSHostedWindow.alpha = 0.5;
-GHLSSHostedWindow.userInteractionEnabled = NO;
-if (GHLSSGameDimmedCount < GHLSSAppCount) {
-strncpy(GHLSSGameDimmedBids[GHLSSGameDimmedCount], GHLSSCacheBundleIDs[i], 127);
-GHLSSGameDimmedBids[GHLSSGameDimmedCount][127] = '\0';
-GHLSSGameDimmedWasMinimized[GHLSSGameDimmedCount] = wasMin;
-GHLSSGameDimmedCount++;
-}
-}
-}
-}
-
-// v56：遊戲模式自動觸發——出遊戲（前台不再是清單裡的 App）：亮度音量
-// 還原進遊戲前的值；變淡＋收小的窗逐一恢復（透明度、尺寸、位置回到進
-// 遊戲前記住的值；本來就是 peek 的還回 peek，不升大窗）。關掉的浮窗
-// 不還原（跟 FV 清後台一樣，清掉就沒了，要再開去啟動器點）。
-static void GHLSSGameModeRestore(void) {
-if (!GHLSSGameModeActive) return;
-GHLSSLogLine("v57 game mode exit");
-if (GHLSSReadGameRememberBrightnessVolume()) {
-if (GHLSSGameSavedBrightness >= 0) [UIScreen mainScreen].brightness = GHLSSGameSavedBrightness;
-if (GHLSSGameSavedVolume >= 0) GHLSSGameSetVolume(GHLSSGameSavedVolume);
-}
-if (GHLSSReadGameDNDProbe()) {
-GHLSSLogLine("v57 game dnd probe: restore skipped (no reliable API)");
-}
-if (GHLSSLauncherShared) {
-for (int k = 0; k < GHLSSGameDimmedCount; k++) {
-int idx = GHLSSAppIndexForBundleID(GHLSSGameDimmedBids[k]);
-if (idx < 0 || idx >= GHLSSAppCount) continue;
-if (!GHLSSCacheWindows[idx] || GHLSSCacheWindows[idx].hidden) continue;
-GHLSSLoadCacheToActive(idx);
-if (!GHLSSGameDimmedWasMinimized[k] && GHLSSHostedMinimized) {
-[GHLSSLauncherShared restoreHostedWindow];
-}
-GHLSSHostedWindow.alpha = GHLSSReadWindowOpacityForBundleID(GHLSSCacheBundleIDs[idx]);
-GHLSSHostedWindow.userInteractionEnabled = YES;
-// v63：出遊戲只還原位置（進遊戲前存的中心），尺寸不動（固定尺寸）。
-// 收著的 peek 不動位置（貼邊佈局管它，動了會亂）；開著的窗才還原。
-// 還原完把位置寫回 geo 鍵（遊戲裡拖過的位置會蓋掉 geo 鍵，不寫回的
-// 話下次開窗又回到遊戲裡的位置）。
-if (!GHLSSHostedMinimized && GHLSSGameSavedPosValid[idx]) {
-CGSize screenSize = [UIScreen mainScreen].bounds.size;
-CGFloat w = GHLSSHostedWindow.bounds.size.width;
-CGFloat h = GHLSSHostedWindow.bounds.size.height;
-CGFloat pcx = GHLSSGameSavedPosCX[idx];
-CGFloat pcy = GHLSSGameSavedPosCY[idx];
-CGFloat minCX = w / 2.0 + 8.0;
-CGFloat maxCX = screenSize.width - w / 2.0 - 8.0;
-CGFloat minCY = GHLSSReadSafeDistance() + h / 2.0;
-CGFloat maxCY = screenSize.height - h / 2.0 - 8.0;
-if (pcx < minCX) pcx = minCX;
-if (pcx > maxCX) pcx = maxCX;
-if (pcy < minCY) pcy = minCY;
-if (pcy > maxCY) pcy = maxCY;
-GHLSSHostedWindow.center = CGPointMake(pcx, pcy);
-GHLSSSaveGeometryForIndex(idx);
-GHLSSLogLine("v68 game window pos restored on exit");
-}
-}
-}
-for (int i = 0; i < GHLSSAppCount; i++) GHLSSGameSavedPosValid[i] = NO;
-GHLSSGameModeActive = NO;
-GHLSSGameActiveBid[0] = '\0';
-GHLSSGameDimmedCount = 0;
-GHLSSGameSavedBrightness = -1;
-GHLSSGameSavedVolume = -1;
-}
-
-// v56：遊戲模式自動觸發（2 秒一輪，跟 tick 走）：前台變成清單裡的遊戲
-// App 就開遊戲模式；開著時前台不再是遊戲 App 就恢復。開關關著不做事
-//（開著時關掉開關也恢復一次）。前台 App 是不是浮窗 App，要看真機
-// 日誌（v56 game frontmost）才定死。
-static void GHLSSCheckGameModeTick(void) {
-if (!GHLSSReadGameModeEnabled()) {
-if (GHLSSGameModeActive) GHLSSGameModeRestore();
-return;
-}
-const char *front = GHLSSFrontmostBundleID();
-static char lastFront[128] = {0};
-if (front) {
-if (strcmp(lastFront, front) != 0) {
-strncpy(lastFront, front, sizeof(lastFront) - 1);
-lastFront[sizeof(lastFront) - 1] = '\0';
-char fbuf[256];
-snprintf(fbuf, sizeof(fbuf), "v57 game frontmost %s", front);
-GHLSSLogLine(fbuf);
-}
-} else {
-lastFront[0] = '\0';
-}
-if (front && GHLSSIsGameAppBundleID(front)) {
-GHLSSGameModeApply(front);
-} else if (GHLSSGameModeActive) {
-GHLSSGameModeRestore();
-}
-}
-
+// v43.30：游戏模式整套已删（皇上 2026-11-22 定）：进出模式、自动触发、工具箱、每游戏窗口位置、亮度音量、勿扰探针、清后台、双击切微信、最小动画。
 // v64：小浮窗黑屏看門狗（21.log 定案，見檔頭 v42.22）：2 秒一輪巡一次
 // 全部快取窗——窗可見（沒藏起來）且 scene 還在、contentState 還不是 2
 // （0 沒就緒、1 準備中）就再推一次前景。只推沒就緒的，好的窗每輪只讀
@@ -4698,8 +4335,6 @@ if (GHLSSReadTaskbarEnabled()) GHLSSBuildTaskbarIfNeeded();
 GHLSSUpdateTaskbar();
 // v54 (b)：系統橫幅探針（2 秒一輪；開關關著不探，見 GHLSSCheckSystemBanner）。
 GHLSSCheckSystemBanner();
-// v56：遊戲模式自動觸發（2 秒一輪；開關關著不做事）。
-GHLSSCheckGameModeTick();
 // v64：小浮窗黑屏看門狗（見上面 GHLSSPeekWatchdogTick）。
 GHLSSPeekWatchdogTick();
 // 重建（設定頁拖完寫 prefs，dylib 這邊 2 秒內接手；沒變不動，
@@ -4933,20 +4568,6 @@ GHLSSLogLine(buf);
 - (void)cycleMainWindow {
 if (!GHLSSReadDoraemonDoubleTapEnabled()) {
 GHLSSLogLine("v57 window cycle disabled");
-return;
-}
-// v56：遊戲模式開著時，雙擊哆啦A夢在當前遊戲與微信之間來回切
-//（微信沒跑就開它，跑著就切到它已有的 scene；非遊戲模式時雙擊
-// 保持原行為——輪切主窗）。
-if (GHLSSGameModeActive && GHLSSGameActiveBid[0] != '\0' && GHLSSReadGameDoubleTapSwitchWeChat()) {
-const char *front = GHLSSFrontmostBundleID();
-if (front && strcmp(front, "com.tencent.xin") == 0) {
-GHLSSLogLine("v57 game double tap: wechat -> game");
-[self openAppFullscreen:GHLSSGameActiveBid];
-} else {
-GHLSSLogLine("v57 game double tap: game -> wechat");
-[self openAppFullscreen:"com.tencent.xin"];
-}
 return;
 }
 // v53：可見窗＋收著的 peek 都能輪切（以前只列看得見的窗，收著的永遠
@@ -5824,23 +5445,6 @@ if (ny < minY) ny = minY;
 winFrame = CGRectMake(nx, ny, winW, winH);
 }
 }
-// v63：遊戲模式下開窗，用這款遊戲記過的位置（只改中心，尺寸不動——
-// 尺寸固定）。
-if (GHLSSGameModeActive && GHLSSGameActiveBid[0] != '\0') {
-CGFloat gCX, gCY;
-if (GHLSSRestoreGameWindowPos(GHLSSGameActiveBid, bundleID, &gCX, &gCY)) {
-CGFloat minCX = winW / 2.0 + 8.0;
-CGFloat maxCX = screenBounds.size.width - winW / 2.0 - 8.0;
-CGFloat minCY = GHLSSReadSafeDistance() + winH / 2.0;
-CGFloat maxCY = screenBounds.size.height - winH / 2.0 - 8.0;
-if (gCX < minCX) gCX = minCX;
-if (gCX > maxCX) gCX = maxCX;
-if (gCY < minCY) gCY = minCY;
-if (gCY > maxCY) gCY = maxCY;
-winFrame = CGRectMake(gCX - winW / 2.0, gCY - winH / 2.0, winW, winH);
-GHLSSLogLine("v68 game window pos applied on open");
-}
-}
 if (strcmp(bundleID, "com.apple.calculator") == 0) {
 char wbuf[160];
 CGFloat calcScale = hostedContentSize.width / GHLSSSceneFrameSizeForBundleID(bundleID).width;
@@ -6135,8 +5739,7 @@ slideWin.frame = CGRectMake(startX, finalFrame.origin.y, finalFrame.size.width, 
 }
 GHLSSHostedWindow.hidden = NO;
 if (doSlideIn) {
-// v56：遊戲模式開著時動畫減到最少（0.01 秒直接到位，省電）。
-NSTimeInterval openAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
+NSTimeInterval openAnimDur = 0.7;
 [UIView animateWithDuration:openAnimDur delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
 slideWin.frame = finalFrame;
 } completion:nil];
@@ -6339,7 +5942,7 @@ char vbuf[64];
 snprintf(vbuf, sizeof(vbuf), "v72 exit anim %d", exitAnim);
 GHLSSLogLine(vbuf);
 }
-if (exitAnim == 4 && !GHLSSGameMinimalAnimationsActive()) {
+if (exitAnim == 4) {
 [self closeHostedWindowWithShatter:closingWin startFrame:startFrame startAlpha:startAlpha completion:nil];
 return;
 }
@@ -6354,13 +5957,13 @@ CGRect screenBounds = [UIScreen mainScreen].bounds;
 if (exitAnim == 0) {
 BOOL slideLeft = GHLSSIsFloatingWindowSlideLeft();
 CGFloat offX = slideLeft ? (-startFrame.size.width - 20.0) : (screenBounds.size.width + 20.0);
-NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
+NSTimeInterval closeAnimDur = 0.7;
 [UIView animateWithDuration:closeAnimDur delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
 closingWin.frame = CGRectMake(offX, startFrame.origin.y, startFrame.size.width, startFrame.size.height);
 closingWin.alpha = 0.0;
 } completion:closeCompletion];
 } else {
-NSTimeInterval closeAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
+NSTimeInterval closeAnimDur = 0.7;
 CGRect endFrame = startFrame;
 CGAffineTransform endTransform = CGAffineTransformIdentity;
 if (exitAnim == 1) {
@@ -6395,7 +5998,7 @@ if (!closingWin) return;
 UIView *snap = [closingWin snapshotViewAfterScreenUpdates:YES];
 if (!snap) {
 // 快照失敗：退回縮小淡出（關窗不能卡住）。
-NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
+NSTimeInterval dur = 0.7;
 [UIView animateWithDuration:dur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
 closingWin.transform = CGAffineTransformMakeScale(0.1, 0.1);
 closingWin.alpha = 0.0;
@@ -6414,7 +6017,7 @@ BOOL rendered = [snap drawViewHierarchyInRect:snap.bounds afterScreenUpdates:YES
 UIImage *snapImage = rendered ? UIGraphicsGetImageFromCurrentImageContext() : nil;
 UIGraphicsEndImageContext();
 if (!snapImage) {
-NSTimeInterval dur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.7;
+NSTimeInterval dur = 0.7;
 [UIView animateWithDuration:dur delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
 closingWin.transform = CGAffineTransformMakeScale(0.1, 0.1);
 closingWin.alpha = 0.0;
@@ -6530,7 +6133,7 @@ overlayWin.hidden = YES;
 - (void)minimizeHostedWindowWithExitAnimation:(int)exitAnim fromFrame:(CGRect)startFrame startAlpha:(CGFloat)startAlpha {
 UIWindow *closingWin = GHLSSHostedWindow;
 if (!closingWin) return;
-if (exitAnim == 4 && !GHLSSGameMinimalAnimationsActive()) {
+if (exitAnim == 4) {
 [self closeHostedWindowWithShatter:closingWin startFrame:startFrame startAlpha:startAlpha completion:^{
 int cidx = GHLSSAppIndexForWindow(closingWin);
 BOOL selfMin = (cidx >= 0 && cidx < GHLSSAppCount && GHLSSCacheMinimized[cidx]);
@@ -6543,7 +6146,7 @@ GHLSSLayoutDockPeeks();
 }];
 return;
 }
-NSTimeInterval dockAnimDur = GHLSSGameMinimalAnimationsActive() ? 0.01 : 0.35;
+NSTimeInterval dockAnimDur = 0.35;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGRect endFrame = startFrame;
 CGAffineTransform endTransform = CGAffineTransformIdentity;
@@ -7193,8 +6796,7 @@ GHLSSRestorePreSnap = nil;
 @try { GHLSSRestorePreSnap = [GHLSSHostedWindow snapshotViewAfterScreenUpdates:NO]; } @catch (NSException *e) { (void)e; GHLSSRestorePreSnap = nil; }
 // v71：恢复门控——恢复先把窗藏起来（小卡点一下就消失，正常）；
 // frame 照旧长到目标尺寸、前景照旧推，等 scene 就绪再淡入显示
-//（见下面门控判断）。目标 alpha 先记下来（游戏模式会把窗调淡，
-// 淡入要回到原来的值，不是 1.0）。
+//（见下面门控判断）。目标 alpha 先记下来，淡入要回到原来的值，不是 1.0。
 GHLSSRestoreGateTargetAlpha = GHLSSHostedWindow.alpha;
 if (GHLSSRestoreGateTargetAlpha <= 0.01) GHLSSRestoreGateTargetAlpha = 1.0;
 GHLSSHostedWindow.hidden = YES;
@@ -7229,15 +6831,6 @@ targetCY = screenBounds.size.height / 2.0;
 } else {
 targetCX = geoCX;
 targetCY = geoCY;
-}
-// v63：遊戲模式下恢復窗，用這款遊戲記過的位置（只改中心，尺寸不動）。
-if (GHLSSGameModeActive && GHLSSGameActiveBid[0] != '\0') {
-CGFloat gCX, gCY;
-if (GHLSSRestoreGameWindowPos(GHLSSGameActiveBid, GHLSSHostedBundleID, &gCX, &gCY)) {
-targetCX = gCX;
-targetCY = gCY;
-GHLSSLogLine("v68 game window pos applied on restore");
-}
 }
 CGFloat minCX = targetW / 2.0 + 8.0;
 CGFloat maxCX = screenBounds.size.width - targetW / 2.0 - 8.0;
@@ -7521,12 +7114,6 @@ dragWindow.center = CGPointMake(snapX, snapY);
 // 恢复到这次的位置和大小（贴边收起时 minimizeHostedWindow 里已存）。
 if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSSAppCount) {
 GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
-}
-// v63：遊戲模式下拖完記 per-game 位置（只記位置；拖的是哪個窗就記哪個）。
-if (dragIdx >= 0 && dragIdx < GHLSSAppCount) {
-GHLSSSaveGameWindowPosForIndex(dragIdx);
-} else if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSSAppCount) {
-GHLSSSaveGameWindowPosForIndex(GHLSSActiveAppIndex);
 }
 }
 }
@@ -8330,14 +7917,12 @@ GHLSSCollectLauncherFlyers(sub, flyers, panels);
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherVisible = NO;
 // v43.2：關閉動畫——圖標往外四散飛走（S2 關啟動器那樣），不是直接消失。
-// 遊戲工具箱是行不是環，不散（照舊直接藏）。四散方向是各圖標相對屏幕
-// 中心的方向（圓環／格狀都適用），140pt 外＋縮 0.6＋淡出，0.35 秒。
+// 四散方向是各圖標相對屏幕中心的方向（圓環／格狀都適用），140pt 外＋縮 0.6＋淡出，0.35 秒。
 // 動畫跑完才藏窗；中途重開的話 completion 只藏舊窗（指標比對＋
 // GHLSSLauncherVisible 守衛），不會把新開的啟動器藏掉。
-BOOL toolbox = (GHLSSGameModeActive && GHLSSReadGameModeEnabled());
 NSMutableArray *flyers = nil;
 NSMutableArray *panels = nil;
-if (!toolbox && GHLSSLauncherContentView) {
+if (GHLSSLauncherContentView) {
 flyers = [NSMutableArray array];
 panels = [NSMutableArray array];
 GHLSSCollectLauncherFlyers(GHLSSLauncherContentView, flyers, panels);
@@ -8449,12 +8034,6 @@ for (UIView *sub in [GHLSSLauncherContentView.subviews copy]) [sub removeFromSup
 GHLSSCarouselScrollView = nil;
 GHLSSCarouselCards = nil;
 GHLSSCarouselPageControl = nil;
-// v63：遊戲工具箱——遊戲模式激活時顯示精簡工具箱，取代正常的置頂／最近／
-// 全部三段；沒激活時 ARC 保持原樣，一點不動。
-if (GHLSSGameModeActive && GHLSSReadGameModeEnabled()) {
-[self rebuildGameToolboxContent];
-return;
-}
 CGFloat iconSize = GHLSSReadARCIconSize();
 // 順序：置頂／最近／全部（只顯示啟動器裡開著的 App；置頂的不在
 // 最近裡重複，最近的不在全部裡重複）。
@@ -8522,184 +8101,6 @@ if (launcherStyle == 1) {
 }
 GHLSSLogLine("v57 launcher icons only");
 }
-
-// v63：遊戲工具箱——遊戲模式激活時 ARC 的內容（從上到下）：回遊戲大行、
-// 微信／QQ（沒裝的不顯示）、清後台、錄屏。不放工具圖標、不放搜索
-//（ARC 已經沒有搜索框了，不加回來）。層數走同一套 addARCIconsForBids
-// 時照新設定走——工具箱是行不是弧圈，不用層數。
-- (void)rebuildGameToolboxContent {
-if (!GHLSSLauncherContentView) return;
-CGRect screenBounds = [UIScreen mainScreen].bounds;
-CGFloat screenW = screenBounds.size.width;
-CGFloat screenH = screenBounds.size.height;
-BOOL slideLeft = GHLSSIsARCSlideLeft();
-CGFloat rowW = 320.0;
-CGFloat rowX = slideLeft ? 16.0 : (screenW - rowW - 16.0);
-CGFloat rowH = 60.0;
-CGFloat gap = 10.0;
-CGFloat totalH = 68.0 + rowH * 4 + gap * 4;
-CGFloat anchorY = GHLSSLauncherAnchorY;
-if (anchorY < 0) anchorY = screenH / 2.0;
-CGFloat startY = anchorY - totalH / 2.0;
-CGFloat minY = GHLSSScreenSafeTopInset() + 8.0;
-CGFloat maxY = screenH - 34.0 - totalH;
-if (startY < minY) startY = minY;
-if (startY > maxY) startY = maxY;
-CGFloat y = startY;
-// 1. 回遊戲（大行，金底黑字；副標是當前遊戲名）。
-char gameName[128];
-GHLSSAppNameForBundleID(GHLSSGameActiveBid, gameName, sizeof(gameName));
-NSString *gameTitle = [NSString stringWithCString:"回游戏" encoding:NSUTF8StringEncoding];
-NSString *gameSub = nil;
-if (gameName[0] != '\0') gameSub = [NSString stringWithCString:gameName encoding:NSUTF8StringEncoding];
-UIButton *backBtn = [self gameToolboxRowWithTitle:gameTitle subtitle:gameSub icon:nil frame:CGRectMake(rowX, y, rowW, 68.0) tag:1000 action:@selector(handleGameToolboxReturnToGame:) highlighted:YES];
-[GHLSSLauncherContentView addSubview:backBtn];
-y += 68.0 + gap;
-// 2/3. 微信／QQ（沒裝的不顯示）。
-const char *chatBids[2] = {"com.tencent.xin", "com.tencent.mqq"};
-const char *chatNames[2] = {"微信", "QQ"};
-for (int c = 0; c < 2; c++) {
-if (!GHLSSIsAppInstalled(chatBids[c])) {
-char nbuf[128];
-snprintf(nbuf, sizeof(nbuf), "v68 game toolbox %s not installed, row hidden", chatBids[c]);
-GHLSSLogLine(nbuf);
-continue;
-}
-char appName[128];
-GHLSSAppNameForBundleID(chatBids[c], appName, sizeof(appName));
-NSString *title = [NSString stringWithCString:(appName[0] != '\0' ? appName : chatNames[c]) encoding:NSUTF8StringEncoding];
-UIImage *icon = GHLSSAppIcon(chatBids[c]);
-UIButton *appBtn = [self gameToolboxRowWithTitle:title subtitle:nil icon:icon frame:CGRectMake(rowX, y, rowW, rowH) tag:c action:@selector(handleGameToolboxApp:) highlighted:NO];
-[GHLSSLauncherContentView addSubview:appBtn];
-y += rowH + gap;
-}
-// 4. 清後台。
-NSString *clearTitle = [NSString stringWithCString:"清后台" encoding:NSUTF8StringEncoding];
-NSString *clearSub = [NSString stringWithCString:"关掉其他非钉选浮窗" encoding:NSUTF8StringEncoding];
-UIButton *clearBtn = [self gameToolboxRowWithTitle:clearTitle subtitle:clearSub icon:nil frame:CGRectMake(rowX, y, rowW, rowH) tag:1003 action:@selector(handleGameToolboxClearBackground:) highlighted:NO];
-[GHLSSLauncherContentView addSubview:clearBtn];
-y += rowH + gap;
-// 5. 錄屏（探針：打開控制中心，不是直接開錄——見 handleGameToolboxRecord:）。
-NSString *recTitle = [NSString stringWithCString:"录屏" encoding:NSUTF8StringEncoding];
-NSString *recSub = [NSString stringWithCString:"打开控制中心，手点录屏" encoding:NSUTF8StringEncoding];
-UIButton *recBtn = [self gameToolboxRowWithTitle:recTitle subtitle:recSub icon:nil frame:CGRectMake(rowX, y, rowW, rowH) tag:1004 action:@selector(handleGameToolboxRecord:) highlighted:NO];
-[GHLSSLauncherContentView addSubview:recBtn];
-GHLSSLogLine("v68 game toolbox built");
-}
-
-// v63：工具箱裡一行（圓角行；highlighted 的那行金底黑字，其他深底白字）。
-// 有圖標時圖標放左邊（40x40）、文字右移；有副標時標題在上、副標在下。
-- (UIButton *)gameToolboxRowWithTitle:(NSString *)title subtitle:(NSString *)subtitle icon:(UIImage *)icon frame:(CGRect)frame tag:(NSInteger)tag action:(SEL)action highlighted:(BOOL)highlighted {
-UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-btn.frame = frame;
-btn.tag = tag;
-[btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
-if (highlighted) {
-btn.backgroundColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0];
-} else {
-btn.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.18];
-}
-btn.layer.cornerRadius = 14.0;
-btn.layer.masksToBounds = YES;
-CGFloat textX = 16.0;
-if (icon) {
-UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(14, (frame.size.height - 40) / 2.0, 40, 40)];
-iconView.image = icon;
-iconView.layer.cornerRadius = 9.0;
-iconView.layer.masksToBounds = YES;
-[btn addSubview:iconView];
-textX = 66.0;
-}
-UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(textX, subtitle ? 10 : 0, frame.size.width - textX - 16, subtitle ? 26 : frame.size.height)];
-titleLabel.text = title;
-titleLabel.textColor = highlighted ? [UIColor blackColor] : [UIColor whiteColor];
-titleLabel.font = [UIFont boldSystemFontOfSize:highlighted ? 19 : 17];
-[btn addSubview:titleLabel];
-if (subtitle) {
-UILabel *subLabel = [[UILabel alloc] initWithFrame:CGRectMake(textX, 36, frame.size.width - textX - 16, 20)];
-subLabel.text = subtitle;
-subLabel.textColor = highlighted ? [[UIColor blackColor] colorWithAlphaComponent:0.7] : [[UIColor whiteColor] colorWithAlphaComponent:0.7];
-subLabel.font = [UIFont systemFontOfSize:13];
-[btn addSubview:subLabel];
-}
-return btn;
-}
-
-// v63：工具箱「回遊戲」——回到當前那款遊戲（遊戲模式激活時記下的 bundleID）。
-// 沒記到就什麼也不做並記日誌。
-- (void)handleGameToolboxReturnToGame:(UIButton *)sender {
-(void)sender;
-if (GHLSSGameActiveBid[0] == '\0') {
-GHLSSLogLine("v68 game toolbox return: no active game");
-return;
-}
-GHLSSLogLine("v68 game toolbox return to game");
-[self dismissLauncher];
-[self openAppFullscreen:GHLSSGameActiveBid];
-}
-
-// v63：工具箱微信／QQ 行（tag 0＝微信、1＝QQ）——像 ARC 圖標一樣開浮窗。
-// 在啟動器槽位裡的走 handleAppButton: 那條路（已開著帶到最前、收著恢復、
-// 沒開的新開浮窗）；不在槽位裡的走 launchHostedApp（跟選 App 頁同一條路）。
-- (void)handleGameToolboxApp:(UIButton *)sender {
-NSInteger which = sender.tag;
-const char *bid = (which == 1) ? "com.tencent.mqq" : "com.tencent.xin";
-char buf[256];
-snprintf(buf, sizeof(buf), "v68 game toolbox app tapped %s", bid);
-GHLSSLogLine(buf);
-// v43.24：第 5 件——工具箱是假按鈕直調 handleAppButton，沒有 TouchDown，這裡直接給一次回饋。
-GHLSSLauncherTapFeedback();
-int idx = GHLSSAppIndexForBundleID(bid);
-if (idx >= 0 && GHLSSIsAppEnabled(idx)) {
-UIButton *fake = [UIButton buttonWithType:UIButtonTypeCustom];
-fake.tag = idx;
-[self handleAppButton:fake];
-return;
-}
-char name[128];
-GHLSSAppNameForBundleID(bid, name, sizeof(name));
-[self dismissLauncher];
-[self launchHostedApp:bid name:(name[0] != '\0' ? name : bid)];
-}
-
-// v63：工具箱「清後台」——立刻清掉其他非釘選浮窗（複用進遊戲自動清的那條路）。
-// 工具箱保持開著（清完 Lee 還要點回遊戲／微信）。
-- (void)handleGameToolboxClearBackground:(UIButton *)sender {
-(void)sender;
-GHLSSLogLine("v68 game toolbox clear background");
-GHLSSGameClearBackgroundWindows(GHLSSGameActiveBid);
-}
-
-// v63：工具箱「錄屏」——探針：沒有可驗證的 SpringBoard 側直接觸發系統錄屏的路
-//（ReplayKit 只能錄自己進程；SDK 裡沒有錄屏觸發 API；SBControlCenterController
-// 的類在 SpringBoard.tbd 裡有，但方法簽名無頭文件可驗）。這行只打開控制中心，
-// 讓 Lee 手點錄屏鈕。不是直接開錄。類／方法都用運行時探測，找不到就只記日誌、不崩。
-- (void)handleGameToolboxRecord:(UIButton *)sender {
-(void)sender;
-[self dismissLauncher];
-GHLSSLogLine("v68 game toolbox record: opening control center (not direct record)");
-@try {
-NSString *ccName = [NSString stringWithCString:"SBControlCenterController" encoding:NSUTF8StringEncoding];
-Class ccClass = NSClassFromString(ccName);
-SEL sharedSel = NSSelectorFromString([NSString stringWithCString:"sharedInstance" encoding:NSUTF8StringEncoding]);
-if (ccClass && [ccClass respondsToSelector:sharedSel]) {
-id cc = ((id (*)(id, SEL))objc_msgSend)((id)ccClass, sharedSel);
-SEL presentSel = NSSelectorFromString([NSString stringWithCString:"presentAnimated:completion:" encoding:NSUTF8StringEncoding]);
-if (cc && [cc respondsToSelector:presentSel]) {
-((void (*)(id, SEL, BOOL, id))objc_msgSend)(cc, presentSel, YES, nil);
-GHLSSLogLine("v68 game toolbox record: control center presented");
-} else {
-GHLSSLogLine("v68 game toolbox record: present selector unavailable");
-}
-} else {
-GHLSSLogLine("v68 game toolbox record: SBControlCenterController unavailable");
-}
-} @catch (NSException *e) {
-(void)e;
-GHLSSLogLine("v68 game toolbox record: control center open failed");
-}
-}
-
 
 // v41：ARC 裡一列圖標（bids 是 bundleID 字串的陣列；
 // 啟動器裡的 App 用槽位下標當 tag，點了走 handleAppButton:）。

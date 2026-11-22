@@ -84,27 +84,30 @@
       }
       .cover-artist { margin-top: 3px; font-size: 12px; letter-spacing: .14em; color: rgba(240,232,255,.85); }
       .change-cover {
-        position: absolute; right: 14px; bottom: 12px;
+        position: absolute; right: 14px; top: 14px;
         display: inline-flex; align-items: center; gap: 6px;
         min-height: 38px; padding: 8px 13px;
-        border: 1px solid rgba(255,255,255,.35); border-radius: 999px;
-        background: rgba(30,20,66,.42); color: #fff;
+        border: 1px solid rgba(255,255,255,.4); border-radius: 999px;
+        background: rgba(30,20,66,.5); color: #fff;
         font-size: 13px; letter-spacing: .06em; cursor: pointer;
+        text-shadow: 0 1px 6px rgba(20,8,50,.6);
+        box-shadow: 0 4px 16px rgba(16,6,44,.35);
         backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
       }
       .change-cover:active { transform: scale(.96); }
       .change-cover svg { width: 17px; height: 17px; flex: none; }
       /* Cover picker sheet */
       .cover-sheet {
-        position: absolute; left: 10px; right: 10px; bottom: 10px;
+        position: absolute; left: 10px; right: 10px; top: 10px;
         padding: 14px 14px 12px; border-radius: 20px;
         background: rgba(24,16,52,.82);
         border: 1px solid rgba(255,255,255,.14);
         backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
         display: none;
       }
-      .cover-sheet.open { display: block; animation: sheetUp .28s ease; }
+      .cover-sheet.open { display: block; animation: sheetDown .28s ease; }
       @keyframes sheetUp { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      @keyframes sheetDown { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       .cover-sheet h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; letter-spacing: .12em; color: rgba(240,232,255,.9); }
       .cover-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
       .cover-opt {
@@ -402,23 +405,175 @@
               { en: 'The truth that you leave behind', zh: '你留在身后的真相',      dur: 5.2 },
               { en: 'is the song I keep of you',       zh: '是我为你留存的歌',      dur: 5.6 }
             ] },
-          { title: '待加入', artist: '等皇上指定歌',
-            note: '这首歌还没加 · 等皇上指定歌名再放进来',
-            cover: 'assets/cover-lake.webp', audio: 'synth', src: null,
-            lines: [
-              { en: 'A song waiting to be named',      zh: '一首还在等名字的歌',   dur: 5.0 },
-              { en: 'Tell me which song to add next',  zh: '告诉我下一首加哪首歌', dur: 5.0 },
-              { en: 'The water keeps flowing',         zh: '水面还在轻轻流淌',    dur: 5.0 }
-            ] },
-          { title: '待加入', artist: '等皇上指定歌',
-            note: '这首歌还没加 · 等皇上指定歌名再放进来',
-            cover: 'assets/cover-keys.webp', audio: 'synth', src: null,
-            lines: [
-              { en: 'An empty slot on the wall',        zh: '墙上一个空着的位置',   dur: 5.0 },
-              { en: 'Waiting for your next pick',       zh: '等你挑下一首歌',      dur: 5.0 },
-              { en: 'The ripples remember',             zh: '涟漪会记得',          dur: 5.0 }
-            ] }
+        
         ];
+        /* ==== SONG DATA（网页版 v4 同步，103 首：0 号真歌＋1..102 生成） ====
+           网页版 RAW／POOL／makeLines／TEMPLATES 原样搬入；歌词墙文字为意境创作，
+           非原曲歌词。0 号仍是原来的真歌（assets/piano.m4a＋原来 10 行）。
+           切歌时调式模板＋移调＋步长随歌变（loadTrack 里应用）。 */
+        var RAW = [
+          ["The Truth That You Leave", "The Truth That You Leave", "Pianoboy · 高至豪", "", ""],
+          ["River Flows in You", "River Flows in You", "Yiruma 李闰珉", "a river flowing through the heart", "河流穿过心间"],
+          ["Kiss the Rain", "Kiss the Rain", "Yiruma 李闰珉", "rain kissing the window", "雨轻吻着窗"],
+          ["卡农", "Canon in D", "Pachelbel 帕赫贝尔", "strings chasing each other in a circle", "弦音彼此追逐成圆"],
+          ["致爱丽丝", "Für Elise", "Beethoven 贝多芬", "a letter that was never sent", "一封未寄出的信"],
+          ["梦中的婚礼", "Mariage d'Amour", "Paul de Senneville", "a wedding held inside a dream", "梦里举行的婚礼"],
+          ["天空之城", "Castle in the Sky", "久石让 Joe Hisaishi", "a castle floating in the sky", "浮在天空的城"],
+          ["千与千寻", "Always With Me", "久石让 Joe Hisaishi", "a river spirit calling your name", "河神轻唤你的名字"],
+          ["夜的钢琴曲", "Piano at Night", "石进", "a piano awake at midnight", "午夜醒着的钢琴"],
+          ["起风了（钢琴版）", "The Wind Rises", "钢琴版", "the wind rising over the hill", "风从山岗上升起"],
+          ["孤勇者（钢琴版）", "The Lone Brave", "钢琴版", "one small light in a dark street", "暗巷里的一盏灯"],
+          ["少年（钢琴版）", "Youth", "钢琴版", "running shoes on a summer road", "夏日路上奔跑的鞋"],
+          ["彩云追月", "Colorful Clouds Chasing the Moon", "广东音乐", "colorful clouds chasing the moon", "彩云追着月亮"],
+          ["茫然", "Lost in the Mist", "钢琴曲", "footsteps lost in the mist", "雾里迷失的脚步"],
+          ["假如爱有天意", "If Love Has a Will", "韩国电影原声 · 钢琴版", "a letter written by fate", "命运写下的信"],
+          ["克罗地亚狂想曲", "Croatian Rhapsody", "Maksim 马克西姆", "fire dancing on the keys", "火焰在琴键上跳舞"],
+          ["亡灵序曲", "The Dawn", "Dreamtale 主题 · 钢琴版", "horns rising over a dark field", "号角越过暗野升起"],
+          ["秋日私语", "Autumn Whisper", "Richard Clayderman", "leaves whispering in autumn", "秋叶低声私语"],
+          ["水边的阿狄丽娜", "Ballade pour Adeline", "Richard Clayderman", "a girl waiting by the water", "水边等待的少女"],
+          ["少女的祈祷", "A Maiden's Prayer", "Bądarzewska 巴达捷芙斯卡", "candles lit by a young heart", "少女点亮的烛光"],
+          ["星空", "Starry Sky", "Richard Clayderman", "stars opening one by one", "星星一颗颗睁开眼"],
+          ["雪之梦", "Snow Dream", "Bandari 班得瑞", "snow falling into a quiet dream", "雪落进安静的梦"],
+          ["雨的印记", "Kiss the Rain", "Yiruma 李闰珉", "raindrops leaving fingerprints", "雨滴留下的指纹"],
+          ["月光奏鸣曲", "Moonlight Sonata", "Beethoven 贝多芬", "moonlight spread on a still lake", "月光铺满静湖"],
+          ["土耳其进行曲", "Turkish March", "Mozart 莫扎特", "tiny soldiers marching in step", "小士兵踏着步点"],
+          ["梁祝", "Butterfly Lovers", "何占豪 · 陈钢", "two butterflies over the flowers", "两只蝴蝶飞过花丛"],
+          ["后来（钢琴版）", "Later", "钢琴版", "a train leaving the platform", "列车驶离站台"],
+          ["体面（钢琴版）", "Dignity", "钢琴版", "a graceful wave goodbye in the rain", "雨里体面地挥手"],
+          ["说好不哭（钢琴版）", "Won't Cry", "钢琴版", "a smile holding back the tears", "忍住眼泪的微笑"],
+          ["光年之外（钢琴版）", "Light Years Away", "钢琴版", "a signal crossing light years", "信号穿越光年"],
+          ["幻想即兴曲", "Fantaisie-Impromptu", "Chopin 肖邦", "sparks spinning in the dark", "暗夜里旋转的火花"],
+          ["革命练习曲", "Revolutionary Étude", "Chopin 肖邦", "a storm breaking over the keys", "风暴压过琴键"],
+          ["离别曲", "Farewell Étude", "Chopin 肖邦", "a handkerchief waved at the station", "站台上挥别的手帕"],
+          ["黑键练习曲", "Black Keys Étude", "Chopin 肖邦", "fingertips dancing on black keys", "指尖在黑键上跳舞"],
+          ["军队波兰舞曲", "Military Polonaise", "Chopin 肖邦", "boots marching in bright ranks", "军靴踏出明亮队列"],
+          ["英雄波兰舞曲", "Heroic Polonaise", "Chopin 肖邦", "a banner rising over the hall", "旗帜在大厅升起"],
+          ["升C小调圆舞曲", "Waltz in C-sharp Minor", "Chopin 肖邦", "a waltz turning under lamplight", "灯下旋转的圆舞"],
+          ["雨滴前奏曲", "Raindrop Prelude", "Chopin 肖邦", "one raindrop keeping perfect time", "一滴雨打着节拍"],
+          ["夜曲", "Nocturne", "Chopin 肖邦", "a candle burning past midnight", "烛火燃过午夜"],
+          ["摇篮曲", "Berceuse", "Chopin 肖邦", "a cradle rocking in moonlight", "月光里摇晃的摇篮"],
+          ["匈牙利狂想曲", "Hungarian Rhapsody", "Liszt 李斯特", "violins playing around a fire", "篝火边的小提琴"],
+          ["爱的梦", "Liebesträume", "Liszt 李斯特", "a dream that smells of roses", "带着玫瑰香的梦"],
+          ["钟", "La Campanella", "Liszt 李斯特", "a little bell over the valley", "山谷上方的小铃"],
+          ["帕格尼尼主题狂想曲", "Rhapsody on a Theme of Paganini", "Rachmaninoff 拉赫玛尼诺夫", "a theme turning into starlight", "主题化作星光"],
+          ["四季·春", "The Four Seasons: Spring", "Vivaldi 维瓦尔第", "birds waking up the orchard", "鸟鸣唤醒果园"],
+          ["四季·夏", "The Four Seasons: Summer", "Vivaldi 维瓦尔第", "thunder rolling over wheat fields", "雷声滚过麦田"],
+          ["四季·秋", "The Four Seasons: Autumn", "Vivaldi 维瓦尔第", "harvest songs in golden fields", "金色田野的丰收歌"],
+          ["四季·冬", "The Four Seasons: Winter", "Vivaldi 维瓦尔第", "footprints crunching in the snow", "雪地里的脚印声"],
+          ["天鹅", "The Swan", "Saint-Saëns 圣桑", "a swan gliding on still water", "天鹅滑过静水"],
+          ["胡桃夹子·糖果仙子", "Dance of the Sugar Plum Fairy", "Tchaikovsky 柴可夫斯基", "sugar sparkles in a music box", "音乐盒里的糖霜闪光"],
+          ["天鹅湖", "Swan Lake", "Tchaikovsky 柴可夫斯基", "swans turning under the moon", "月下旋转的天鹅"],
+          ["睡美人圆舞曲", "Sleeping Beauty Waltz", "Tchaikovsky 柴可夫斯基", "a palace asleep for a hundred years", "沉睡百年的宫殿"],
+          ["蓝色多瑙河", "The Blue Danube", "Johann Strauss II", "a river waltzing through Vienna", "多瑙河在维也纳起舞"],
+          ["春之声圆舞曲", "Voices of Spring", "Johann Strauss II", "spring voices filling the ballroom", "舞会里满是春之声"],
+          ["维也纳森林的故事", "Tales from the Vienna Woods", "Johann Strauss II", "stories whispered by tall trees", "高树低语的故事"],
+          ["拉德茨基进行曲", "Radetzky March", "Johann Strauss I", "hands clapping in march time", "掌声踏着进行曲"],
+          ["皇帝圆舞曲", "Emperor Waltz", "Johann Strauss II", "chandeliers turning in a palace", "宫殿里旋转的吊灯"],
+          ["命运交响曲（钢琴版）", "Symphony of Fate", "Beethoven 贝多芬", "fate knocking at the door", "命运在敲门"],
+          ["欢乐颂", "Ode to Joy", "Beethoven 贝多芬", "voices joining one by one", "歌声一个个汇合"],
+          ["小星星变奏曲", "Twinkle Twinkle Variations", "Mozart 莫扎特", "a little star changing costumes", "小星星换着衣裳"],
+          ["婚礼进行曲", "Wedding March", "Mendelssohn 门德尔松", "petals falling on the aisle", "花瓣落在红毯上"],
+          ["绿袖子", "Greensleeves", "英格兰民谣", "green sleeves in an old song", "老歌里的绿袖子"],
+          ["友谊地久天长", "Auld Lang Syne", "苏格兰民歌", "old friends raising a cup together", "老朋友举起酒杯"],
+          ["送别", "Farewell", "李叔同", "a long pavilion at dusk", "黄昏里的长亭"],
+          ["茉莉花", "Jasmine Flower", "江苏民歌", "a jasmine blooming in white", "茉莉开出白色的花"],
+          ["平湖秋月", "Autumn Moon over the Calm Lake", "吕文成", "the autumn moon on a calm lake", "秋月落在平湖上"],
+          ["高山流水", "High Mountains, Flowing Water", "古曲 · 钢琴版", "a stream answering the mountains", "流水回应高山"],
+          ["梅花三弄", "Three Variations on Plum Blossom", "古曲 · 钢琴版", "plum blossoms in cold fragrance", "梅花在冷香里绽放"],
+          ["渔舟唱晚", "Fisherman's Song at Dusk", "古曲 · 钢琴版", "a fishing boat singing its way home", "渔舟唱着晚歌归来"],
+          ["春江花月夜", "Spring River in the Flower Moon Night", "古曲 · 钢琴版", "moon flowers on a spring river", "春江上开满月花"],
+          ["二泉映月", "The Moon Reflected on the Second Spring", "华彦钧（阿炳）", "moonlight trembling on spring water", "月光在泉水上颤动"],
+          ["黄河钢琴协奏曲", "Yellow River Piano Concerto", "中央乐团集体创作", "the Yellow River roaring eastward", "黄河向东奔腾"],
+          ["保卫黄河", "Defend the Yellow River", "冼星海", "oars beating hard against the waves", "船桨拍打着浪花"],
+          ["我的祖国（钢琴版）", "My Motherland", "刘炽", "a great river with wide waves", "一条大河波浪宽"],
+          ["康定情歌（钢琴版）", "Kangding Love Song", "四川民歌", "the moon bending over Kangding", "月亮弯弯照着康定"],
+          ["美丽的神话（钢琴版）", "Endless Love", "钢琴版", "a myth written in the stars", "写在星空里的神话"],
+          ["雪山春晓", "Spring Dawn on Snow Mountain", "藏族风格钢琴曲", "spring dawn over the snow peaks", "雪山迎来春晓"],
+          ["浏阳河（钢琴版）", "Liuyang River", "湖南民歌", "a river bending nine gentle times", "浏阳河弯过九道弯"],
+          ["洪湖水浪打浪", "Honghu Waters, Wave on Wave", "湖北民歌", "waves chasing waves across Honghu", "洪湖水浪赶着浪"],
+          ["走西口", "Going West", "山西民歌", "a long road stretching past the pass", "长路伸出关口之外"],
+          ["小白杨", "The Little White Poplar", "军旅歌曲 · 钢琴版", "a poplar standing tall at the post", "哨所旁挺立的小白杨"],
+          ["军港之夜（钢琴版）", "Night at the Naval Port", "钢琴版", "waves rocking the harbor to sleep", "海浪摇着军港入睡"],
+          ["映山红（钢琴版）", "Azaleas on the Hills", "钢琴版", "azaleas reddening all the hills", "映山红开满山坡"],
+          ["十送红军（钢琴版）", "Ten Farewells to the Red Army", "江西民歌", "a long road of ten farewells", "十里长路送亲人"],
+          ["南泥湾（钢琴版）", "Nanniwan", "钢琴版", "flowers opening all over Nanniwan", "南泥湾开满鲜花"],
+          ["山丹丹开花红艳艳", "Red Lilies in Full Bloom", "陕北民歌", "red lilies over the loess hills", "山丹丹开满黄土坡"],
+          ["绣红旗", "Embroidering the Red Flag", "歌剧《江姐》选段 · 钢琴版", "a needle stitching threads of starlight", "针线绣出星光"],
+          ["红梅赞", "Ode to the Red Plum", "歌剧《江姐》选段 · 钢琴版", "red plum blooming in the snow", "红梅在雪里开放"],
+          ["我和我的祖国（钢琴版）", "Me and My Motherland", "钢琴版", "a wave that never leaves the sea", "浪花从不离开大海"],
+          ["难忘今宵（钢琴版）", "Unforgettable Tonight", "钢琴版", "lanterns glowing warm tonight", "今宵灯火明亮"],
+          ["同一首歌（钢琴版）", "The Same Song", "钢琴版", "one song sung by many voices", "一首歌许多人一起唱"],
+          ["明天会更好（钢琴版）", "Tomorrow Will Be Better", "钢琴版", "morning light falling on tomorrow", "晨光落在明天"],
+          ["感恩的心（钢琴版）", "A Grateful Heart", "钢琴版", "hands folded in quiet thanks", "双手合十的感谢"],
+          ["隐形的翅膀（钢琴版）", "Invisible Wings", "钢琴版", "invisible wings riding the wind", "风里隐形的翅膀"],
+          ["最初的梦想（钢琴版）", "The First Dream", "钢琴版", "the very first dream still glowing", "最初的梦想还在发光"],
+          ["我的未来不是梦（钢琴版）", "My Future Is Not a Dream", "钢琴版", "footsteps chasing after the future", "脚步追着未来跑"],
+          ["水手（钢琴版）", "The Sailor", "钢琴版", "a sailor facing down the storm", "水手迎着风浪"],
+          ["朋友（钢琴版）", "Friends", "钢琴版", "a friend walking right beside you", "朋友走在身旁"],
+          ["童年（钢琴版）", "Childhood", "钢琴版", "a paper plane over the playground", "纸飞机飞过操场"],
+          ["鲁冰花（钢琴版）", "Lupine Flowers", "钢琴版", "lupines blooming by the fence", "鲁冰花开在篱笆边"],
+          ["让我们荡起双桨（钢琴版）", "Let's Row the Oars", "钢琴版", "two oars stirring the green water", "双桨划开绿水"],
+          ["世上只有妈妈好（钢琴版）", "Mom Is the Best in the World", "钢琴版", "a lamp kept warm at home", "家里亮着一盏暖灯"],
+          ["铃儿响叮当（钢琴版）", "Jingle Bells", "钢琴版", "sleigh bells ringing in the snow", "雪地里铃儿响叮当"]
+        ]
+        var POOL = [
+          { en: 'Piano keys like ripples, soft and slow', zh: '琴键像涟漪，轻轻慢慢' },
+          { en: 'Every note lands on the water', zh: '每个音符都落在水面上' },
+          { en: 'The melody drifts beyond the shore', zh: '旋律漂向岸的另一边' },
+          { en: 'Moonlight keeps time with the keys', zh: '月光陪着琴键打拍子' },
+          { en: 'A quiet heart hears every echo', zh: '安静的心听见每声回响' },
+          { en: 'The water remembers this tune', zh: '水面记住了这段旋律' },
+          { en: 'Notes rise like fireflies at dusk', zh: '音符像黄昏的萤火升起' },
+          { en: 'And the night hums along, softly', zh: '夜色也跟着轻轻哼唱' },
+          { en: 'Ripples carry the song away', zh: '涟漪把歌带向远方' }
+        ]
+        function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+        function makeLines(s, idx) {
+          var p = POOL[idx % POOL.length], q = POOL[(idx + 4) % POOL.length];
+          return [
+            { en: cap(s.mEn), zh: s.mZh, dur: 5.2 },
+            { en: 'Where ' + s.mEn + ' meets the moon', zh: s.mZh + '，遇见月亮', dur: 5.2 },
+            { en: p.en, zh: p.zh, dur: 5.0 },
+            { en: cap(s.en) + ' — carried on the water', zh: '《' + s.zh + '》，随水而行', dur: 5.2 },
+            { en: q.en, zh: q.zh, dur: 5.0 },
+            { en: 'And ' + s.mEn + ' fades into blue', zh: s.mZh + '，慢慢沉入蓝色', dur: 5.6 }
+          ];
+        }
+        var TEMPLATES = [
+          { chords: [
+            { root: 50, tones: [62, 66, 69, 76] },
+            { root: 47, tones: [59, 62, 66, 73] },
+            { root: 43, tones: [55, 59, 62, 69] },
+            { root: 45, tones: [57, 61, 64, 71] }
+          ], penta: [74, 76, 78, 81, 83, 86] },
+          { chords: [
+            { root: 45, tones: [57, 60, 64, 71] },
+            { root: 41, tones: [53, 57, 60, 69] },
+            { root: 48, tones: [60, 64, 67, 76] },
+            { root: 43, tones: [55, 59, 62, 71] }
+          ], penta: [69, 72, 74, 76, 79, 81] },
+          { chords: [
+            { root: 48, tones: [60, 64, 67, 74] },
+            { root: 43, tones: [55, 59, 62, 71] },
+            { root: 45, tones: [57, 60, 64, 72] },
+            { root: 41, tones: [53, 57, 60, 69] }
+          ], penta: [72, 74, 76, 79, 81, 84] }
+        ]
+        var COVERS = ['assets/cover-eyes.webp', 'assets/cover-lake.webp', 'assets/cover-keys.webp'];
+        (function () {
+          for (var _i = 1; _i < RAW.length; _i++) {
+            var _r = RAW[_i];
+            var _s = { zh: _r[0], en: _r[1], artist: _r[2], mEn: _r[3], mZh: _r[4],
+                       tpl: _i % 3, tr: ((_i * 5) % 9) - 4, step: 0.54 + (_i % 5) * 0.03, idx: _i };
+            TRACKS.push({
+              title: _s.zh, artist: _s.artist + ' · 纯音乐钢琴',
+              note: '本曲为纯音乐 · 墙上文字为配乐意境创作，非原曲歌词',
+              cover: COVERS[_i % COVERS.length], audio: 'synth', src: null,
+              tpl: _s.tpl, tr: _s.tr, step: _s.step, lines: makeLines(_s, _i)
+            });
+          }
+        })();
+        /* ==== /SONG DATA ==== */
         var currentTrack = 0;
         var LINES = TRACKS[0].lines;
         var STARTS = [], TOTAL = 0;
@@ -455,6 +610,7 @@
         var ambientImg = document.getElementById('ambientImg');
         var sheet = document.getElementById('coverSheet');
         var uploadedURL = null;
+        var customCover = false;
         function setCover(src) {
           coverImg.style.opacity = '0';
           var pre = new Image();
@@ -475,6 +631,7 @@
         });
         document.querySelectorAll('.cover-opt[data-cover]').forEach(function (b) {
           b.addEventListener('click', function () {
+            customCover = true;
             setCover(b.getAttribute('data-cover'));
             sheet.classList.remove('open');
           });
@@ -485,6 +642,7 @@
           if (uploadedURL) URL.revokeObjectURL(uploadedURL);
           uploadedURL = URL.createObjectURL(f);
           document.querySelectorAll('.cover-opt[data-cover]').forEach(function (b) { b.classList.remove('sel'); });
+          customCover = true;
           setCover(uploadedURL);
           sheet.classList.remove('open');
         });
@@ -513,13 +671,10 @@
         /* ================= WebAudio 合成钢琴（兜底） ================= */
         var AC = null, master = null, wet = null, schedTimer = null, nextNoteTime = 0, stepIdx = 0;
         function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-        var CHORDS = [
-          { root: 50, tones: [62, 66, 69, 76] },  // Dmaj9
-          { root: 47, tones: [59, 62, 66, 73] },  // Bm9
-          { root: 43, tones: [55, 59, 62, 69] },  // Gmaj9
-          { root: 45, tones: [57, 61, 64, 71] }   // Aadd9
-        ];
-        var PENTA = [74, 76, 78, 81, 83, 86];
+/* TEMPLATES 在上面的 SONG DATA 块里定义，这里直接用 */
+        var CHORDS = TEMPLATES[0].chords;
+        var PENTA = TEMPLATES[0].penta;
+        var stepDur = 0.6;
         var melIdx = 2;
         function makeImpulse(ctx, dur, decay) {
           var rate = ctx.sampleRate, len = rate * dur;
@@ -561,7 +716,7 @@
         }
         function scheduler() {
           if (!AC) return;
-          var STEP = 0.6, BAR = 8; // 每小节 8 步 × 0.6s = 4.8s，一个和弦
+          var STEP = stepDur, BAR = 8; // 每小节 8 步，一个和弦
           while (nextNoteTime < AC.currentTime + 0.7) {
             var bar = Math.floor(stepIdx / BAR), s = stepIdx % BAR;
             var ch = CHORDS[bar % CHORDS.length];
@@ -1027,6 +1182,7 @@
         var autoRipple = 0;
         function tick() {
           requestAnimationFrame(tick);
+          if (window.__ghlssPaused) return;
           try {
             var dt = Math.min(clock.getDelta(), 0.05);
             elapsed += dt;
@@ -1098,7 +1254,7 @@
             var tag = '';
             if (i === currentTrack) tag = '<span class="track-tag">播放中</span>';
             else if (t.source) tag = '<span class="track-tag">已导入</span>';
-            else if (t.audio === 'synth') tag = '<span class="track-tag wait">待加入</span>';
+            else if (t.placeholder) tag = '<span class="track-tag wait">待加入</span>';
             b.innerHTML = '<span class="track-num">' + (i + 1) + '</span>'
               + '<span class="track-info"><span class="track-name">' + escHtml(t.title) + '</span><br/>'
               + '<span class="track-sub">' + escHtml(t.artist) + '</span></span>' + tag;
@@ -1123,10 +1279,19 @@
           document.getElementById('tTot').textContent = fmt(TOTAL);
           document.getElementById('lineTag').textContent = '1 / ' + LINES.length;
           document.title = t.title + ' · 3D水面立体歌词墙';
-          setCover(t.cover);
+          var _tpl = TEMPLATES[(t.tpl || 0) % TEMPLATES.length];
+          var _tr = t.tr || 0;
+          CHORDS = _tpl.chords.map(function (c) {
+            return { root: c.root + _tr, tones: c.tones.map(function (m) { return m + _tr; }) };
+          });
+          PENTA = _tpl.penta.map(function (m) { return m + _tr; });
+          stepDur = t.step || 0.6; stepIdx = 0;
+          if (AC) nextNoteTime = AC.currentTime + 0.15;
+          if (!customCover) setCover(t.cover);
           currentTime = 0; lastActive = -1;
           layoutLyrics(0);
           if (t.audio === 'file') {
+            if (AC && AC.state === 'running') AC.suspend();
             useSynth = false;
             if (bgm.getAttribute('src') !== t.src) {
               bgm.setAttribute('src', t.src);
@@ -1280,6 +1445,16 @@
           pauseIcon.style.display = on ? '' : 'none';
           document.getElementById('playBtn').setAttribute('aria-label', on ? '暂停' : '播放');
         }
+        /* v43.30：主页内嵌播放器暂停钩子（设置主页消失时由原生侧调用，
+           防主页墙与详情页墙同时出声；只停声音＋停渲染，不改曲目／进度；
+           恢复只恢复渲染，不自动续播）。 */
+        window.ghlssPausePlayer = function () {
+          window.__ghlssPaused = true;
+          if (playing) setPlaying(false);
+        };
+        window.ghlssResumeView = function () {
+          window.__ghlssPaused = false;
+        };
         bigPlay.addEventListener('click', function () { setPlaying(true); spawnRipple(0, 1.8, 1.0); });
         document.getElementById('playBtn').addEventListener('click', function () { setPlaying(!playing); });
         document.getElementById('prevBtn').addEventListener('click', function () {

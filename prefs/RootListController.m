@@ -1,7 +1,8 @@
 // 顾海龙集团分屏 — 设置页（PreferenceLoader）。
-// v43.27：主頁順序＝版本頭／常用開關／歌词墙／ARC／浮窗／其他功能／
-// 遊戲模式／遊戲模式自動觸發／配置管理（含檢查更新）／
-// 新手模式殿後；子頁是獨立 plist（浮窗／ARC／其他＋調度／陰影／
+// v43.30：主頁順序＝版本頭／激活／常用開關／歌词墙／启动器设置／
+// 浮窗设置／其他功能／配置管理（含檢查更新）／狀態；
+// 遊戲模式整套已刪（v43.30，皇上 2026-11-22 定）；激活是獨立頁
+// （Activation.plist，兩張卡：激活／狀態）。子頁是獨立 plist（浮窗／ARC／其他＋調度／陰影／
 // 橫幅／鍵盤／搜索／桌面圖標／懸浮圖標／ARC 按鈕＋手勢自定義／
 // 狀態頁），由 PreferenceLoader 的預設控制器
 // 載入；「加入 App」是動態頁（GHLSSAppPickerListController，下面），
@@ -40,10 +41,6 @@ static CFStringRef GHLSSRuntimeCFString(const char *cstr) {
 // 設定檔目錄（設定 App 的 mobile 用戶可寫）。
 static NSString *GHLSSPrefsDir(void) {
     return GHLSSRuntimeString("/var/mobile/Library/Preferences");
-}
-
-static NSString *GHLSSPrefsFilePath(void) {
-    return [GHLSSPrefsDir() stringByAppendingPathComponent:GHLSSRuntimeString("com.guhailong.splitscreen.plist")];
 }
 
 static NSString *GHLSSBackupFilePath(void) {
@@ -91,9 +88,9 @@ static NSString *GHLSSPrefsActivationStatusText(void) {
     char *state = GHLSSPrefsCString("activationState");
     NSString *out;
     if (state && strcmp(state, "authorized") == 0) {
-        out = GHLSSRuntimeString("已激活");
+        out = GHLSSRuntimeString("您的设备已授权");
     } else if (state && strcmp(state, "locked") == 0) {
-        out = GHLSSRuntimeString("未激活（激活码不对或没输）");
+        out = GHLSSRuntimeString("未授权");
     } else if (state && strcmp(state, "checkFailed") == 0) {
         out = GHLSSRuntimeString("名单读不到，暂不锁（检查网络／名单）");
     } else {
@@ -363,7 +360,7 @@ static int GHLSSFixedIndexForBundleID(const char *bid) {
 }
 
 // v43.24：第 6 件——自選 App 串列（customAppBundleIDs，逗號分隔 bundleID），
-// 跟遊戲清單 gameAppBundleIDs 同一套做法。開關是 sel-<bundleID>。
+// 開關是 sel-<bundleID>。
 static BOOL GHLSSCustomAppListContainsBid(const char *bid) {
     if (!bid || bid[0] == '\0') return NO;
     char *raw = GHLSSPrefsCString("customAppBundleIDs");
@@ -524,7 +521,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @end
 
 @interface GuHaiLongSplitScreenRootListController : PSListController <UIDocumentPickerDelegate>
-@property (nonatomic, strong) UIImageView *ghlssBannerView;
+@property (nonatomic, strong) WKWebView *ghlssInlineLyricView;
 @property (nonatomic, strong) UIView *ghlssBannerContainer;
 @property (nonatomic, assign) BOOL ghlssBannerInstalled;
 @property (nonatomic, assign) int ghlssDocPickerKind;
@@ -539,85 +536,98 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     char buf[160];
     snprintf(buf, sizeof(buf), "v57 prefs-page: %s", [NSStringFromClass([self class]) UTF8String]);
     GHLSSPrefsLogLine(buf);
-    // v53：設定主頁頂上直接顯示卡片背景圖橫幅（點圖就換；「卡片背景圖」行＋
-    // 進去選圖的子頁已拿掉）。只掛在設定主頁本身（isMemberOfClass），
-    // 子頁（GHLSSPlistPageController 繼承這裡）不掛。
+    // v43.30：設定主頁頂上直接嵌整个 3D 立体歌词墙播放器（480pt 高的
+    // WKWebView 头，跟歌词墙那栏同一份 lyricwall/index.html，不是两套
+    // 播放器；触摸进墙里，不再点横幅进详情页）。只挂在設定主頁本身
+    //（isMemberOfClass），子頁（GHLSSPlistPageController 繼承這裡）不掛。
+    // 主页列表滚动从播放器下面开始拖；主页消失时暂停内嵌播放器（见下面
+    // viewWillDisappear），防主页墙与详情页墙同时出声。
     if ([self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) {
         @try {
             CGFloat w = [UIScreen mainScreen].bounds.size.width;
-            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 200)];
-            container.backgroundColor = [UIColor whiteColor];
-            // v54：圖改滿幅（0,0,w,200）去白邊（v53 是 (0,10,w,180)，上下各 10pt 白邊）。
-            // v43.10：完整顯示＋模糊底拿掉，橫幅改回原來裁滿（皇上 2026-11-21 真機測完定）。
-            UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, w, 200)];
-            iv.contentMode = UIViewContentModeScaleAspectFill;
-            iv.clipsToBounds = YES;
-            iv.backgroundColor = [UIColor whiteColor];
-            iv.userInteractionEnabled = YES;
-            [container addSubview:iv];
-            UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(ghlssBannerTapped:)];
-            [iv addGestureRecognizer:tap];
-            // v43.10：恢复默认钮保持拿掉（皇上 2026-11-21 定：不要改回去）。
-            self.ghlssBannerView = iv;
+            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 480)];
+            container.backgroundColor = [UIColor blackColor];
+            container.clipsToBounds = YES;
+            NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+            NSString *htmlPath = [bundle pathForResource:GHLSSRuntimeString("index") ofType:GHLSSRuntimeString("html") inDirectory:GHLSSRuntimeString("lyricwall")];
+            WKWebView *wv = nil;
+            if (htmlPath) {
+                WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
+                wv = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, w, 480) configuration:config];
+                wv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+                wv.backgroundColor = [UIColor blackColor];
+                wv.opaque = YES;
+                NSURL *fileURL = [NSURL fileURLWithPath:htmlPath];
+                NSURL *dirURL = [fileURL URLByDeletingLastPathComponent];
+                [wv loadFileURL:fileURL allowingReadAccessToURL:dirURL];
+                [container addSubview:wv];
+            } else {
+                UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, w, 480)];
+                lb.text = GHLSSRuntimeString("歌词墙文件没找到，请重装一次插件再试。");
+                lb.font = [UIFont systemFontOfSize:15];
+                lb.textColor = [UIColor grayColor];
+                lb.textAlignment = NSTextAlignmentCenter;
+                lb.numberOfLines = 0;
+                lb.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+                [container addSubview:lb];
+                GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall html missing");
+            }
+            self.ghlssInlineLyricView = wv;
             self.ghlssBannerContainer = container;
-            [self ghlssRefreshBannerPreview];
         } @catch (NSException *e) {
-            GHLSSPrefsLogLine("v57 prefs-banner: viewDidLoad EXCEPTION");
+            GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall viewDidLoad EXCEPTION");
         }
     }
 }
 
-// v53：橫幅掛載（viewDidAppear 才碰 table；只掛設定主頁本身）。
+// v43.30：内嵌歌词墙挂载（viewDidAppear 才碰 table；只挂設定主頁本身）。
 // v54：掛載前核對取到的表就是主表（dataSource 是自己才掛），寬度改這時重取。
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
     if (self.ghlssBannerContainer && !self.ghlssBannerInstalled) {
-        UITableView *tv = GHLSSSafeTableViewForController(self, "banner");
+        UITableView *tv = GHLSSSafeTableViewForController(self, "inline-lyricwall");
         if (tv && tv.dataSource && (id)tv.dataSource != (id)self) {
-            GHLSSPrefsLogLine("v57 prefs-banner: table mismatch, header not mounted");
+            GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: table mismatch, header not mounted");
             return;
         }
         if (tv) {
             @try {
                 CGFloat w = tv.bounds.size.width;
                 if (w <= 0) w = [UIScreen mainScreen].bounds.size.width;
-                self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, 200);
-                self.ghlssBannerView.frame = CGRectMake(0, 0, w, 200);
+                self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, 480);
+                if (self.ghlssInlineLyricView) self.ghlssInlineLyricView.frame = CGRectMake(0, 0, w, 480);
                 tv.tableHeaderView = self.ghlssBannerContainer;
                 self.ghlssBannerInstalled = YES;
-                GHLSSPrefsLogLine("v57 prefs-banner: header mounted");
+                GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: header mounted");
             } @catch (NSException *e) {
-                GHLSSPrefsLogLine("v57 prefs-banner: mount EXCEPTION");
+                GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: mount EXCEPTION");
             }
         } else {
-            GHLSSPrefsLogLine("v57 prefs-banner: no table, header not mounted");
+            GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: no table, header not mounted");
         }
     }
-    // v43.27：回來時刷一次橫幅（歌词墙封面图）。
-    [self ghlssRefreshBannerPreview];
 }
 
-
-- (void)ghlssRefreshBannerPreview {
-    @try {
-        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-        NSString *coverPath = [bundle pathForResource:GHLSSRuntimeString("cover-eyes") ofType:GHLSSRuntimeString("webp") inDirectory:GHLSSRuntimeString("lyricwall/assets")];
-        UIImage *img = coverPath ? [UIImage imageWithContentsOfFile:coverPath] : nil;
-        self.ghlssBannerView.image = img;
-    } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v57 prefs-banner: refresh EXCEPTION");
+// v43.30：主页嵌了整个歌词墙（480pt WKWebView 头）：离开主页时暂停内嵌
+// 播放器（停声音＋停渲染），防主页墙与详情页墙同时出声；回来时只恢复
+// 渲染，不自动续播（声音等用户再点播放）。
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
+    if (self.ghlssInlineLyricView) {
+        [self.ghlssInlineLyricView evaluateJavaScript:GHLSSRuntimeString("window.ghlssResumeView && window.ghlssResumeView()") completionHandler:nil];
     }
 }
 
-
-
-- (void)ghlssBannerTapped:(UITapGestureRecognizer *)tap {
-    (void)tap;
-    // v43.27：点横幅进歌词墙播放器。
-    GHLSSLyricWallListController *vc = [[GHLSSLyricWallListController alloc] init];
-    [self.navigationController pushViewController:vc animated:YES];
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
+    if (self.ghlssInlineLyricView) {
+        [self.ghlssInlineLyricView evaluateJavaScript:GHLSSRuntimeString("window.ghlssPausePlayer && window.ghlssPausePlayer()") completionHandler:nil];
+    }
 }
+
 
 // v43：按鈕行自己派發（見上面 GHLSSDispatchButtonTap）；其他行走框架。
 // v47：plist 名 detail 的連結行先攔下來自己推 PlistPage（見下面
@@ -668,23 +678,14 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.104");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.105");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.104。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.105。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
         }
     });
-}
-
-// v43.28：检查激活码（发 Darwin 通知给 dylib；dylib 收到就重抓名单对码，
-// 通过了就放行，不用重启用户空间；码本身存在 activationCode 键里）。
-- (void)ghlssCheckActivation:(PSSpecifier *)specifier {
-    (void)specifier;
-    notify_post("com.guhailong.splitscreen.activationRecheck");
-    GHLSSPrefsLogLine("v43.28 prefs-activation recheck posted");
-    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已发送") message:GHLSSRuntimeString("已发送检查，稍等几秒再看激活状态。")];
 }
 
 
@@ -869,45 +870,6 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
     }
 }
 
-// v63：清除已記的遊戲浮窗位置——刪掉全部 gameWinPos_ 開頭的設定鍵
-//（每款遊戲記浮窗位置的記錄），方便重設。檔案裡刪鍵再寫回，再逐鍵從
-// CFPreferences 刪一次（快取才會更新——v43 導入的教訓：直接換檔不動
-// cfprefsd 快取，開關看著像沒反應）。刪完彈提示。
-- (void)ghlssClearGameWindowPositions:(PSSpecifier *)specifier {
-    (void)specifier;
-    GHLSSPrefsLogLine("v68 prefs-config clear game window positions entry");
-    NSString *prefix = GHLSSRuntimeString("gameWinPos_");
-    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-    if (domain) { CFPreferencesAppSynchronize(domain); CFRelease(domain); }
-    NSString *path = GHLSSPrefsFilePath();
-    NSMutableDictionary *dict = [NSMutableDictionary dictionaryWithContentsOfFile:path];
-    NSMutableArray *toDelete = [NSMutableArray array];
-    if (dict) {
-        for (NSString *key in dict) {
-            if ([key hasPrefix:prefix]) [toDelete addObject:key];
-        }
-    }
-    int removed = (int)[toDelete count];
-    if (removed > 0) {
-        for (NSString *key in toDelete) [dict removeObjectForKey:key];
-        [dict writeToFile:path atomically:YES];
-        CFStringRef domain2 = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-        if (domain2) {
-            for (NSString *key in toDelete) {
-                CFPreferencesSetAppValue((__bridge CFStringRef)key, NULL, domain2);
-            }
-            CFPreferencesAppSynchronize(domain2);
-            CFRelease(domain2);
-        }
-        char buf[128];
-        snprintf(buf, sizeof(buf), "v68 prefs-config clear game window positions: removed %d keys", removed);
-        GHLSSPrefsLogLine(buf);
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已清除") message:GHLSSRuntimeString("已记的游戏浮窗位置都清掉了，下次进游戏浮窗回到预设位置。")];
-    } else {
-        GHLSSPrefsLogLine("v68 prefs-config clear game window positions: none saved");
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有已记的位置") message:GHLSSRuntimeString("还没有记过任何游戏浮窗位置，不用清。")];
-    }
-}
 
 // 導出配置（非備份配置）：live 設定現取值寫一份到導出檔，導入時讀它（v43.8）。
 - (void)ghlssExportConfig:(PSSpecifier *)specifier {
@@ -1071,7 +1033,7 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
 // v42：布局預設——點一下一次換整套設定（各預設改哪些 key，
 // Root.plist 的頁腳列出來了）。改完要重新啟動 SpringBoard 才生效
 //（浮窗尺寸／任務欄那幾項 2 秒 tick 會自己跟上）。
-// v56：遊戲布局已取消（§141-5；留遊戲模式）。ghlssApplyLayoutGame 整段刪掉。
+// v56：遊戲布局已取消（§141-5）。ghlssApplyLayoutGame 整段刪掉。
 // v53：工作／默認布局已刪（皇上 23:29：布局只要遊戲布局就好了）。
 @end
 // 開的那份清單的設定頁版，同一份 key、同一份清單，兩邊同步。
@@ -1104,49 +1066,12 @@ static UIImage *GHLSSAppIconForBundleID(NSString *bid) {
     return icon;
 }
 
-// v56：遊戲 App 清單（gameAppBundleIDs，逗號分隔 bundleID；遊戲模式自動觸發認這份清單）。
-static BOOL GHLSSGameAppContainsBid(const char *bid) {
-    if (!bid || bid[0] == '\0') return NO;
-    char *raw = GHLSSPrefsCString("gameAppBundleIDs");
-    if (!raw) return NO;
-    NSString *rawStr = [NSString stringWithCString:raw encoding:NSUTF8StringEncoding];
-    free(raw);
-    if (!rawStr || [rawStr length] == 0) return NO;
-    NSArray *parts = [rawStr componentsSeparatedByString:GHLSSRuntimeString(",")];
-    NSString *bidStr = [NSString stringWithCString:bid encoding:NSUTF8StringEncoding];
-    return [parts containsObject:bidStr];
-}
-static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
-    if (!bid || bid[0] == '\0') return;
-    NSMutableArray *ids = [NSMutableArray array];
-    char *raw = GHLSSPrefsCString("gameAppBundleIDs");
-    if (raw) {
-        NSString *rawStr = [NSString stringWithCString:raw encoding:NSUTF8StringEncoding];
-        free(raw);
-        if (rawStr && [rawStr length] > 0) {
-            NSArray *parts = [rawStr componentsSeparatedByString:GHLSSRuntimeString(",")];
-            for (NSString *p in parts) if ([p length] > 0 && ![ids containsObject:p]) [ids addObject:p];
-        }
-    }
-    NSString *bidStr = [NSString stringWithCString:bid encoding:NSUTF8StringEncoding];
-    [ids removeObject:bidStr];
-    if (on) [ids addObject:bidStr];
-    NSString *joined = [ids componentsJoinedByString:GHLSSRuntimeString(",")];
-    GHLSSWritePrefsCString("gameAppBundleIDs", [joined UTF8String]);
-}
 
 @interface GHLSSAppPickerListController : PSListController
 @end
 
 @implementation GHLSSAppPickerListController
 
-// v56：是不是遊戲 App 選擇（Root.plist「選擇遊戲 App」連結行帶
-// ghlssPickerMode=game；沒帶就是啟動器選擇）。每次現讀 specifier，
-// 不用 ivar——super viewDidLoad 會先載 specifiers，ivar 晚了就讀不到。
-- (BOOL)ghlssIsGamePicker {
-    NSString *mode = self.specifier ? self.specifier.properties[GHLSSRuntimeString("ghlssPickerMode")] : nil;
-    return (mode && [mode isEqualToString:GHLSSRuntimeString("game")]);
-}
 
 // v43：記進了哪一頁。
 - (void)viewDidLoad {
@@ -1175,12 +1100,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
             // 說明組。
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
             NSString *footerKey = GHLSSRuntimeString("footerText");
-            // v56：遊戲模式復用同一頁——頁腳改說遊戲清單，開關只管遊戲清單。
-            if ([self ghlssIsGamePicker]) {
-                [group setProperty:GHLSSRuntimeString("选哪些 App 算游戏：进这些 App 自动开游戏模式（浮窗变淡、缩边、防误触；出来自动恢复）。开关只管游戏清单，不影响启动器。") forKey:footerKey];
-            } else {
-                [group setProperty:GHLSSRuntimeString("开的 App 出现在启动器里（数量不限）。清单在后台列举、缓存起来；刚装的 App 可能要等一会儿才出现，缺 App 时点下面「重新扫描」。") forKey:footerKey];
-            }
+            [group setProperty:GHLSSRuntimeString("开的 App 出现在启动器里（数量不限）。清单在后台列举、缓存起来；刚装的 App 可能要等一会儿才出现，缺 App 时点下面「重新扫描」。") forKey:footerKey];
             [specs addObject:group];
             // v50：重新掃描（清單是後台列舉的緩存，舊了會缺 App；點一下請
             // dylib 2 秒內重建緩存，下次開這頁就看到新的）。
@@ -1194,8 +1114,6 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
                 [spec setProperty:GHLSSRuntimeString(GHLSSFixedEnabledKeys[i]) forKey:GHLSSRuntimeString("key")];
                 [spec setProperty:GHLSSRuntimeString("com.guhailong.splitscreen") forKey:GHLSSRuntimeString("defaults")];
                 [spec setProperty:@(YES) forKey:GHLSSRuntimeString("default")];
-                // v56：遊戲模式下固定行也按 bundleID 認遊戲清單（key 不走啟動器開關）。
-                if ([self ghlssIsGamePicker]) [spec setProperty:GHLSSRuntimeString(GHLSSFixedBundleIDs[i]) forKey:GHLSSRuntimeString("ghlssGameBid")];
                 UIImage *fixedIcon = GHLSSAppIconForBundleID(GHLSSRuntimeString(GHLSSFixedBundleIDs[i]));
                 if (fixedIcon) [spec setProperty:fixedIcon forKey:GHLSSRuntimeString("iconImage")];
                 [specs addObject:spec];
@@ -1256,17 +1174,6 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
 }
 
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
-    // v56：遊戲模式——開關讀遊戲清單（ghlssGameBid 固定行／sel- 自選行），不讀啟動器開關。
-    if ([self ghlssIsGamePicker]) {
-        NSString *bidStr = specifier.properties[GHLSSRuntimeString("ghlssGameBid")];
-        if (!bidStr) {
-            NSString *key = specifier.properties[GHLSSRuntimeString("key")];
-            NSString *selPrefix = GHLSSRuntimeString("sel-");
-            if (key && [key hasPrefix:selPrefix]) bidStr = [key substringFromIndex:[selPrefix length]];
-        }
-        if (!bidStr) return @(NO);
-        return @(GHLSSGameAppContainsBid([bidStr UTF8String]));
-    }
     NSString *key = specifier.properties[GHLSSRuntimeString("key")];
     if (!key) return @(NO);
     NSString *selPrefix = GHLSSRuntimeString("sel-");
@@ -1295,23 +1202,6 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
 }
 
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
-    // v56：遊戲模式——開關寫遊戲清單（沒有 10 個上限，不彈自選已滿提示）。
-    if ([self ghlssIsGamePicker]) {
-        BOOL on = [value boolValue];
-        NSString *bidStr = specifier.properties[GHLSSRuntimeString("ghlssGameBid")];
-        if (!bidStr) {
-            NSString *key = specifier.properties[GHLSSRuntimeString("key")];
-            NSString *selPrefix = GHLSSRuntimeString("sel-");
-            if (key && [key hasPrefix:selPrefix]) bidStr = [key substringFromIndex:[selPrefix length]];
-        }
-        if (!bidStr) return;
-        GHLSSSetGameAppBid([bidStr UTF8String], on);
-        char buf[320];
-        snprintf(buf, sizeof(buf), "v57 prefs-set: game app %s = %d", [bidStr UTF8String], on ? 1 : 0);
-        GHLSSPrefsLogLine(buf);
-        [self reloadSpecifiers];
-        return;
-    }
     NSString *key = specifier.properties[GHLSSRuntimeString("key")];
     if (!key) return;
     BOOL on = [value boolValue];
@@ -1737,7 +1627,7 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
 // v50：Advanced 刪了（去重）、Status 新加。
 static BOOL GHLSSPrefsIsKnownPlistName(const char *name) {
     if (!name || name[0] == '\0') return NO;
-    static const char *known[] = {"ARC", "ARCButtons", "Banner", "Floating", "FloatingIcon", "GestureCustom", "Info", "Keyboard", "Other", "Root", "Scheduler", "Shadow", "Status", "Window"};
+    static const char *known[] = {"ARC", "ARCButtons", "Activation", "Banner", "Floating", "FloatingIcon", "GestureCustom", "Info", "Keyboard", "Other", "Root", "Scheduler", "Shadow", "Status", "Window"};
     size_t n = sizeof(known) / sizeof(known[0]);
     for (size_t i = 0; i < n; i++) {
         if (strcmp(name, known[i]) == 0) return YES;
@@ -2160,7 +2050,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.104\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.105\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {
@@ -2218,6 +2108,352 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
     GHLSSPrefsLogLine("v71 prefs-status telegram copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("Telegram 群链接已复制到剪贴板，去 Telegram 贴上进群。")];
+}
+
+@end
+
+// v43.30：激活页专用行（图标＋主标题＋副标题／右值，仿电话助手激活页）。
+// PreferenceLoader 的 cellClass 键指定本类；读 specifier 的 label／
+// subtitle／iconName／valueText 四个属性排版。cellClass 万一不生效，
+// 行退回 stock PSButtonCell／PSLinkCell，只剩主标题、点按功能照常；
+// 值行要 cellClass 才显示右值（状态页仍有同一状态可看）。
+@interface GHLSSActivationRowCell : PSTableCell
+@end
+
+@implementation GHLSSActivationRowCell {
+    UIImageView *_actIconView;
+    UILabel *_actTitleLabel;
+    UILabel *_actSubtitleLabel;
+    UILabel *_actValueLabel;
+    UIImageView *_actChevronView;
+}
+
+- (id)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
+    if (self) {
+        self.accessoryType = UITableViewCellAccessoryNone;
+        _actIconView = [[UIImageView alloc] init];
+        _actIconView.contentMode = UIViewContentModeScaleAspectFit;
+        _actIconView.tintColor = [UIColor systemBlueColor];
+        [self.contentView addSubview:_actIconView];
+        _actTitleLabel = [[UILabel alloc] init];
+        _actTitleLabel.font = [UIFont systemFontOfSize:16];
+        _actTitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [self.contentView addSubview:_actTitleLabel];
+        _actSubtitleLabel = [[UILabel alloc] init];
+        _actSubtitleLabel.font = [UIFont systemFontOfSize:13];
+        _actSubtitleLabel.textColor = [UIColor grayColor];
+        _actSubtitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [self.contentView addSubview:_actSubtitleLabel];
+        _actValueLabel = [[UILabel alloc] init];
+        _actValueLabel.font = [UIFont systemFontOfSize:16];
+        _actValueLabel.textColor = [UIColor grayColor];
+        _actValueLabel.textAlignment = NSTextAlignmentRight;
+        _actValueLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [self.contentView addSubview:_actValueLabel];
+        _actChevronView = [[UIImageView alloc] init];
+        _actChevronView.contentMode = UIViewContentModeScaleAspectFit;
+        _actChevronView.tintColor = [UIColor grayColor];
+        [self.contentView addSubview:_actChevronView];
+    }
+    return self;
+}
+
+- (void)refreshCellContentsWithSpecifier:(PSSpecifier *)specifier {
+    [super refreshCellContentsWithSpecifier:specifier];
+    self.textLabel.text = nil;
+    self.textLabel.hidden = YES;
+    self.detailTextLabel.text = nil;
+    self.detailTextLabel.hidden = YES;
+    NSString *title = specifier.properties[GHLSSRuntimeString("label")];
+    _actTitleLabel.text = title;
+    NSString *subtitle = specifier.properties[GHLSSRuntimeString("subtitle")];
+    _actSubtitleLabel.text = subtitle;
+    _actSubtitleLabel.hidden = (!subtitle || [subtitle length] == 0);
+    NSString *iconName = specifier.properties[GHLSSRuntimeString("iconName")];
+    UIImage *icon = nil;
+    if (iconName && [iconName length] > 0) icon = [UIImage systemImageNamed:iconName];
+    _actIconView.image = icon;
+    _actIconView.hidden = (icon == nil);
+    NSString *value = specifier.properties[GHLSSRuntimeString("valueText")];
+    _actValueLabel.text = value;
+    _actValueLabel.hidden = (!value || [value length] == 0);
+    BOOL hasAction = (specifier.properties[GHLSSRuntimeString("action")] != nil);
+    if (hasAction) {
+        _actChevronView.image = [UIImage systemImageNamed:GHLSSRuntimeString("chevron.right")];
+        _actChevronView.hidden = NO;
+    } else {
+        _actChevronView.image = nil;
+        _actChevronView.hidden = YES;
+    }
+    [self setNeedsLayout];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat w = self.contentView.bounds.size.width;
+    CGFloat h = self.contentView.bounds.size.height;
+    CGFloat textX = _actIconView.hidden ? 15 : 53;
+    CGFloat textRight = w - 15;
+    if (!_actChevronView.hidden) textRight = w - 40;
+    if (!_actIconView.hidden) _actIconView.frame = CGRectMake(15, (h - 28) / 2, 28, 28);
+    if (!_actChevronView.hidden) _actChevronView.frame = CGRectMake(w - 25, (h - 14) / 2, 10, 14);
+    CGFloat valueW = _actValueLabel.hidden ? 0 : 160;
+    if (valueW > 0) _actValueLabel.frame = CGRectMake(textRight - valueW, 0, valueW, h);
+    CGFloat titleW = textRight - valueW - (valueW > 0 ? 8 : 0) - textX;
+    if (titleW < 0) titleW = 0;
+    if (_actSubtitleLabel.hidden) {
+        _actTitleLabel.frame = CGRectMake(textX, 0, titleW, h);
+    } else {
+        _actTitleLabel.frame = CGRectMake(textX, 7, titleW, 22);
+        _actSubtitleLabel.frame = CGRectMake(textX, 29, titleW, 18);
+    }
+}
+
+@end
+
+// v43.30：激活页（两张卡：上卡激活／赞助／管理三行，下卡状态行＋
+// 加入群组＋底部「关于 SeaDragon Split」）。旧激活组（输入行＋检查
+// 按钮）已由本页代替；状态文字走同一套 GHLSSPrefsActivationStatusText，
+// 跟状态页一致。值行在 -specifiers 里现填，viewWillAppear 重载。
+// 设备号那行不加（设备号读不出来才整条取消的，不把已删的链加回来）。
+@interface GHLSSActivationListController : GuHaiLongSplitScreenRootListController
+@end
+
+@implementation GHLSSActivationListController
+
+- (void)viewDidLoad {
+    @try {
+        [super viewDidLoad];
+    } @catch (NSException *e) {
+        const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v43.30 prefs-activation viewDidLoad EXCEPTION %s", reason);
+        GHLSSPrefsLogLine(buf);
+    }
+    GHLSSPrefsLogLine("v43.30 prefs-page: Activation");
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reloadSpecifiers];
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    char buf[160];
+    snprintf(buf, sizeof(buf), "v43.30 prefs-activation tap: section %ld row %ld", (long)indexPath.section, (long)indexPath.row);
+    GHLSSPrefsLogLine(buf);
+    if (GHLSSHandlePlistDetailTap(self, tableView, indexPath)) return;
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    (void)tableView;
+    (void)indexPath;
+    return 56;
+}
+
+- (NSArray *)specifiers {
+    if (!_specifiers) {
+        @try {
+            NSMutableArray *loaded = [self loadSpecifiersFromPlistName:GHLSSRuntimeString("Activation") target:self];
+            for (PSSpecifier *spec in loaded) {
+                NSString *vk = spec.properties[GHLSSRuntimeString("valueKey")];
+                if (![vk isKindOfClass:[NSString class]]) continue;
+                if ([vk isEqualToString:GHLSSRuntimeString("activationState")]) {
+                    [spec setProperty:GHLSSPrefsActivationStatusText() forKey:GHLSSRuntimeString("valueText")];
+                } else if ([vk isEqualToString:GHLSSRuntimeString("systemVersion")]) {
+                    NSString *ver = [[UIDevice currentDevice] systemVersion];
+                    NSString *txt = [GHLSSRuntimeString("iOS ") stringByAppendingString:(ver ? ver : GHLSSRuntimeString("?"))];
+                    [spec setProperty:txt forKey:GHLSSRuntimeString("valueText")];
+                } else if ([vk isEqualToString:GHLSSRuntimeString("pluginVersion")]) {
+                    [spec setProperty:GHLSSRuntimeString("1.0.105") forKey:GHLSSRuntimeString("valueText")];
+                }
+            }
+            _specifiers = loaded;
+        } @catch (NSException *e) {
+            const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+            char buf[512];
+            snprintf(buf, sizeof(buf), "v43.30 prefs-activation specifiers EXCEPTION %s", reason);
+            GHLSSPrefsLogLine(buf);
+            NSMutableArray *safe = [NSMutableArray array];
+            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
+            [group setProperty:GHLSSRuntimeString("激活页打不开（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
+            [safe addObject:group];
+            _specifiers = safe;
+        }
+        if (!_specifiers) _specifiers = [NSMutableArray array];
+    }
+    return _specifiers;
+}
+
+// v43：提示框改走最上层 presenter、主队列（同 ghlssShowAlertWithTitle
+// 的做法；本页的输入框／操作表不能走那个只带「好」的 helper）。
+- (void)ghlssActivationPresent:(UIAlertController *)alert {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController *presenter = self;
+        while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+        if (!presenter.view.window) {
+            UIWindow *keyWindow = nil;
+            for (UIScene *s in [[UIApplication sharedApplication] connectedScenes]) {
+                if (![s isKindOfClass:[UIWindowScene class]]) continue;
+                UIWindowScene *ws = (UIWindowScene *)s;
+                if (ws.activationState != UISceneActivationStateForegroundActive) continue;
+                for (UIWindow *w in ws.windows) {
+                    if (w.isKeyWindow) { keyWindow = w; break; }
+                }
+                if (keyWindow) break;
+            }
+            if (keyWindow && keyWindow.rootViewController) {
+                presenter = keyWindow.rootViewController;
+                while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+            }
+        }
+        if (alert.popoverPresentationController) {
+            alert.popoverPresentationController.sourceView = self.view;
+            alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+        }
+        if (presenter) {
+            [presenter presentViewController:alert animated:YES completion:nil];
+        } else {
+            GHLSSPrefsLogLine("v43.30 prefs-activation present FAILED: no presenter");
+        }
+    });
+}
+
+// 发 Darwin 通知给 dylib 重抓名单对码，4 秒后重载本页（状态行自己翻成
+// 「您的设备已授权」／「未授权」，不用退出重进）。
+- (void)ghlssActivationPostRecheck {
+    notify_post("com.guhailong.splitscreen.activationRecheck");
+    GHLSSPrefsLogLine("v43.30 prefs-activation recheck posted");
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf reloadSpecifiers];
+    });
+}
+
+// 上卡第 1 行：弹输入框输激活码，确认就写 prefs＋发检查（码不记日志）。
+- (void)ghlssActivationEnterCode:(PSSpecifier *)specifier {
+    (void)specifier;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("激活正版授权") message:GHLSSRuntimeString("输入激活码来绑定当前的设备。") preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = GHLSSRuntimeString("激活码，如 SD-XXXX-XXXX-XXXX");
+        textField.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    }];
+    UIAlertAction *cancel = [UIAlertAction actionWithTitle:GHLSSRuntimeString("取消") style:UIAlertActionStyleCancel handler:nil];
+    __weak UIAlertController *weakAlert = alert;
+    UIAlertAction *ok = [UIAlertAction actionWithTitle:GHLSSRuntimeString("确认") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        (void)action;
+        UIAlertController *strongAlert = weakAlert;
+        NSString *raw = strongAlert ? strongAlert.textFields.firstObject.text : nil;
+        NSString *code = [[raw stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] uppercaseString];
+        if (!code || [code length] == 0) {
+            [self ghlssShowAlertWithTitle:GHLSSRuntimeString("请输入激活码") message:GHLSSRuntimeString("激活码是空的，先输入再确认。")];
+            return;
+        }
+        CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+        if (domain) {
+            CFStringRef cfKey = GHLSSRuntimeCFString("activationCode");
+            if (cfKey) {
+                CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)code, domain);
+                CFRelease(cfKey);
+            }
+            CFPreferencesAppSynchronize(domain);
+            CFRelease(domain);
+        }
+        [self ghlssActivationPostRecheck];
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已发送检查") message:GHLSSRuntimeString("已发送检查，稍等几秒再看「当前授权状态」，通过了会显示「您的设备已授权」。")];
+    }];
+    [alert addAction:cancel];
+    [alert addAction:ok];
+    [self ghlssActivationPresent:alert];
+}
+
+// 上卡第 2 行：没有在线购买页，去 Telegram 频道找 Lee 要码。
+- (void)ghlssActivationSponsor:(PSSpecifier *)specifier {
+    (void)specifier;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("赞助购买授权") message:GHLSSRuntimeString("没有在线购买页，去 Telegram 频道找 Lee 要激活码。") preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *cancel = [UIAlertAction actionWithTitle:GHLSSRuntimeString("取消") style:UIAlertActionStyleCancel handler:nil];
+    UIAlertAction *open = [UIAlertAction actionWithTitle:GHLSSRuntimeString("打开频道") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        (void)action;
+        [self ghlssActivationOpenTelegramChannel];
+    }];
+    [alert addAction:cancel];
+    [alert addAction:open];
+    [self ghlssActivationPresent:alert];
+}
+
+// v71 同款：设置页进程里 openURL 不可靠，先顺手试 tg:// 深链，
+// 不管成不成都复制 https 邀请链接＋弹「已复制」，保证链接一定到手。
+- (void)ghlssActivationOpenTelegramChannel {
+    NSURL *tgURL = [NSURL URLWithString:GHLSSRuntimeString("tg://join?invite=UaeIYedetWtiZGQ1")];
+    if (tgURL) {
+        [[UIApplication sharedApplication] openURL:tgURL options:[NSDictionary dictionary] completionHandler:^(BOOL success) {
+            (void)success;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                GHLSSPrefsLogLine("v43.30 prefs-activation telegram tg attempted");
+            });
+        }];
+    }
+    [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("https://t.me/+UaeIYedetWtiZGQ1");
+    GHLSSPrefsLogLine("v43.30 prefs-activation telegram copied");
+    [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("Telegram 频道链接已复制到剪贴板，去 Telegram 贴上进群找 Lee 要码。")];
+}
+
+// 上卡第 3 行：清除已保存的激活码、重新检查。
+- (void)ghlssActivationManage:(PSSpecifier *)specifier {
+    (void)specifier;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("管理配置授权") message:GHLSSRuntimeString("重置配置，授权找回等操作。") preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertAction *clear = [UIAlertAction actionWithTitle:GHLSSRuntimeString("清除已保存的激活码") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        (void)action;
+        CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+        if (domain) {
+            CFStringRef cfKey = GHLSSRuntimeCFString("activationCode");
+            if (cfKey) {
+                CFPreferencesSetAppValue(cfKey, NULL, domain);
+                CFRelease(cfKey);
+            }
+            CFPreferencesAppSynchronize(domain);
+            CFRelease(domain);
+        }
+        [self ghlssActivationPostRecheck];
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已清除") message:GHLSSRuntimeString("已保存的激活码已清除，状态回到未授权。")];
+    }];
+    UIAlertAction *recheck = [UIAlertAction actionWithTitle:GHLSSRuntimeString("重新检查激活码") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        (void)action;
+        [self ghlssActivationPostRecheck];
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已发送检查") message:GHLSSRuntimeString("已发送检查，稍等几秒再看「当前授权状态」。")];
+    }];
+    UIAlertAction *cancel = [UIAlertAction actionWithTitle:GHLSSRuntimeString("取消") style:UIAlertActionStyleCancel handler:nil];
+    [sheet addAction:clear];
+    [sheet addAction:recheck];
+    [sheet addAction:cancel];
+    [self ghlssActivationPresent:sheet];
+}
+
+// 下卡：加入官方群组——QQ 群号复制、Telegram 频道。
+- (void)ghlssActivationJoinGroup:(PSSpecifier *)specifier {
+    (void)specifier;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("加入官方群组") message:GHLSSRuntimeString("选择加入官方交流群") preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertAction *qq = [UIAlertAction actionWithTitle:GHLSSRuntimeString("QQ 群 1130823454") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        (void)action;
+        [UIPasteboard generalPasteboard].string = GHLSSRuntimeString("1130823454");
+        GHLSSPrefsLogLine("v43.30 prefs-activation QQ group copied");
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("QQ交流群 1130823454 已复制到剪贴板，去 QQ 搜索群号加入。")];
+    }];
+    UIAlertAction *tg = [UIAlertAction actionWithTitle:GHLSSRuntimeString("Telegram 频道") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        (void)action;
+        [self ghlssActivationOpenTelegramChannel];
+    }];
+    UIAlertAction *cancel = [UIAlertAction actionWithTitle:GHLSSRuntimeString("取消") style:UIAlertActionStyleCancel handler:nil];
+    [sheet addAction:qq];
+    [sheet addAction:tg];
+    [sheet addAction:cancel];
+    [self ghlssActivationPresent:sheet];
 }
 
 @end

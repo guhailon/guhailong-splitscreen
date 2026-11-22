@@ -10,35 +10,21 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.104（实验版 v104）</string>
+			<string>SeaDragon Split v1.0.105（实验版 v105）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>输入激活码才能用分屏（找 Lee 要码）。输对后点下面「检查激活码」，通过了感应带和哆啦A梦钮就出来了；码不对或没输就锁住，只藏功能，不会闪退、不会进安全模式。</string>
 			<key>label</key>
 			<string>激活</string>
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSEditTextCell</string>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>activationCode</string>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>GHLSSActivationListController</string>
 			<key>label</key>
-			<string>激活码</string>
-			<key>noAutoCorrect</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssCheckActivation</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>检查激活码</string>
+			<string>激活授权</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -115,122 +101,6 @@
 			<string>Other</string>
 			<key>label</key>
 			<string>其他功能</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>游戏模式</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>gameModeEnabled</string>
-			<key>label</key>
-			<string>游戏模式</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>游戏模式开著时，进选好的游戏 App 自动开：浮窗变淡到 0.5、缩到边上成小窗、不吃触摸（只剩哆啦A梦钮可点）；出游戏自动恢复原样。哆啦A梦钮点一下叫回浮窗。横屏自动用横屏尺寸。亮度音量按每款游戏记住（音量是探针，真机未证实）；勿扰联动是探针。</string>
-			<key>label</key>
-			<string>游戏模式自动触发</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>detail</key>
-			<string>GHLSSAppPickerListController</string>
-			<key>ghlssPickerMode</key>
-			<string>game</string>
-			<key>label</key>
-			<string>选择游戏 App</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>gameRememberBrightnessVolume</string>
-			<key>label</key>
-			<string>进游戏记住亮度音量</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>gameClearBackground</string>
-			<key>label</key>
-			<string>进游戏自动清后台</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>gameDoubleTapSwitchWeChat</string>
-			<key>label</key>
-			<string>双击哆啦A梦切游戏／微信</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>gameMinimalAnimations</string>
-			<key>label</key>
-			<string>游戏时浮窗动画减到最少</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>gameDNDProbe</string>
-			<key>label</key>
-			<string>进游戏开勿扰（探针）</string>
-		</dict>
-		<dict>
-			<key>action</key>
-			<string>ghlssClearGameWindowPositions</string>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>清除已记的游戏浮窗位置</string>
 		</dict>
 		<dict>
 			<key>cell</key>
