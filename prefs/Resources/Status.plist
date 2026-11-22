@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>SeaDragon Split v1.0.99（实验版 v99）</string>
+			<string>SeaDragon Split v1.0.100（实验版 v100）</string>
 			<key>label</key>
 			<string>版本</string>
 		</dict>
@@ -33,6 +33,16 @@
 			<string>statusKbHelperMarkers</string>
 			<key>label</key>
 			<string>键盘助手载入标记</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>（读取中）</string>
+			<key>key</key>
+			<string>statusLicenseState</string>
+			<key>label</key>
+			<string>授权状态</string>
 		</dict>
 		<dict>
 			<key>cell</key>
