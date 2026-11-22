@@ -83,6 +83,82 @@
 			<string>启动器触控音效</string>
 		</dict>
 		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>dialEnabled</string>
+			<key>label</key>
+			<string>扇形转盘</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>dialHapticEnabled</string>
+			<key>label</key>
+			<string>转盘震动反馈</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>medium</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>dialHapticStrength</string>
+			<key>label</key>
+			<string>转盘震动强度</string>
+			<key>validTitles</key>
+			<array>
+				<string>重</string>
+				<string>中</string>
+				<string>轻</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>heavy</string>
+				<string>medium</string>
+				<string>light</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>dialSoundEnabled</string>
+			<key>label</key>
+			<string>转盘音效（水滴声）</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>扇形转盘只在圆环样式（默认）下生效：手指拨动，图标沿弧线转着切页；每转过一格给一次震动＋水滴音。转盘震动／音效跟上面的启动器震动／触控音效分开，只管转盘。水滴声用的是系统 1104 音效，音色到底像不像水滴，真机上听了才知道。</string>
+			<key>label</key>
+			<string>扇形转盘</string>
+		</dict>
+		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>

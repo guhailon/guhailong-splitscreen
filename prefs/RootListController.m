@@ -605,9 +605,9 @@ static void GHLSSAddLyricWallCSSInjection(WKWebViewConfiguration *config) {
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.106");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.107");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.106。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.107。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1161,6 +1161,139 @@ static UIImage *GHLSSAppIconForBundleID(NSString *bid) {
 
 @end
 
+// v43.32（1.0.107，禁用比例調節）：每 App 一行開關，開了那個 App
+// 就不按「分屏比例」開、peek 拖調尺寸也不動（鍵 ratioDisabled-<bid>）。
+// 照 GHLSSAppPickerListController 的做法：固定 5 個＋快取的已安裝 App。
+// 計算器不在名單裡（代碼裡本來就不參與比例，列出來也沒用）。
+@interface GHLSSRatioDisabledListController : PSListController
+@end
+
+@implementation GHLSSRatioDisabledListController
+
+- (void)viewDidLoad {
+    @try {
+        [super viewDidLoad];
+    } @catch (NSException *e) {
+        const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+        char buf[256];
+        snprintf(buf, sizeof(buf), "v57 prefs-ratiodisabled viewDidLoad EXCEPTION %s", reason);
+        GHLSSPrefsLogLine(buf);
+    }
+    GHLSSPrefsLogLine("v57 prefs-page: RatioDisabled");
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+}
+
+- (NSArray *)specifiers {
+    if (!_specifiers) {
+        @try {
+            NSMutableArray *specs = [NSMutableArray array];
+            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
+            NSString *footerKey = GHLSSRuntimeString("footerText");
+            [group setProperty:GHLSSRuntimeString("开的 App 不按「分屏比例」开窗，peek 拖调尺寸也不动（改比例可能造成黑边、键盘问题时，把那个 App 加进来）。计算器本来就不参与比例，不在名单里。") forKey:footerKey];
+            [specs addObject:group];
+            // 固定 5 個（跳過計算器）。
+            for (int i = 0; i < 5; i++) {
+                if (strcmp(GHLSSFixedBundleIDs[i], "com.apple.calculator") == 0) continue;
+                NSString *name = GHLSSRuntimeString(GHLSSFixedNames[i]);
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:name target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
+                char keyBuf[192];
+                snprintf(keyBuf, sizeof(keyBuf), "ratioDisabled-%s", GHLSSFixedBundleIDs[i]);
+                [spec setProperty:GHLSSRuntimeString(keyBuf) forKey:GHLSSRuntimeString("key")];
+                [spec setProperty:GHLSSRuntimeString("com.guhailong.splitscreen") forKey:GHLSSRuntimeString("defaults")];
+                [spec setProperty:@(NO) forKey:GHLSSRuntimeString("default")];
+                UIImage *fixedIcon = GHLSSAppIconForBundleID(GHLSSRuntimeString(GHLSSFixedBundleIDs[i]));
+                if (fixedIcon) [spec setProperty:fixedIcon forKey:GHLSSRuntimeString("iconImage")];
+                [specs addObject:spec];
+            }
+            // 緩存的已安裝 App（跳過固定 5 個，按名字排過了）。
+            NSArray *cached = [NSArray arrayWithContentsOfFile:GHLSSAppCacheFilePath()];
+            BOOL anyCached = NO;
+            if (cached) {
+                for (id item in cached) {
+                    if (![item isKindOfClass:[NSDictionary class]]) continue;
+                    NSString *bidStr = item[GHLSSRuntimeString("bundleID")];
+                    NSString *nameStr = item[GHLSSRuntimeString("name")];
+                    if (!bidStr || [bidStr length] == 0) continue;
+                    const char *bid = [bidStr UTF8String];
+                    if (GHLSSFixedIndexForBundleID(bid) >= 0) continue;
+                    if (strcmp(bid, "com.apple.calculator") == 0) continue;
+                    anyCached = YES;
+                    NSString *label = (nameStr && [nameStr length] > 0) ? nameStr : bidStr;
+                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:label target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
+                    NSString *rdKey = [GHLSSRuntimeString("ratioDisabled-") stringByAppendingString:bidStr];
+                    [spec setProperty:rdKey forKey:GHLSSRuntimeString("key")];
+                    [spec setProperty:GHLSSRuntimeString("com.guhailong.splitscreen") forKey:GHLSSRuntimeString("defaults")];
+                    [spec setProperty:@(NO) forKey:GHLSSRuntimeString("default")];
+                    UIImage *cachedIcon = GHLSSAppIconForBundleID(bidStr);
+                    if (cachedIcon) [spec setProperty:cachedIcon forKey:GHLSSRuntimeString("iconImage")];
+                    [specs addObject:spec];
+                }
+            }
+            if (!anyCached) {
+                PSSpecifier *emptyGroup = [PSSpecifier emptyGroupSpecifier];
+                [emptyGroup setProperty:GHLSSRuntimeString("还没有已安装 App 清单（后台列举中，稍后再开这个页）。") forKey:GHLSSRuntimeString("footerText")];
+                [specs addObject:emptyGroup];
+            }
+            _specifiers = specs;
+        } @catch (NSException *e) {
+            const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
+            char buf[512];
+            snprintf(buf, sizeof(buf), "v57 prefs-ratiodisabled specifiers EXCEPTION %s", reason);
+            GHLSSPrefsLogLine(buf);
+            NSMutableArray *safe = [NSMutableArray array];
+            PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
+            [group setProperty:GHLSSRuntimeString("选择器页组装出错（已记进日志），先回上一页再试。") forKey:GHLSSRuntimeString("footerText")];
+            [safe addObject:group];
+            _specifiers = safe;
+        }
+        if (!_specifiers) _specifiers = [NSMutableArray array];
+    }
+    return _specifiers;
+}
+
+- (id)readPreferenceValue:(PSSpecifier *)specifier {
+    NSString *key = specifier.properties[GHLSSRuntimeString("key")];
+    if (!key) return @(NO);
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    CFPropertyListRef v = NULL;
+    if (domain) {
+        CFStringRef cfKey = (__bridge CFStringRef)key;
+        v = CFPreferencesCopyAppValue(cfKey, domain);
+        CFRelease(domain);
+    }
+    if (v) {
+        id value = (__bridge_transfer id)v;
+        return value;
+    }
+    NSString *defaultName = GHLSSRuntimeString("default");
+    id def = specifier.properties[defaultName];
+    if (def) return def;
+    return @(NO);
+}
+
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSString *key = specifier.properties[GHLSSRuntimeString("key")];
+    if (!key) return;
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) {
+        CFStringRef cfKey = (__bridge CFStringRef)key;
+        CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, domain);
+        CFPreferencesAppSynchronize(domain);
+        CFRelease(domain);
+    }
+    char buf[256];
+    const char *keyC = [key UTF8String];
+    const char *valC = [[value description] UTF8String];
+    snprintf(buf, sizeof(buf), "v57 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
+    GHLSSPrefsLogLine(buf);
+}
+
+@end
+
 
 // v60：标题栏整个拿掉，「三屏工具栏排序」页跟着删（没有按钮可排了）。
 // GHLSSToolbarSortListController、GHLSSToolbarSortIDs／Names 全删；
@@ -1549,12 +1682,13 @@ static UIImage *GHLSSAppIconForBundleID(NSString *bid) {
 @interface GHLSSLinkListController : GuHaiLongSplitScreenRootListController
 @end
 
-// v43：子頁要跳的 plist 白名單（14 份真實檔案；不在裡面的
+// v43：子頁要跳的 plist 白名單（15 份真實檔案；不在裡面的
 // 名字一律不載，免得 loadSpecifiersFromPlistName 拿到壞名字）。
 // v50：Advanced 刪了（去重）、Status 新加。
+// v43.32：SplitDetail 新加（1.0.107 分屏細節頁）。
 static BOOL GHLSSPrefsIsKnownPlistName(const char *name) {
     if (!name || name[0] == '\0') return NO;
-    static const char *known[] = {"ARC", "ARCButtons", "Activation", "Banner", "Floating", "FloatingIcon", "GestureCustom", "Info", "Keyboard", "Other", "Root", "Scheduler", "Shadow", "Status", "Window"};
+    static const char *known[] = {"ARC", "ARCButtons", "Activation", "Banner", "Floating", "FloatingIcon", "GestureCustom", "Info", "Keyboard", "Other", "Root", "Scheduler", "Shadow", "SplitDetail", "Status", "Window"};
     size_t n = sizeof(known) / sizeof(known[0]);
     for (size_t i = 0; i < n; i++) {
         if (strcmp(name, known[i]) == 0) return YES;
@@ -1977,7 +2111,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.106\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.107\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {
@@ -2195,7 +2329,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
                     NSString *txt = [GHLSSRuntimeString("iOS ") stringByAppendingString:(ver ? ver : GHLSSRuntimeString("?"))];
                     [spec setProperty:txt forKey:GHLSSRuntimeString("valueText")];
                 } else if ([vk isEqualToString:GHLSSRuntimeString("pluginVersion")]) {
-                    [spec setProperty:GHLSSRuntimeString("1.0.106") forKey:GHLSSRuntimeString("valueText")];
+                    [spec setProperty:GHLSSRuntimeString("1.0.107") forKey:GHLSSRuntimeString("valueText")];
                 }
             }
             _specifiers = loaded;

@@ -1278,6 +1278,8 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // v43.2：圓環中央大設定齒輪。
 - (UIButton *)arcRadialGearButtonAtCenter:(CGPoint)center size:(CGFloat)size;
 - (void)handleARCRadialGearButton:(UIButton *)sender;
+// v43.32（1.0.107，扇形轉盤）：轉盤拖動手勢（見 handleDialPan:）。
+- (void)handleDialPan:(UIPanGestureRecognizer *)recognizer;
 - (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)showNotificationBannerWithText:(const char *)text;
 // v72：showNotificationBannerForName 整个拿掉（皇上：浮窗已打开提示取消）——
@@ -1332,6 +1334,43 @@ static int GHLSSAppPickerCount = 0;
 static UIScreenEdgePanGestureRecognizer *GHLSSLauncherEdgePan = nil; // v40：感应带上的右/左边缘滑动手势（跟小窗位置设定走，见 GHLSSUpdateStripPosition）。
 static GHLSSLauncher *GHLSSLauncherShared = nil;
 static BOOL GHLSSLauncherVisible = NO;
+// v43.32（1.0.107，扇形轉盤）：radial 樣式轉盤的狀態——每顆圖標的
+// 半徑／基準角（弧度，螢幕座標系）／中心點＋當前轉角。重建啟動器
+// 時清空、轉角歸零；slideBottom 扇形不轉，不記。
+static NSMutableArray *GHLSSDialButtons = nil;
+static NSMutableArray *GHLSSDialRadii = nil;
+static NSMutableArray *GHLSSDialAngles = nil;
+static CGPoint GHLSSDialCenter = {0, 0};
+static double GHLSSDialRotation = 0;
+static double GHLSSDialLastTouchAngle = 0;
+static double GHLSSDialLastTickRotation = 0;
+static int GHLSSDialTotal = 0;
+// 轉盤手勢裝在哪個 contentView 上（弱引用——窗每次打開都重建，
+// 視圖釋放後自動歸 nil，不留懸空指標）。
+static __weak UIView *GHLSSDialPanView = nil;
+// v43.32（1.0.107，反轉長按動作）：圖標長按反向開啟時用一次就清
+//（handleAppButton 裡翻轉 openMode；浮窗↔全屏，橫屏照舊強制浮窗）。
+static BOOL GHLSSInvertOpenModeOnce = NO;
+// v43.32（1.0.107，長按鬆手觸發）：圖標長按的武裝狀態（按住到時間
+// 只武裝，手指放開才執行；取消／失敗就解除武裝）。
+static BOOL GHLSSIconLongPressArmed = NO;
+static NSInteger GHLSSIconLongPressArmedIdx = -1;
+// v43.32（1.0.107，長按鬆手觸發）：哆啦A夢長按的武裝狀態（同上）。
+static BOOL GHLSSDoraemonLongPressArmed = NO;
+// 轉盤按當前轉角重排圖標（基準角＋轉角，繞中心轉）。
+static void GHLSSDialApplyRotation(void) {
+if (!GHLSSDialButtons || !GHLSSDialRadii || !GHLSSDialAngles) return;
+NSUInteger n = [GHLSSDialButtons count];
+for (NSUInteger i = 0; i < n; i++) {
+UIButton *btn = (UIButton *)[GHLSSDialButtons objectAtIndex:i];
+NSNumber *rNum = (NSNumber *)[GHLSSDialRadii objectAtIndex:i];
+NSNumber *aNum = (NSNumber *)[GHLSSDialAngles objectAtIndex:i];
+if (!btn || !rNum || !aNum) continue;
+double r = [rNum doubleValue];
+double a = [aNum doubleValue] + GHLSSDialRotation;
+btn.center = CGPointMake(GHLSSDialCenter.x + r * cos(a), GHLSSDialCenter.y + r * sin(a));
+}
+}
 // 上一次边缘滑动的时间（CFAbsoluteTime），用来做"滑两次才开"。
 static double GHLSSLastSwipeTime = 0;
 static CGFloat GHLSSLastSwipeStartY = -1; // v43.3：这次边缘滑动起手的 Y（屏幕坐标，触发区判定用；没起手过是 -1）。
@@ -1468,6 +1507,8 @@ static BOOL GHLSSScreenLocked = NO; // v64：鎖屏旗標（看門狗用：鎖�
 // v54：任務欄快照已拿掉（v43.21 起芯片只顯示 App 圖標，不抓快照）。
 static BOOL GHLSSKeyboardShifted = NO;
 static CGRect GHLSSKeyboardSavedFrame = {{0, 0}, {0, 0}};
+static BOOL GHLSSKeyboardAvoidHidden = NO; // v43.32（1.0.107，浮窗規避）：非寄宿 App 彈鍵盤時暫收的浮窗，等鍵盤收了還原。
+static char GHLSSKeyboardAvoidBid[128] = {0}; // v43.32：觸發規避的那個 App 的 bid（hide 時只認它）。
 static BOOL GHLSSKeyboardEnlarged = NO; // v43.5：橫屏放大中（鍵盤彈出時放大、收起恢復原尺寸）。
 static CGRect GHLSSKeyboardEnlargedSavedFrame = {{0, 0}, {0, 0}}; // v43.5：放大前原尺寸。
 static NSTimeInterval GHLSSKeyboardHideLastTime = 0; // v43.22：上次 hide 的時間（1 秒內同一 bundle 第二次 hide 忽略）。
@@ -1602,6 +1643,7 @@ GHLSSActiveAppIndex = -1;
 // v42.3 前向声明：貼邊 peek 收成（自動縮窗時調，定義在後面，跟收掉同一區）。
 static void GHLSSHideDockPeekForIndex(int idx);
 static void GHLSSShowDockPeekForIndex(int idx);
+static void GHLSSFullSizeForIndex(int idx, CGFloat *outW, CGFloat *outH);
 
 static void GHLSSDestroyCachedEntryAtIndex(int idx) {
 if (idx < 0 || idx >= GHLSSAppCount) return;
@@ -2498,6 +2540,217 @@ isLeft = GHLSSIsWindowPositionLeft();
 }
 return isLeft;
 }
+// v43.32（1.0.107，照 TrollOpen 分屏設置頁）：分屏細節新鍵。
+// 方式 splitMode：字串 "fv"/"default"，預設 "fv"（升級不改行為——
+// 現在的做法就是 FV：嚴格單主窗）。"default"＝跳過自動收 peek，
+// 多窗並存到 windowCap 為止（底層多窗能力本來就在，只是被自動
+// 收 peek 蓋住了；見 GHLSSBringWindowToFront 的門控）。
+static BOOL GHLSSReadSplitModeIsFV(void) {
+char *mode = GHLSSReadPrefsCString("splitMode");
+BOOL isFV = YES;
+if (mode) {
+isFV = (strcmp(mode, "default") != 0);
+free(mode);
+}
+return isFV;
+}
+// 扇形轉盤開關（radial 樣式才用；預設開）。
+static BOOL GHLSSReadCarouselEnabled(void) {
+return GHLSSReadPrefsBool("dialEnabled", YES);
+}
+// 轉盤專用震動／音效（跟 1.0.99 的 arcHaptics／arcTouchSound 分開，
+// 只管轉盤轉動與選中；水滴聲沿用現有 1104 音效 ID）。
+static BOOL GHLSSReadDialHapticEnabled(void) {
+return GHLSSReadPrefsBool("dialHapticEnabled", YES);
+}
+// 轉盤震動強度：字串 "heavy"/"medium"/"light"，預設 "medium"；
+// 回 2 重／1 中／0 輕（UIImpactFeedbackStyle 對應值）。
+static int GHLSSReadDialHapticStyle(void) {
+char *s = GHLSSReadPrefsCString("dialHapticStrength");
+int style = 1;
+if (s) {
+if (strcmp(s, "heavy") == 0) style = 2;
+else if (strcmp(s, "light") == 0) style = 0;
+free(s);
+}
+return style;
+}
+static BOOL GHLSSReadDialSoundEnabled(void) {
+return GHLSSReadPrefsBool("dialSoundEnabled", YES);
+}
+// 反轉長按動作（預設關）：圖標長按不再釘／取消釘，改成反向開啟
+//（浮窗↔全屏，見 GHLSSInvertOpenModeOnce）。
+static BOOL GHLSSReadReverseLongPress(void) {
+return GHLSSReadPrefsBool("reverseLongPress", NO);
+}
+// 長按鬆手觸發（預設開）：長按動作在手指放開時才執行，而不是按住
+// 到時間就執行（哆啦A夢長按關全部＋圖標長按都走這個）。
+static BOOL GHLSSReadLongPressReleaseTrigger(void) {
+return GHLSSReadPrefsBool("longPressReleaseTrigger", YES);
+}
+// 小窗頂部留白（0–100，預設 30）：peek 排布 startY 的下限；
+// 預設 30 時不起作用（topInset ≥44 已兜底）。
+static CGFloat GHLSSReadMiniWindowTopMargin(void) {
+double v = GHLSSReadPrefsDouble("miniWindowTopMargin", 30.0);
+if (v < 0) v = 0;
+if (v > 100) v = 100;
+return (CGFloat)v;
+}
+// 分屏比例：字串 "original"/"1:1"/"4:3"/"16:9"，預設 "original"；
+// 回 0 原始／1 1:1／2 4:3／3 16:9（寬不變、改高；計算機不參與）。
+static int GHLSSReadSplitRatio(void) {
+char *s = GHLSSReadPrefsCString("splitRatio");
+int ratio = 0;
+if (s) {
+if (strcmp(s, "1:1") == 0) ratio = 1;
+else if (strcmp(s, "4:3") == 0) ratio = 2;
+else if (strcmp(s, "16:9") == 0) ratio = 3;
+free(s);
+}
+return ratio;
+}
+// 左下角調節比例（預設開）：peek 小窗左下角也長一個調尺寸手柄。
+static BOOL GHLSSReadBottomLeftAdjustRatio(void) {
+return GHLSSReadPrefsBool("bottomLeftAdjustRatio", YES);
+}
+// 固定屏幕寬度（預設開）：peek 拖調尺寸時寬不變、只改高。
+static BOOL GHLSSReadFixedScreenWidth(void) {
+return GHLSSReadPrefsBool("fixedScreenWidth", YES);
+}
+// 背景點擊（鍵盤彈起時點浮窗外）：字串 "closeKeyboard"/"closeWindow"，
+// 預設 "closeKeyboard"；回 0 關鍵盤／1 關浮窗。
+static int GHLSSReadKeyboardBackgroundTap(void) {
+char *s = GHLSSReadPrefsCString("keyboardBackgroundTap");
+int action = 0;
+if (s) {
+if (strcmp(s, "closeWindow") == 0) action = 1;
+free(s);
+}
+return action;
+}
+// 浮窗規避（預設關）：非寄宿 App 彈鍵盤時，把浮窗暫時收起來，
+// 鍵盤收了再還原（見鍵盤處理裡的 GHLSSKeyboardAvoidHidden）。
+static BOOL GHLSSReadFloatingWindowAvoid(void) {
+return GHLSSReadPrefsBool("floatingWindowAvoid", NO);
+}
+// 四角圓角（0–100，預設 60）：容器／內容區的圓角，跟窗框圓角
+// cornerRadius（預設 30）分開。預設 60 來自 TrollOpen，升級後
+// 內容四角會比現在更圓——是看得見的變化，見 TASK_1.0.107。
+static CGFloat GHLSSReadFourCornerRadius(void) {
+double v = GHLSSReadPrefsDouble("fourCornerRadius", 60.0);
+if (v < 0) v = 0;
+if (v > 100) v = 100;
+return (CGFloat)v;
+}
+// 顯示手勢區域（預設關）：開了頂條帶淡淡底色，看得見拖動區。
+static BOOL GHLSSReadShowGestureArea(void) {
+return GHLSSReadPrefsBool("showGestureArea", NO);
+}
+// 光圈外框（預設關）：開了窗框多一圈細邊（寬＝windowAperture/10 pt）。
+static BOOL GHLSSReadHaloOuterFrame(void) {
+return GHLSSReadPrefsBool("haloOuterFrame", NO);
+}
+// 邊緣圖標（預設開）：關了頂條的 App 名＋小圓點、調尺寸手柄的
+// 括號都藏起來（手勢照常能用）。
+static BOOL GHLSSReadEdgeIcons(void) {
+return GHLSSReadPrefsBool("edgeIcons", YES);
+}
+// 窗口光圈（0–60，預設 30）：外框細圈的寬，單位 0.1pt（30≈3pt）。
+static CGFloat GHLSSReadWindowAperture(void) {
+double v = GHLSSReadPrefsDouble("windowAperture", 30.0);
+if (v < 0) v = 0;
+if (v > 60) v = 60;
+return (CGFloat)v;
+}
+// 小窗縮放（0.10–0.50，預設 0.32）：沒存過尺寸的 peek 預設大小
+// ＝整窗 × 這個值；0.32 還原現在的 112×242（350×0.32≈112）。
+// TrollOpen 的 0.20 在我們這裡會變成 70×151，太小不好點，所以
+// 預設不用 0.20，滑桿照樣能拉到 0.10。
+static double GHLSSReadMiniWindowScale(void) {
+double v = GHLSSReadPrefsDouble("miniWindowScale", 0.32);
+if (v < 0.10) v = 0.10;
+if (v > 0.50) v = 0.50;
+return v;
+}
+// 手勢區域大小（0.5–5.0，預設 2.00）：頂條拖動區高度＝12×這個值，
+// 預設 24pt，跟現在一樣。
+static CGFloat GHLSSReadGestureStripHeight(void) {
+double v = GHLSSReadPrefsDouble("gestureAreaSize", 2.0);
+if (v < 0.5) v = 0.5;
+if (v > 5.0) v = 5.0;
+return (CGFloat)(12.0 * v);
+}
+// 某個 App 是否在「禁用比例調節」名單裡（鍵 ratioDisabled-<bid>）。
+static BOOL GHLSSIsRatioDisabledForBundleID(const char *bid) {
+if (!bid || !bid[0]) return NO;
+char key[192];
+snprintf(key, sizeof(key), "ratioDisabled-%s", bid);
+return GHLSSReadPrefsBool(key, NO);
+}
+// v43.32 探針行（設定頁只讀寫、不接行為——見 TASK_1.0.107 原因）：
+// 跳轉分屏／通知分屏／APP切換器／桌面圖標滑動分屏。啟動時記一次值
+//（GHLSSDeferredSetupRun），存錯了能在日誌裡看見。
+static BOOL GHLSSReadJumpSplitEnabled(void) {
+return GHLSSReadPrefsBool("jumpSplitEnabled", NO);
+}
+static BOOL GHLSSReadSpotlightSplitEnabled(void) {
+return GHLSSReadPrefsBool("spotlightSplitEnabled", NO);
+}
+static BOOL GHLSSReadSpringboardSplitEnabled(void) {
+return GHLSSReadPrefsBool("springboardSplitEnabled", NO);
+}
+static BOOL GHLSSReadCallbackCloseEnabled(void) {
+return GHLSSReadPrefsBool("callbackCloseEnabled", NO);
+}
+static BOOL GHLSSReadBannerTapSplit(void) {
+return GHLSSReadPrefsBool("bannerTapSplit", NO);
+}
+static BOOL GHLSSReadBannerLongPressSplit(void) {
+return GHLSSReadPrefsBool("bannerLongPressSplit", NO);
+}
+static BOOL GHLSSReadNotificationCenterSplit(void) {
+return GHLSSReadPrefsBool("notificationCenterSplit", NO);
+}
+static BOOL GHLSSReadAppSwitcherEnabled(void) {
+return GHLSSReadPrefsBool("appSwitcherEnabled", NO);
+}
+static BOOL GHLSSReadSwipeCardSplit(void) {
+return GHLSSReadPrefsBool("swipeCardSplit", NO);
+}
+static int GHLSSReadIconSwipeSplit(void) {
+char *s = GHLSSReadPrefsCString("iconSwipeSplit");
+int v = 0;
+if (s) {
+if (strcmp(s, "up") == 0) v = 1;
+else if (strcmp(s, "down") == 0) v = 2;
+free(s);
+}
+return v;
+}
+static BOOL GHLSSReadLongPressSplitButton(void) {
+return GHLSSReadPrefsBool("longPressSplitButton", YES);
+}
+// v43.32（1.0.107，扇形轉盤）：轉盤專用 tick 反饋——震動強度走
+// dialHapticStrength（重／中／輕），音效固定水滴聲（AudioServices 1104，
+// 跟現有點按音效同一 ID；水滴音色到底像不像，要皇上在真機上聽——
+// 見 TASK_1.0.107）。放 readers 後面（它讀 prefs，定義要在 readers 之後）。
+static void GHLSSDialTickFeedback(void) {
+if (GHLSSReadDialHapticEnabled()) {
+@try {
+UIImpactFeedbackStyle style = UIImpactFeedbackStyleMedium;
+int s = GHLSSReadDialHapticStyle();
+if (s == 2) style = UIImpactFeedbackStyleHeavy;
+else if (s == 0) style = UIImpactFeedbackStyleLight;
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
+if (GHLSSReadDialSoundEnabled()) {
+AudioServicesPlaySystemSound(1104);
+}
+}
 // v46：cameraPermissionEnabled 只存偏好（設定頁讀寫），主插件裡沒有
 // 地方用它——這裡不寫讀值 helper，免得 -Wunused-function 報錯；
 // 鍵照樣在 Other.plist 裡，設定頁照常讀寫，頁腳老實寫明它修不好相機。
@@ -2623,12 +2876,29 @@ CGFloat h = GHLSS_DOCK_PEEK_H;
 if (idx >= 0 && idx < GHLSSAppCount) {
 char key[64];
 double v = 0;
+BOOL storedW = NO;
+BOOL storedH = NO;
 GHLSSGeoKeyForIndex(idx, "PeekW", key, sizeof(key));
 v = GHLSSReadPrefsDouble(key, 0);
-if (v >= GHLSS_DOCK_PEEK_W) w = (CGFloat)v;
+if (v >= GHLSS_DOCK_PEEK_W) { w = (CGFloat)v; storedW = YES; }
 GHLSSGeoKeyForIndex(idx, "PeekH", key, sizeof(key));
 v = GHLSSReadPrefsDouble(key, 0);
-if (v >= GHLSS_DOCK_PEEK_H) h = (CGFloat)v;
+if (v >= GHLSS_DOCK_PEEK_H) { h = (CGFloat)v; storedH = YES; }
+if (!storedW && !storedH) {
+// v43.32（1.0.107，小窗縮放 miniWindowScale）：沒存過尺寸的 peek，
+// 預設大小＝整窗 × 這個值（預設 0.32，還原現在的 112×242；
+// 下限 80×160，免得縮到點不著；存過的尺寸照舊優先）。
+CGFloat fullW = GHLSS_HOSTED_CONTENT_W;
+CGFloat fullH = GHLSS_HOSTED_CONTENT_H;
+GHLSSFullSizeForIndex(idx, &fullW, &fullH);
+double scale = GHLSSReadMiniWindowScale();
+CGFloat sw = (CGFloat)(fullW * scale);
+CGFloat sh = (CGFloat)(fullH * scale);
+if (sw < 80) sw = 80;
+if (sh < 160) sh = 160;
+w = sw;
+h = sh;
+}
 }
 CGSize screenSize = [UIScreen mainScreen].bounds.size;
 if (w > screenSize.width - 4.0) w = screenSize.width - 4.0;
@@ -3333,7 +3603,17 @@ GHLSSRestoreHungWindowForIndex(fidx);
 }
 GHLSSMarkWindowFront(GHLSSAppIndexForWindow(window));
 // v42.3：一次一個大窗——其他大窗自動縮成 peek（見上面）。
+// v43.32（1.0.107，方式 splitMode）：FV 才跑這一步；默认模式跳過，
+// 多窗並存到 windowCap 為止（cap 門控下面那行兩種模式都跑；點某個
+// 窗會先把它變成活動窗，拖動／調尺寸只作用在活動窗上——
+// 見 TASK_1.0.107）。
+if (GHLSSReadSplitModeIsFV()) {
 GHLSSAutoPeekOtherWindows(window);
+} else {
+char mbuf[128];
+snprintf(mbuf, sizeof(mbuf), "v43.32 split mode default: skip auto-peek, %s", GHLSSHostedBundleID);
+GHLSSLogLine(mbuf);
+}
 // v43.3：上限——活窗数超了就把最久没动的收成小卡。
 GHLSEnforceWindowCap(window);
 GHLSSLogLine("v57 window brought to front");
@@ -3488,6 +3768,10 @@ CGFloat shrink = 1.0;
 if (totalH > availH && totalH > 0) shrink = availH / totalH;
 CGFloat startY = (screenBounds.size.height - totalH * shrink) / 2.0;
 if (startY < topInset) startY = topInset;
+// v43.32（1.0.107，小窗頂部留白 miniWindowTopMargin）：peek 排布
+// startY 的下限；預設 30 時不起作用（topInset ≥44 已兜底）。
+CGFloat topMargin = GHLSSReadMiniWindowTopMargin();
+if (startY < topMargin) startY = topMargin;
 CGFloat y = startY;
 CGRect *peekFrames = (CGRect *)calloc((size_t)(GHLSSAppCount > 0 ? GHLSSAppCount : 1), sizeof(CGRect));
 if (!peekFrames) { free(docked); return; }
@@ -3680,6 +3964,14 @@ handle.autoresizingMask = UIViewAutoresizingNone;
 handle.hidden = NO;
 [container bringSubviewToFront:handle];
 }
+// v43.32（1.0.107，左下角調節比例）：左下角手柄也提到點按層之上，
+// 開關關著就不顯示。
+UIView *blHandle = [container viewWithTag:9106];
+if (blHandle) {
+blHandle.autoresizingMask = UIViewAutoresizingNone;
+blHandle.hidden = !GHLSSReadBottomLeftAdjustRatio();
+[container bringSubviewToFront:blHandle];
+}
 GHLSSLayoutDockPeeks();
 // v55：排布後才定顯示尺寸——窗框可能被 shrink 縮過（總高超屏時），
 // 點按層／手柄／內容縮放一律按顯示尺寸（窗的實際 frame），
@@ -3691,6 +3983,11 @@ if (dispH < GHLSS_DOCK_PEEK_H) dispH = GHLSS_DOCK_PEEK_H;
 GHLSSPeekTapOverlays[idx].frame = CGRectMake(0, 0, dispW, dispH);
 if (GHLSSCacheResizeHandles[idx]) {
 GHLSSCacheResizeHandles[idx].frame = CGRectMake(dispW - 36, dispH - 36, 36, 36);
+}
+// v43.32（1.0.107，左下角調節比例）：左下角手柄貼左下角。
+UIView *blHandle2 = [container viewWithTag:9106];
+if (blHandle2) {
+blHandle2.frame = CGRectMake(0, dispH - 36, 36, 36);
 }
 // v53：收成 peek 時把 scene 推到 peek 尺寸（App 按小窗重排版，不再是左上切片）。
 GHLSSPushPeekScaleForIndex(idx, dispW, dispH);
@@ -3785,6 +4082,15 @@ handle.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresiz
 handle.frame = CGRectMake(container.bounds.size.width - 36, container.bounds.size.height - 36, 36, 36);
 // v63：尺寸固定——恢復成大窗，手柄藏回去（大窗拖角落縮放停用）。
 handle.hidden = YES;
+}
+// v43.32（1.0.107，左下角調節比例）：恢復成大窗，左下角手柄也藏回去。
+if (GHLSSCacheContainers[idx]) {
+UIView *blHandle = [GHLSSCacheContainers[idx] viewWithTag:9106];
+if (blHandle) {
+blHandle.autoresizingMask = UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin;
+blHandle.frame = CGRectMake(0, GHLSSCacheContainers[idx].bounds.size.height - 36, 36, 36);
+blHandle.hidden = YES;
+}
 }
 // v59：恢復成大窗，裁切保持開（容器＋內容區的圓角靠裁切才看得見；
 // v55 以前關掉它，四角就變直角——見 13:22 照片。peek 路本來就開著裁切）。
@@ -4603,13 +4909,31 @@ free(cands);
 // 已收起的 peek（第 7 项）。每个窗走现有的关闭路径（hide +
 // background scene，不在 session 内 destroy scene，遵守 v35 规则；
 // peek 清除）。关一个不影响别的——这里是全部关掉（用户主动长按）。
-// 只在 Began 时做一次（长按中途状态变 Changed 不重复关）。
-// 旗标不在 Ended/Cancelled 里清——触摸抬起时手势先变 Ended、按钮的
+// v43.32（1.0.107，長按鬆手觸發，預設開）：按住到時間只武裝，
+// 手指放開才關全部；開關關著時照舊按住到時間就關。旗标不在
+// Ended/Cancelled 里清——触摸抬起时手势先变 Ended、按钮的
 // 单击手势后到，先清会让 ARC 误开；旗标由 handleDoraemonButtonSingleTap
 //（点按）与 handleDoraemonButtonDrag（拖动）清。
 - (void)handleDoraemonButtonLongPress:(UILongPressGestureRecognizer *)recognizer {
+if (GHLSSReadLongPressReleaseTrigger()) {
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+GHLSSDoraemonLongPressArmed = YES;
+GHLSSDoraemonLongPressed = YES;
+return;
+}
+if (recognizer.state == UIGestureRecognizerStateEnded) {
+if (!GHLSSDoraemonLongPressArmed) return;
+GHLSSDoraemonLongPressArmed = NO;
+} else {
+if (recognizer.state == UIGestureRecognizerStateCancelled || recognizer.state == UIGestureRecognizerStateFailed) {
+GHLSSDoraemonLongPressArmed = NO;
+}
+return;
+}
+} else {
 if (recognizer.state != UIGestureRecognizerStateBegan) return;
 GHLSSDoraemonLongPressed = YES;
+}
 GHLSSLogLine("v57 close all windows");
 for (int i = 0; i < GHLSSAppCount; i++) {
 if (GHLSSCacheWindows[i]) {
@@ -4796,6 +5120,15 @@ if (idx < 0) {
 GHLSSUpdateDimOverlay();
 return;
 }
+// v43.32（1.0.107，背景點擊 keyboardBackgroundTap）：鍵盤彈起時點
+// 浮窗外——選「關閉鍵盤」時只發一個 Darwin 通知給 helper（App 行程
+// 裡收了就 endEditing 收鍵盤），浮窗本身不動；選「關閉浮窗」才走
+// 下面原來的 tapOutsideAction 邏輯。
+if ((GHLSSKeyboardShifted || GHLSSKeyboardEnlarged) && GHLSSReadKeyboardBackgroundTap() == 0) {
+notify_post("com.guhailong.splitscreen.keyboardDismiss");
+GHLSSLogLine("v43.32 tap outside with keyboard: dismiss notification posted");
+return;
+}
 GHLSSLoadCacheToActive(idx);
 char *action = GHLSSReadPrefsCString("tapOutsideAction");
 int tapMode = 1; // v70：0 關閉、1 側邊（預設）、2 懸掛
@@ -4872,6 +5205,13 @@ return;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 BOOL isLandscape = screenBounds.size.width > screenBounds.size.height;
 int openMode = GHLSSReadARCMenuOpenMode();
+// v43.32（1.0.107，反轉長按動作）：長按反向開啟——這次翻轉打開方式
+//（浮窗↔全屏），用一次就清；橫屏照舊強制浮窗（下面那行不動）。
+if (GHLSSInvertOpenModeOnce) {
+GHLSSInvertOpenModeOnce = NO;
+openMode = (openMode == 0) ? 1 : 0;
+GHLSSLogLine("v43.32 long-press reverse open mode");
+}
 if (isLandscape && openMode != 1) {
 GHLSSLogLine("v57 landscape forces floating");
 openMode = 1;
@@ -5357,6 +5697,66 @@ GHLSSHostedLaunching = NO;
 // 建 FV 风格的悬浮窗（V5_DESIGN.md §4.4 + 附录 D）：
 // 圆角 35、有阴影、离屏幕边缘有距离、44pt 标题栏（可拖动）、
 // 红关闭钮、黄最小化钮、右下角缩放手柄。内容区嵌 presenter 的 view。
+// v43.32（1.0.107，分屏比例）：給定寬、按 splitRatio 算高（原始＝
+// 不動，回 -1；計算器與「禁用比例調節」名單不參與；高夾在
+// [200, 屏高−120]）。建窗與恢復共用。
+static CGFloat GHLSSSplitRatioHeightForWidth(CGFloat winW, const char *bid) {
+if (!bid || strcmp(bid, "com.apple.calculator") == 0 || GHLSSIsRatioDisabledForBundleID(bid)) return -1;
+int ratio = GHLSSReadSplitRatio();
+if (ratio == 0) return -1;
+CGFloat h = winW;
+if (ratio == 2) h = winW * 3.0 / 4.0;
+else if (ratio == 3) h = winW * 9.0 / 16.0;
+if (h < 200) h = 200;
+CGFloat maxH = [UIScreen mainScreen].bounds.size.height - 120.0;
+if (h > maxH) h = maxH;
+return h;
+}
+
+// v43.32（1.0.107，外觀）：建窗／恢復成大窗時統一刷一次窗外觀——
+// 四角圓角（容器／內容區）、光圈外框（窗框細圈）、手勢區域底色、
+// 邊緣圖標（頂條名＋小圓點、手柄括號）的顯隱。
+static void GHLSSApplyHostedWindowChrome(void) {
+if (!GHLSSHostedWindow || !GHLSSHostedContainer) return;
+// 四角圓角：容器／內容區的圓角（預設 60，來自 TrollOpen；窗框
+// 圓角 cornerRadius 預設 30 不動，陰影跟窗框走）。
+CGFloat fourR = GHLSSReadFourCornerRadius();
+GHLSSHostedContainer.layer.cornerRadius = fourR;
+if (GHLSSHostedContentView) GHLSSHostedContentView.layer.cornerRadius = fourR;
+// 光圈外框：開了窗框多一圈細邊（寬＝windowAperture/10 pt，預設 3pt）。
+if (GHLSSReadHaloOuterFrame()) {
+GHLSSHostedWindow.layer.borderWidth = GHLSSReadWindowAperture() / 10.0;
+GHLSSHostedWindow.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.6].CGColor;
+} else {
+GHLSSHostedWindow.layer.borderWidth = 0;
+}
+// 顯示手勢區域：開了頂條帶淡淡底色，看得見拖動區。
+// 邊緣圖標：關了頂條的子視圖（App 名＋小圓點）都藏起來（手勢照常能用）。
+if (GHLSSHostedTopStrip) {
+GHLSSHostedTopStrip.backgroundColor = GHLSSReadShowGestureArea() ? [[UIColor whiteColor] colorWithAlphaComponent:0.12] : [UIColor clearColor];
+BOOL showIcons = GHLSSReadEdgeIcons();
+for (UIView *sub in GHLSSHostedTopStrip.subviews) {
+sub.hidden = !showIcons;
+}
+}
+// 邊緣圖標：手柄的括號也一起藏／顯示（手柄本身不藏，拖動照常能用）。
+if (GHLSSHostedResizeHandle) {
+BOOL showIcons = GHLSSReadEdgeIcons();
+for (UIView *sub in GHLSSHostedResizeHandle.subviews) {
+sub.hidden = !showIcons;
+}
+}
+if (GHLSSHostedContainer) {
+UIView *blHandle = [GHLSSHostedContainer viewWithTag:9106];
+if (blHandle) {
+BOOL showIcons = GHLSSReadEdgeIcons();
+for (UIView *sub in blHandle.subviews) {
+sub.hidden = !showIcons;
+}
+}
+}
+}
+
 - (void)buildHostedWindowForBundleID:(const char *)bundleID name:(const char *)name scene:(FBScene *)scene presenter:(_UIScenePresenter *)presenter layerHostView:(UIView *)layerHostView sceneID:(NSString *)sceneID pid:(int)pid {
 @try {
 CGRect screenBounds = [UIScreen mainScreen].bounds;
@@ -5372,6 +5772,18 @@ CGFloat winH = hostedContentSize.height;
 // 後面會蓋掉這裡）。
 GHLSSPresetSizeForBundleID(bundleID, &winW, &winH);
 hostedContentSize = CGSizeMake(winW, winH);
+// v43.32（1.0.107，分屏比例 splitRatio）：寬不變、按比例改高
+//（見 GHLSSSplitRatioHeightForWidth；建窗在預設尺寸之後、幾何
+// 恢復之前算，恢復走固定尺寸（v63）時也會帶進去；恢復那邊
+// restoreHostedWindow 另外調一次同一函數）。
+CGFloat ratioH = GHLSSSplitRatioHeightForWidth(winW, bundleID);
+if (ratioH > 0) {
+winH = ratioH;
+hostedContentSize = CGSizeMake(winW, winH);
+char rbuf[128];
+snprintf(rbuf, sizeof(rbuf), "v43.32 split ratio applied %dx%d %s", (int)winW, (int)winH, bundleID);
+GHLSSLogLine(rbuf);
+}
 {
 char pbuf[128];
 snprintf(pbuf, sizeof(pbuf), "v57 window build preset size %dx%d %s", (int)winW, (int)winH, bundleID);
@@ -5560,7 +5972,7 @@ GHLSSLogLine("v57 hosted view frame failed");
 //（在内容区之上），跟着窗一起缓存、一起藏/显示。
 // v42：滑桿條加高到 72pt，第二行放浮窗大小預設（小/中/大三顆鈕，
 // 點一下窗就變那個尺寸，走 resize 路；窄窗（<240pt）不放這行）。
-UIView *scaleBar = [[UIView alloc] initWithFrame:CGRectMake(0, GHLSS_HOSTED_STRIP_H, winW, 72)];
+UIView *scaleBar = [[UIView alloc] initWithFrame:CGRectMake(0, GHLSSReadGestureStripHeight(), winW, 72)];
 scaleBar.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
 scaleBar.hidden = YES;
 [container addSubview:scaleBar];
@@ -5624,7 +6036,7 @@ sizeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:13];
 // pill 从垂直置中改成贴条底（72x6 不变，y=17），给名字让位；名字
 // 与 pill 都跟窗宽走（名字横向拉伸、pill 左右留空、水平置中），
 // 窗调尺寸后不跑偏。
-UIView *topStrip = [[UIView alloc] initWithFrame:CGRectMake(0, 0, winW, GHLSS_HOSTED_STRIP_H)];
+UIView *topStrip = [[UIView alloc] initWithFrame:CGRectMake(0, 0, winW, GHLSSReadGestureStripHeight())];
 topStrip.backgroundColor = [UIColor clearColor];
 [container addSubview:topStrip];
 GHLSSHostedTopStrip = topStrip;
@@ -5721,6 +6133,32 @@ resizeGesture.maximumNumberOfTouches = 1;
 [resizeHandle addGestureRecognizer:resizeGesture];
 [container addSubview:resizeHandle];
 GHLSSHostedResizeHandle = resizeHandle;
+// v43.32（1.0.107，左下角調節比例）：peek 小窗左下角的調尺寸手柄
+//（鏡像 ⌞：豎條在左緣、橫條在底緣；tag 9106，用容器找，不進緩存
+// 陣列；手勢跟右手柄同一條 handleResizeDrag:，靠 tag 分左右）。
+// 大窗上藏著，收成 peek 時 GHLSSShowDockPeekForIndex 再顯示
+//（開關 bottomLeftAdjustRatio 關著就不顯示）。
+UIView *resizeHandleBL = [[UIView alloc] initWithFrame:CGRectMake(0, winH - 36, 36, 36)];
+resizeHandleBL.tag = 9106;
+resizeHandleBL.backgroundColor = [UIColor clearColor];
+resizeHandleBL.autoresizingMask = UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin;
+resizeHandleBL.hidden = YES;
+UIView *bracketBLV = [[UIView alloc] initWithFrame:CGRectMake(2, 17, 3, 17)];
+bracketBLV.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.8];
+bracketBLV.layer.cornerRadius = 1.5;
+[resizeHandleBL addSubview:bracketBLV];
+UIView *bracketBLH = [[UIView alloc] initWithFrame:CGRectMake(2, 31, 17, 3)];
+bracketBLH.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.8];
+bracketBLH.layer.cornerRadius = 1.5;
+[resizeHandleBL addSubview:bracketBLH];
+UIPanGestureRecognizer *resizeGestureBL = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResizeDrag:)];
+resizeGestureBL.minimumNumberOfTouches = 1;
+resizeGestureBL.maximumNumberOfTouches = 1;
+[resizeHandleBL addGestureRecognizer:resizeGestureBL];
+[container addSubview:resizeHandleBL];
+// v43.32（1.0.107，外觀）：建窗後按設定刷一次窗外觀（四角圓角／
+// 光圈外框／手勢區域／邊緣圖標）。
+GHLSSApplyHostedWindowChrome();
 GHLSSHostedWindow.rootViewController = vc;
 // v54：浮窗滑出方向——開窗時從設定那邊滑進來（左／右，預設右）。
 // 動畫只改窗 frame，內容不動；
@@ -5897,6 +6335,10 @@ GHLSSLogLine("v57 window failed exception");
 // 不再回来——卡没了、窗藏着，下次从启动器重开直接复用缓存里的 scene）。
 - (void)closeHostedWindow {
 if (!GHLSSHostedWindow) return;
+// v43.32（1.0.107，浮窗規避）：關窗了，規避的待還原也作廢（不然
+// 旗標一直掛著，下次別的 App 彈鍵盤再也不觸發規避）。
+GHLSSKeyboardAvoidHidden = NO;
+GHLSSKeyboardAvoidBid[0] = '\0';
 // v71：關窗就取消恢復門控（門控進行中關窗時，tick 看到旗標沒了就回，
 // 不會把已關的窗又顯示出來；關窗本身不動）。
 GHLSSRestoreGateActive = NO;
@@ -6777,6 +7219,10 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 
 - (void)restoreHostedWindow {
 if (!GHLSSHostedWindow || !GHLSSHostedMinimized) return;
+// v43.32（1.0.107，浮窗規避）：窗回來了，規避就結束了（手動點小卡
+// 恢復也一樣清——鍵盤收了再來 hide，也沒東西要還原）。
+GHLSSKeyboardAvoidHidden = NO;
+GHLSSKeyboardAvoidBid[0] = '\0';
 // v71：恢复门控——之前恢复（见下面）先把上一次没跑完的门控取消
 //（新恢复自己重新设门；旧 tick 看到旗標没了就直接回，不会乱显示）。
 // v72：同时记下这次恢复盯着的 scene（快照动画播完时门控决策拿它验证——
@@ -6825,6 +7271,10 @@ GHLSSHostedScaleRatio = geoScale;
 }
 targetW = presetW;
 targetH = presetH;
+// v43.32（1.0.107，分屏比例）：恢復也按比例來（建窗時按比例開的窗，
+// 恢復不能回到原始高；位置夾取在下面，用比例後的高算）。
+CGFloat restoreRatioH = GHLSSSplitRatioHeightForWidth(targetW, GHLSSHostedBundleID);
+if (restoreRatioH > 0) targetH = restoreRatioH;
 if (GHLSSReadCenterOnOpen() || !hasGeo) {
 targetCX = screenBounds.size.width / 2.0;
 targetCY = screenBounds.size.height / 2.0;
@@ -6848,11 +7298,13 @@ if (targetCY > maxCY) targetCY = maxCY;
 restoreTargetFrame = CGRectMake(targetCX - targetW / 2.0, targetCY - targetH / 2.0, targetW, targetH);
 restoreHasTargetFrame = YES;
 CGRect restoreTargetContentFrame = CGRectMake(0, 0, targetW, targetH);
-CGRect restoreTargetStripFrame = CGRectMake(0, 0, targetW, GHLSS_HOSTED_STRIP_H);
+CGRect restoreTargetStripFrame = CGRectMake(0, 0, targetW, GHLSSReadGestureStripHeight());
 GHLSSHostedWindow.frame = restoreTargetFrame;
 if (GHLSSHostedContainer) GHLSSHostedContainer.frame = restoreTargetContentFrame;
 if (GHLSSHostedContentView) GHLSSHostedContentView.frame = restoreTargetContentFrame;
 if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = restoreTargetStripFrame;
+// v43.32（1.0.107，外觀）：恢復成大窗後按設定刷一次窗外觀。
+GHLSSApplyHostedWindowChrome();
 // v42.3：恢復時把 scene frame 也推回滿窗尺寸（不只改 bounds + transform）。
 // 小窗拖調尺寸時松手推過一次小 frame（resizeHostedSceneToContentSize）；
 // 只推 bounds 不推 frame 的話，scene 還以為自己是小窗，恢復後大窗裡
@@ -7158,9 +7610,9 @@ if (newY + newH > screenBounds.size.height - 8.0) newY = screenBounds.size.heigh
 GHLSSHostedWindow.frame = CGRectMake(newX, newY, newW, newH);
 if (GHLSSHostedContainer) GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
 if (GHLSSHostedContentView) GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
-if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
+if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSSReadGestureStripHeight());
 if (GHLSSHostedScaleSliderBar) {
-GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSS_HOSTED_STRIP_H, newW, 72);
+GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSSReadGestureStripHeight(), newW, 72);
 for (UIView *sub in GHLSSHostedScaleSliderBar.subviews) {
 if ([sub isKindOfClass:[UIButton class]] && sub.tag >= 100 && sub.tag <= 102) {
 int sp = (int)sub.tag - 100;
@@ -7383,6 +7835,19 @@ GHLSSLogLine(buf);
 //（舊路徑沒有包名）。只對活動浮窗動作；橫屏放大不認「自動上移」開關，
 // 上移／關窗照舊認各自開關。
 - (void)ghlssHandleKeyboardShowHeight:(CGFloat)kbHeight bundleID:(const char *)bid {
+// v43.32（1.0.107，浮窗規避 floatingWindowAvoid）：非寄宿 App 彈鍵盤
+// 時，把浮窗暫時收成 peek，鍵盤收了再還原（hide 路認 GHLSSKeyboardAvoidBid）。
+// 放在 bid 不符 early return 之前——規避要的正是「別人的鍵盤」。
+if (GHLSSReadFloatingWindowAvoid() && bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0 && GHLSSHostedWindow && !GHLSSHostedMinimized && !GHLSSKeyboardAvoidHidden) {
+strncpy(GHLSSKeyboardAvoidBid, bid, sizeof(GHLSSKeyboardAvoidBid) - 1);
+GHLSSKeyboardAvoidBid[sizeof(GHLSSKeyboardAvoidBid) - 1] = '\0';
+GHLSSKeyboardAvoidHidden = YES;
+[self minimizeHostedWindow];
+char abuf[192];
+snprintf(abuf, sizeof(abuf), "v43.32 keyboard avoid: minimized for %s", bid);
+GHLSSLogLine(abuf);
+return;
+}
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 if (bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0) return;
 if (kbHeight <= 0) return;
@@ -7456,6 +7921,15 @@ GHLSSKeyboardEnlarged = NO;
 GHLSSLogLine("v43.5 window restored after keyboard hide (enlarge)");
 }
 - (void)ghlssHandleKeyboardHideBundleID:(const char *)bid {
+// v43.32（1.0.107，浮窗規避）：鍵盤收了，把暫收的浮窗還原回來。
+// 放在最小化守衛之前——被規避收起的窗正是 minimized，守衛會擋住。
+// 還原後繼續往下走：bid 是別的 App，下一行的 bid 不符檢查會直接回。
+if (GHLSSKeyboardAvoidHidden && bid && bid[0] != '\0' && GHLSSKeyboardAvoidBid[0] != '\0' && strcmp(bid, GHLSSKeyboardAvoidBid) == 0) {
+GHLSSKeyboardAvoidHidden = NO;
+GHLSSKeyboardAvoidBid[0] = '\0';
+[self restoreHostedWindow];
+GHLSSLogLine("v43.32 keyboard avoid: restored after hide");
+}
 // v43.10：最小化守衛（跟 show 路對稱）——鍵盤彈起上移後窗被收成小卡，
 // shift 旗標還在；收起時不能把滿窗框推到小卡窗上（內容還停在小卡縮放，
 // 其餘全黑，半黑）。直接清旗標走人，不要動窗框。
@@ -7732,10 +8206,10 @@ if (newH > screenBounds.size.height - 120.0) newH = screenBounds.size.height - 1
 // （y=24），都跟着窗宽走。
 GHLSSHostedWindow.frame = CGRectMake(frame.origin.x, frame.origin.y, newW, newH);
 GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
-if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
+if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSSReadGestureStripHeight());
 GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
 // v38：滑杆条跟着窗宽走（在细条下面）。
-if (GHLSSHostedScaleSliderBar) GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSS_HOSTED_STRIP_H, newW, 36);
+if (GHLSSHostedScaleSliderBar) GHLSSHostedScaleSliderBar.frame = CGRectMake(0, GHLSSReadGestureStripHeight(), newW, 36);
 if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, newW - 70, 30);
 if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
 if (recognizer.state == UIGestureRecognizerStateEnded) {
@@ -7763,6 +8237,14 @@ GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 if (!GHLSSHostedWindow || !GHLSSHostedContainer || !GHLSSHostedContentView) return;
 int idx = GHLSSActiveAppIndex;
 if (idx < 0 || idx >= GHLSSAppCount) return;
+// v43.32（1.0.107，禁用比例調節）：名單裡的 App，peek 拖調尺寸
+// 直接不動（比例不生效、手柄也不該拖）。
+if (GHLSSIsRatioDisabledForBundleID(GHLSSCacheBundleIDs[idx])) {
+char dbuf[192];
+snprintf(dbuf, sizeof(dbuf), "v43.32 peek resize disabled for %s", GHLSSCacheBundleIDs[idx]);
+GHLSSLogLine(dbuf);
+return;
+}
 // v68：跟手修法——translation 不能量在會動的容器上（同款毛病，
 // 容器原點跟著尺寸動，穩態約 2/3 速度）。改拿固定不動的邊條窗當參考
 // 座標，只換這兩行，其餘夾取／升大窗邏輯不動。
@@ -7778,8 +8260,15 @@ GHLSSLogLine(bbuf);
 }
 CGFloat fullW, fullH;
 GHLSSFullSizeForIndex(idx, &fullW, &fullH);
-CGFloat newW = frame.size.width + point.x;
+// v43.32（1.0.107，左下角調節比例）：左下角手柄（tag 9106）往左
+// 拖是放大，dx 取反；右下角照舊。
+BOOL isLeftHandle = (recognizer.view.tag == 9106);
+CGFloat newW = frame.size.width + (isLeftHandle ? -point.x : point.x);
 CGFloat newH = frame.size.height + point.y;
+// v43.32（1.0.107，固定屏幕寬度，預設開）：peek 拖調尺寸時寬不變、
+// 只改高（TrollOpen 的做法；鍵盤放大那次寬不變的教訓也在這裡——
+// 寬一變，webview 視口跟著變，頁面會橫向偏）。
+if (GHLSSReadFixedScreenWidth()) newW = frame.size.width;
 if (newW < GHLSS_DOCK_PEEK_W) newW = GHLSS_DOCK_PEEK_W;
 if (newW > fullW) newW = fullW;
 if (newH < GHLSS_DOCK_PEEK_H) newH = GHLSS_DOCK_PEEK_H;
@@ -7793,11 +8282,16 @@ if (newY + newH > screenBounds.size.height - 2.0) newY = screenBounds.size.heigh
 GHLSSHostedWindow.frame = CGRectMake(newX, newY, newW, newH);
 GHLSSHostedContainer.frame = CGRectMake(0, 0, newW, newH);
 GHLSSHostedContentView.frame = CGRectMake(0, 0, newW, newH);
-if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSS_HOSTED_STRIP_H);
+if (GHLSSHostedTopStrip) GHLSSHostedTopStrip.frame = CGRectMake(0, 0, newW, GHLSSReadGestureStripHeight());
 // 點按層跟著小窗走（不然放大後露出的地方點了會直接碰到 App 內容）。
 if (GHLSSPeekTapOverlays[idx]) GHLSSPeekTapOverlays[idx].frame = CGRectMake(0, 0, newW, newH);
 // 手柄排版是關掉的（None），手動跟到右下角。
 if (GHLSSHostedResizeHandle) GHLSSHostedResizeHandle.frame = CGRectMake(newW - 36, newH - 36, 36, 36);
+// v43.32（1.0.107，左下角調節比例）：左下角手柄手動跟到左下角。
+if (GHLSSHostedContainer) {
+UIView *blHandle = [GHLSSHostedContainer viewWithTag:9106];
+if (blHandle) blHandle.frame = CGRectMake(0, newH - 36, 36, 36);
+}
 BOOL ended = (recognizer.state == UIGestureRecognizerStateEnded);
 BOOL cancelled = (recognizer.state == UIGestureRecognizerStateCancelled);
 if (!ended && !cancelled) return;
@@ -7916,6 +8410,14 @@ GHLSSCollectLauncherFlyers(sub, flyers, panels);
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherVisible = NO;
+// v43.32（1.0.107，扇形轉盤）：轉盤狀態清空——圖標按鈕跟著舊窗走，
+// 靜態陣列不留著它們（不然每次打開都漏 25 顆按鈕）；弱引用跟著歸 nil。
+GHLSSDialButtons = nil;
+GHLSSDialRadii = nil;
+GHLSSDialAngles = nil;
+GHLSSDialTotal = 0;
+GHLSSDialRotation = 0;
+GHLSSDialPanView = nil;
 // v43.2：關閉動畫——圖標往外四散飛走（S2 關啟動器那樣），不是直接消失。
 // 四散方向是各圖標相對屏幕中心的方向（圓環／格狀都適用），140pt 外＋縮 0.6＋淡出，0.35 秒。
 // 動畫跑完才藏窗；中途重開的話 completion 只藏舊窗（指標比對＋
@@ -8099,6 +8601,15 @@ if (launcherStyle == 1) {
 } else {
 [self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
 }
+// v43.32（1.0.107，扇形轉盤）：radial 全圓版才裝轉盤手勢——手指在
+// 啟動器上撥動，圖標沿弧線轉著切頁；slideBottom 扇形、其他四種
+// 樣式不裝。contentView 每次打開都重建，弱引用守衛保證一個視圖
+// 只裝一次（重建時舊視圖已釋放，弱引用自動歸 nil）。
+if (launcherStyle == 0 && GHLSSReadCarouselEnabled() && !GHLSSIsARCSlideBottom() && GHLSSDialTotal > 0 && GHLSSDialPanView != GHLSSLauncherContentView) {
+UIPanGestureRecognizer *dialPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleDialPan:)];
+[GHLSSLauncherContentView addGestureRecognizer:dialPan];
+GHLSSDialPanView = GHLSSLauncherContentView;
+}
 GHLSSLogLine("v57 launcher icons only");
 }
 
@@ -8276,6 +8787,15 @@ center = CGPointMake(ax, screenBounds.size.height - 76.0);
 CGFloat icon = size;
 if (icon < 40.0) icon = 40.0;
 if (icon > 72.0) icon = 72.0;
+// v43.32（1.0.107，扇形轉盤）：轉盤狀態重建——每次重排都清空、
+// 轉角歸零（slideBottom 扇形不轉，循環裡不記）。
+GHLSSDialButtons = [NSMutableArray array];
+GHLSSDialRadii = [NSMutableArray array];
+GHLSSDialAngles = [NSMutableArray array];
+GHLSSDialCenter = center;
+GHLSSDialRotation = 0;
+GHLSSDialLastTickRotation = 0;
+GHLSSDialTotal = (int)total;
 // v43.8 单圈优先：半径取 Rmax（留 12pt 边距），容量＝周长／间距；
 // 装不下就往小缩（每次减 4，最小 40），缩到底还装不下就不走单圈。
 CGFloat radii[6] = {0, 0, 0, 0, 0, 0};
@@ -8436,6 +8956,12 @@ NSInteger tag = GHLSSAppIndexForBundleID(bid);
 if (tag < 0) continue;
 UIButton *btn = [self arcIconButtonForBundleID:bid name:name tag:tag action:action atCenter:p size:icon withName:NO];
 [GHLSSLauncherContentView addSubview:btn];
+// v43.32（1.0.107，扇形轉盤）：記下半徑／基準角，供轉盤拖動重排。
+if (!slideBottom) {
+[GHLSSDialButtons addObject:btn];
+[GHLSSDialRadii addObject:[NSNumber numberWithDouble:(double)radius]];
+[GHLSSDialAngles addObject:[NSNumber numberWithDouble:angle]];
+}
 CGFloat bottom = p.y + icon / 2.0;
 if (bottom > maxBottom) maxBottom = bottom;
 }
@@ -8449,6 +8975,50 @@ snprintf(sbuf, sizeof(sbuf), "v43.2 radial icons=%d size=%d rings=%d", (int)tota
 GHLSSLogLine(sbuf);
 }
 return maxBottom + 12.0;
+}
+
+// v43.32（1.0.107，扇形轉盤）：手指撥動轉盤——按觸點繞圓心的角度
+// 增量轉圖標；每轉過一格（2π/總數）給一次 tick 震動＋水滴音；
+// 放手時吸附到最近的格子（0.15 秒動畫）。齒輪鈕在圓心，不跟著轉。
+// 圓心 40pt 內不算（角度在圓心附近不穩定，手指按著齒輪不轉盤）。
+- (void)handleDialPan:(UIPanGestureRecognizer *)recognizer {
+if (!GHLSSDialButtons || [GHLSSDialButtons count] == 0 || GHLSSDialTotal <= 0) return;
+UIView *view = GHLSSLauncherContentView;
+if (!view) return;
+CGPoint p = [recognizer locationInView:view];
+double dx = (double)(p.x - GHLSSDialCenter.x);
+double dy = (double)(p.y - GHLSSDialCenter.y);
+if (dx * dx + dy * dy < 40.0 * 40.0) return;
+double ang = atan2(dy, dx);
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+GHLSSDialLastTouchAngle = ang;
+return;
+}
+if (recognizer.state == UIGestureRecognizerStateChanged) {
+double delta = ang - GHLSSDialLastTouchAngle;
+// 角度跳變（-π↔π 邊界）時 delta 會跳 ±2π，折回 [-π, π]。
+if (delta > M_PI) delta -= 2.0 * M_PI;
+if (delta < -M_PI) delta += 2.0 * M_PI;
+GHLSSDialLastTouchAngle = ang;
+GHLSSDialRotation += delta;
+GHLSSDialApplyRotation();
+double slot = 2.0 * M_PI / (double)GHLSSDialTotal;
+if (fabs(GHLSSDialRotation - GHLSSDialLastTickRotation) >= slot) {
+GHLSSDialLastTickRotation = GHLSSDialRotation;
+GHLSSDialTickFeedback();
+}
+return;
+}
+if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled) {
+// 吸附到最近的格子。
+double slot = 2.0 * M_PI / (double)GHLSSDialTotal;
+double target = round(GHLSSDialRotation / slot) * slot;
+GHLSSDialRotation = target;
+[UIView animateWithDuration:0.15 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+GHLSSDialApplyRotation();
+} completion:nil];
+GHLSSDialLastTickRotation = target;
+}
 }
 
 // v43.19：側邊欄式——邊緣滑出來（跟圓環／格狀一樣由邊緣滑動叫出，不常駐）。
@@ -8941,7 +9511,14 @@ GHLSSLogLine(buf);
 // 鬆開／取消還原。掛在共用工廠 arcIconButtonForBundleID 與 tile 大卡上。
 - (void)handleLauncherIconTouchDown:(UIButton *)sender {
 sender.transform = CGAffineTransformMakeScale(0.95, 0.95);
+// v43.32（1.0.107，扇形轉盤）：radial 轉盤上的圖標點下走轉盤專用
+// tick（震動強度＋水滴音各走各的開關）；其他四種樣式、轉盤關掉時
+// 走原來的共用點按反饋。
+if (GHLSSReadLauncherStyleRadial() && GHLSSReadCarouselEnabled()) {
+GHLSSDialTickFeedback();
+} else {
 GHLSSLauncherTapFeedback();
+}
 }
 - (void)handleLauncherIconTouchCancel:(UIButton *)sender {
 sender.transform = CGAffineTransformIdentity;
@@ -8992,19 +9569,44 @@ nameLabel.textAlignment = NSTextAlignmentCenter;
 [btn addSubview:nameLabel];
 }
 UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleARCIconLongPress:)];
-lp.minimumPressDuration = 0.5;
+lp.minimumPressDuration = GHLSSReadLongPressDuration(); // v43.32：長按時間走設定（不再寫死 0.5）
 [btn addGestureRecognizer:lp];
 return btn;
 }
 
 // v41：長按 ARC 圖標——置頂/取消置頂（置頂的固定在最上面一段，
 // 存 prefs 鍵 pinnedAppIDs；震動一下回饋；重建內容即時生效）。
+// v43.32（1.0.107）：長按鬆手觸發（預設開）——按住到時間只武裝，
+// 手指放開才執行；反轉長按動作（預設關）——長按改成反向開啟
+//（浮窗↔全屏），釘／取消釘就沒入口了（見 TASK_1.0.107）。
 - (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer {
-if (recognizer.state != UIGestureRecognizerStateBegan) return;
 UIButton *btn = (UIButton *)recognizer.view;
 if (!btn) return;
 NSInteger idx = btn.tag;
 if (idx < 0 || idx >= GHLSSAppCount) return;
+if (GHLSSReadLongPressReleaseTrigger()) {
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+GHLSSIconLongPressArmed = YES;
+GHLSSIconLongPressArmedIdx = idx;
+return;
+}
+if (recognizer.state == UIGestureRecognizerStateEnded) {
+if (!GHLSSIconLongPressArmed || GHLSSIconLongPressArmedIdx != idx) return;
+GHLSSIconLongPressArmed = NO;
+} else {
+if (recognizer.state == UIGestureRecognizerStateCancelled || recognizer.state == UIGestureRecognizerStateFailed) {
+GHLSSIconLongPressArmed = NO;
+}
+return;
+}
+} else {
+if (recognizer.state != UIGestureRecognizerStateBegan) return;
+}
+if (GHLSSReadReverseLongPress()) {
+GHLSSInvertOpenModeOnce = YES;
+[self handleAppButton:btn];
+return;
+}
 const char *bid = GHLSSAppBundleIDs[idx];
 BOOL pinned = !GHLSSIsAppPinned(bid);
 GHLSSSetAppPinned(bid, pinned);
@@ -9371,6 +9973,17 @@ static void GHLSSDeferredSetupRun(void) {
 char dbuf[64];
 snprintf(dbuf, sizeof(dbuf), "v57 deferred setup ran, enabled=%d", (int)GHLSSReadEnabled());
 GHLSSLogLine(dbuf);
+}
+// v43.32（1.0.107，分屏細節）：啟動時記一次分屏方式＋探針行開關的
+// 值（設定頁只讀寫、不接行為；存錯了能在日誌裡看見）。
+{
+char pbuf[512];
+snprintf(pbuf, sizeof(pbuf), "v43.32 split detail: mode=%s jump=%d spotlight=%d springboard=%d callback=%d bannerTap=%d bannerLP=%d nc=%d switcher=%d swipeCard=%d iconSwipe=%d lpSplitBtn=%d",
+GHLSSReadSplitModeIsFV() ? "fv" : "default",
+(int)GHLSSReadJumpSplitEnabled(), (int)GHLSSReadSpotlightSplitEnabled(), (int)GHLSSReadSpringboardSplitEnabled(), (int)GHLSSReadCallbackCloseEnabled(),
+(int)GHLSSReadBannerTapSplit(), (int)GHLSSReadBannerLongPressSplit(), (int)GHLSSReadNotificationCenterSplit(),
+(int)GHLSSReadAppSwitcherEnabled(), (int)GHLSSReadSwipeCardSplit(), GHLSSReadIconSwipeSplit(), (int)GHLSSReadLongPressSplitButton());
+GHLSSLogLine(pbuf);
 }
 // v69：啟動時自愈一次——清掉已存的小窗尺寸（拖大過的 App 也回到 112×242）。
 GHLSSResetStoredPeekSizesOnce();

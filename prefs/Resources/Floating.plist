@@ -56,6 +56,14 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>SplitDetail</string>
+			<key>label</key>
+			<string>分屏细节设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>这两行和子页里的是同一设定（浮窗窗口设置／启动器设置里也有一份），主页多放一份是怕子页快取旧了看不到。</string>

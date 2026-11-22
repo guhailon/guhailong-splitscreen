@@ -9,6 +9,9 @@
 //     frame 移到屏幕底部全寬。只動 frame，不攔按鍵、不碰 first
 //     responder、不改鍵盤內部視圖；開關每彈一次鍵盤重讀，關了下次
 //     就恢復原樣，不用 respring。
+// (3) v43.32（1.0.107，背景點擊「關閉鍵盤」）：反向通道——SpringBoard
+//     側點浮窗外發 Darwin 通知（com.guhailong.splitscreen.keyboardDismiss），
+//     這裡收了就 endEditing 收鍵盤；不碰浮窗。
 // 安全邊界：%ctor 先排 bundle——SpringBoard、抖音（兩個包名，
 // DYYY.plist Filter 原文）、設定 App（kill switch 必須永遠能關）
 // 都不進。
@@ -260,6 +263,8 @@ static UIWindow *GHLSSKBDragTarget = nil;
 - (void)handleKeyboardWillHide:(NSNotification *)note;
 - (void)handleAppDidFinishLaunching:(NSNotification *)note;
 - (void)handleKeyboardDrag:(UIPanGestureRecognizer *)recognizer;
+// v43.32（1.0.107，背景點擊「關閉鍵盤」）：Darwin 通知反向通道。
+- (void)handleKeyboardDismissNotification;
 @end
 
 @implementation GHLSSKeyboardHelper
@@ -374,6 +379,21 @@ static UIWindow *GHLSSKBDragTarget = nil;
     }
 }
 
+// v43.32（1.0.107，背景點擊「關閉鍵盤」）：SpringBoard 側點浮窗外時
+// 發 Darwin 通知，App 行程裡收了就把鍵盤收掉（所有窗 endEditing）。
+// 不碰 first responder、不改浮窗；鍵盤本來就沒彈時是空操作。
+// （notify_register_dispatch 已在主隊列調，這裡不另切隊列。）
+- (void)handleKeyboardDismissNotification {
+    for (UIScene *s in [[UIApplication sharedApplication] connectedScenes]) {
+        if (![s isKindOfClass:[UIWindowScene class]]) continue;
+        UIWindowScene *ws = (UIWindowScene *)s;
+        for (UIWindow *w in ws.windows) {
+            [w endEditing:YES];
+        }
+    }
+    GHLSSKBLogLine("v43.32 kb-helper keyboard dismissed");
+}
+
 // v43.26：第二次標記——App 啟動完成時再發一次，證明 helper 活到 App 啟動
 // 完成（不是只在 %ctor 閃一下就死）。bid 為空跳過。
 - (void)handleAppDidFinishLaunching:(NSNotification *)note {
@@ -434,6 +454,15 @@ static UIWindow *GHLSSKBDragTarget = nil;
     [nc addObserver:helper selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
     // v43.26：第二次標記——App 啟動完成時再發一次（見 handleAppDidFinishLaunching:）。
     [nc addObserver:helper selector:@selector(handleAppDidFinishLaunching:) name:UIApplicationDidFinishLaunchingNotification object:nil];
+    // v43.32（1.0.107，背景點擊「關閉鍵盤」）：SpringBoard 側點浮窗外
+    // 發 Darwin 通知，這裡收了就 endEditing 收鍵盤（反向通道，主隊列）。
+    {
+        int dismissToken = 0;
+        notify_register_dispatch("com.guhailong.splitscreen.keyboardDismiss", &dismissToken, dispatch_get_main_queue(), ^(int token) {
+            (void)token;
+            [helper handleKeyboardDismissNotification];
+        });
+    }
     // v43.26：%ctor 標記三件套（見 GHLSSKBReportLoaded）：prefs 鍵 best-effort、
     // TMPDIR 標記檔＋os_log、Darwin 通知（名字帶 bid）給 SpringBoard 寫共用
     // prefs。bid 為空整組跳過，不寫 kbHelperLoaded- 無用鍵（41.log 遺留）。
