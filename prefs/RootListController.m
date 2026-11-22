@@ -1,12 +1,12 @@
 // 顾海龙集团分屏 — 设置页（PreferenceLoader）。
-// v50：主頁順序＝版本頭／常用開關／壁紙／ARC／浮窗／其他功能／
+// v43.27：主頁順序＝版本頭／常用開關／歌词墙／ARC／浮窗／其他功能／
 // 遊戲模式／遊戲模式自動觸發／配置管理（含檢查更新）／
 // 新手模式殿後；子頁是獨立 plist（浮窗／ARC／其他＋調度／陰影／
 // 橫幅／鍵盤／搜索／桌面圖標／懸浮圖標／ARC 按鈕＋手勢自定義／
 // 狀態頁），由 PreferenceLoader 的預設控制器
 // 載入；「加入 App」是動態頁（GHLSSAppPickerListController，下面），
-// 按後台緩存的已安裝 App 清單即時建開關；日誌查看器、卡片頭像／
-// 背景圖、搜索、每頁重置也都是動態頁（下面）。
+// 按後台緩存的已安裝 App 清單即時建開關；日誌查看器、卡片頭像、搜索、
+// 每頁重置也都是動態頁（下面）。
 //
 // 注意（2026-11-12）：这个文件以前用写死字串和 CFSTR，设置一打开
 // 就闪退——和 SpringBoard 那边一样，咱们这套工具链编出来的写死
@@ -25,6 +25,7 @@
 #import <Preferences/PSTableCell.h>
 #import <UIKit/UIKit.h>
 #import <PhotosUI/PhotosUI.h>
+#import <WebKit/WebKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <objc/message.h>
 #import <notify.h>
@@ -148,11 +149,6 @@ static void GHLSSWritePrefsCString(const char *key, const char *value) {
     if (keyRef) CFRelease(keyRef);
 }
 
-// v42：卡片背景圖的固定檔名（設定目錄下，浮窗卡片和設定頁兩邊都讀得到；
-// v55：卡片頭像已取消，只剩背景圖）。
-static NSString *GHLSSCardBgPath(void) {
-    return [GHLSSPrefsDir() stringByAppendingPathComponent:GHLSSRuntimeString("GuHaiLongSplitScreen-cardbg.jpg")];
-}
 
 // 先聲明（下面定義；輪播 helper 要記日誌，先用）。
 static void GHLSSPrefsLogLine(const char *line);
@@ -162,7 +158,8 @@ static void GHLSSPrefsLicenseUDIDShowAlert(id controller, NSString *title, NSStr
 
 // v43.26：本機 UDID 改向 SpringBoard 要（Darwin 通知問答）——設定頁進程
 // （Preferences.app）沒有 com.apple.private.MobileGestalt 權限，直接讀回
-// NULL（1.0.100 的寫法）；SpringBoard 讀得到，本來就用它做授權查驗。
+// NULL（1.0.100 的寫法）；v43.27 更正：實測 SpringBoard 也讀不到
+// （46.log 5 次問答全回 unavailable），問答只是把讀不到的結果傳回來。
 // 流程：設定頁發 licenseUDIDRequest → SpringBoard 回 licenseUDIDReply
 // （userInfo：status＝ok 帶 udid／unavailable 讀不到）。UDID 只放記憶體快取，
 // 絕不寫 prefs／檔案／日誌。狀態：0 沒開始、1 等回覆、2 已拿到、3 讀不到、
@@ -274,93 +271,6 @@ static NSString *GHLSSPrefsLicenseUDIDFooterText(void) {
     return [[[head stringByAppendingString:GHLSSRuntimeString("\n授权状态：")] stringByAppendingString:status] stringByAppendingString:GHLSSRuntimeString("\n把 UDID 发给 Lee 授权，通过后点「重新检查授权」。")];
 }
 
-// v59：背景圖輪播——最多 6 張槽位檔（cardbg-0..5.jpg）；
-// GuHaiLongSplitScreen-cardbg.jpg 仍是「當前那張」（橫幅＋浮窗卡片讀它，
-// 不動讀取方）。count／index 存 prefs 字串；沒寫過就遷移：舊版單張在
-// 就拷進槽位 0 當 1 張，否則 0 張。輪播間隔 cardBgInterval 預設 3 秒。
-#define GHLSS_CARD_BG_MAX 6
-static NSString *GHLSSCardBgSlotPath(int slot) {
-    char name[64];
-    snprintf(name, sizeof(name), "GuHaiLongSplitScreen-cardbg-%d.jpg", slot);
-    return [GHLSSPrefsDir() stringByAppendingPathComponent:GHLSSRuntimeString(name)];
-}
-static int GHLSSCardBgCountValue(void) {
-    char *raw = GHLSSPrefsCString("cardBgCount");
-    int n = -1;
-    if (raw) { n = atoi(raw); free(raw); }
-    if (n < 0) {
-        NSFileManager *fm = [NSFileManager defaultManager];
-        NSString *legacy = GHLSSCardBgPath();
-        if ([fm fileExistsAtPath:legacy]) {
-            [fm copyItemAtPath:legacy toPath:GHLSSCardBgSlotPath(0) error:nil];
-            n = 1;
-        } else {
-            n = 0;
-        }
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%d", n);
-        GHLSSWritePrefsCString("cardBgCount", buf);
-        GHLSSWritePrefsCString("cardBgIndex", "0");
-    }
-    if (n < 0) n = 0;
-    if (n > GHLSS_CARD_BG_MAX) n = GHLSS_CARD_BG_MAX;
-    return n;
-}
-static int GHLSSCardBgIndexValue(void) {
-    int n = GHLSSCardBgCountValue();
-    if (n <= 0) return 0;
-    char *raw = GHLSSPrefsCString("cardBgIndex");
-    int idx = 0;
-    if (raw) { idx = atoi(raw); free(raw); }
-    if (idx < 0) idx = 0;
-    if (idx >= n) idx = 0;
-    return idx;
-}
-static void GHLSSCardBgWriteCount(int n) {
-    if (n < 0) n = 0;
-    if (n > GHLSS_CARD_BG_MAX) n = GHLSS_CARD_BG_MAX;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", n);
-    GHLSSWritePrefsCString("cardBgCount", buf);
-}
-static void GHLSSCardBgWriteIndex(int idx) {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", idx);
-    GHLSSWritePrefsCString("cardBgIndex", buf);
-}
-// v43.9：轮播间隔 cardBgInterval（秒："3"／"5"／"10"／"0"＝关闭），默认 3。
-// 没写过就看旧开关 cardBgRotate：旧版关了轮播的，一次迁移成 "0"。
-static int GHLSSCardBgIntervalValue(void) {
-    char *raw = GHLSSPrefsCString("cardBgInterval");
-    if (raw) {
-        int v = atoi(raw);
-        free(raw);
-        if (v == 0 || v == 3 || v == 5 || v == 10) return v;
-        return 3;
-    }
-    if (!GHLSSPrefsBool("cardBgRotate", YES)) {
-        GHLSSWritePrefsCString("cardBgInterval", "0");
-        return 0;
-    }
-    return 3;
-}
-static BOOL GHLSSCardBgRotateEnabled(void) {
-    return GHLSSCardBgIntervalValue() != 0;
-}
-// 把第 idx 張槽位拷成當前圖（橫幅＋浮窗卡片讀它），記一行日誌。
-static void GHLSSCardBgSetCurrent(int idx) {
-    int n = GHLSSCardBgCountValue();
-    if (n <= 0 || idx < 0 || idx >= n) return;
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSString *src = GHLSSCardBgSlotPath(idx);
-    if (![fm fileExistsAtPath:src]) return;
-    [fm removeItemAtPath:GHLSSCardBgPath() error:nil];
-    [fm copyItemAtPath:src toPath:GHLSSCardBgPath() error:nil];
-    GHLSSCardBgWriteIndex(idx);
-    char buf[128];
-    snprintf(buf, sizeof(buf), "v59 bg current %d/%d", idx + 1, n);
-    GHLSSPrefsLogLine(buf);
-}
 
 // v53：哆啦A夢鈕自訂圖的固定檔名（跟卡片頭像／背景同一個設定目錄；
 // dylib 那邊 GHLSSCustomDoraemonImagePath 寫死同一條路徑）。
@@ -505,7 +415,7 @@ static NSString *GHLSSLogTailNewestFirstN(int maxLines) {
     return [[lines subarrayWithRange:r] componentsJoinedByString:GHLSSRuntimeString("\n")];
 }
 
-// v42：圖片居中裁方形（頭像用，512px）＋按最長邊縮放（背景圖用，1024px）。
+// v42：圖片居中裁方形（頭像用，512px）。
 static UIImage *GHLSSPrefsSquareCropImage(UIImage *image, CGFloat size) {
     if (!image || !image.CGImage) return nil;
     CGFloat w = image.size.width, h = image.size.height;
@@ -521,118 +431,7 @@ static UIImage *GHLSSPrefsSquareCropImage(UIImage *image, CGFloat size) {
     return out;
 }
 
-static UIImage *GHLSSPrefsResizeImageMax(UIImage *image, CGFloat maxDim) {
-    if (!image) return nil;
-    CGFloat w = image.size.width, h = image.size.height;
-    CGFloat m = (w > h) ? w : h;
-    if (m <= maxDim) return image;
-    CGFloat s = maxDim / m;
-    CGSize ns = CGSizeMake(w * s, h * s);
-    UIGraphicsBeginImageContextWithOptions(ns, YES, 1.0);
-    [image drawInRect:CGRectMake(0, 0, ns.width, ns.height)];
-    UIImage *out = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return out;
-}
 
-// v62：每張槽位圖的顏色名（挑選頁下卡標籤「第 X 張 · 色」用；沒記的
-// 就只寫「第 X 張」）。key 是 cardBgColor0..5，跟槽位檔一起搬。
-static void GHLSSCardBgWriteColor(int slot, const char *color) {
-    char key[32];
-    snprintf(key, sizeof(key), "cardBgColor%d", slot);
-    GHLSSWritePrefsCString(key, color);
-}
-static char *GHLSSCardBgColorValue(int slot) {
-    char key[32];
-    snprintf(key, sizeof(key), "cardBgColor%d", slot);
-    return GHLSSPrefsCString(key);
-}
-
-// v62：把一張圖按顏色特徵分成舊內置（0 粉／1 白／2 綠／3 龍）或 -1
-//（用戶圖／認不出）。舊裁圖的特徵（16×16 上算）：粉 pink 0.49、
-// 白 pink 0.19／dark 0.16、綠 pink 0.08／white 0.34、龍 dark 0.66。
-// 槽位檔是舊圖同尺寸 JPEG 重壓（q0.85），特徵漂得不多，閾值留足餘量。
-static int GHLSSCardBgClassifyOldBuiltin(UIImage *img) {
-    if (!img || !img.CGImage) return -1;
-    size_t W = 16, H = 16;
-    unsigned char *buf = (unsigned char *)calloc(W * H * 4, 1);
-    if (!buf) return -1;
-    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-    CGContextRef ctx = CGBitmapContextCreate(buf, W, H, 8, W * 4, cs, kCGImageAlphaPremultipliedLast);
-    int kind = -1;
-    if (ctx) {
-        CGContextDrawImage(ctx, CGRectMake(0, 0, W, H), img.CGImage);
-        long n = (long)(W * H);
-        double pink = 0, white = 0, dark = 0;
-        for (long i = 0; i < n; i++) {
-            unsigned char r = buf[i*4], g = buf[i*4+1], b = buf[i*4+2];
-            unsigned char mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
-            unsigned char mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
-            if ((int)r - (int)g > 25 && (int)r - (int)b > 10) pink += 1;
-            if (mn > 200 && (mx - mn) < 25) white += 1;
-            if (mx < 110) dark += 1;
-        }
-        pink /= n; white /= n; dark /= n;
-        if (dark >= 0.50) kind = 3;
-        else if (pink >= 0.35) kind = 0;
-        else if (pink < 0.10 && white >= 0.20) kind = 2;
-        else if (pink >= 0.10 && white < 0.15 && dark < 0.30) kind = 1;
-        CGContextRelease(ctx);
-    }
-    if (cs) CGColorSpaceRelease(cs);
-    free(buf);
-    return kind;
-}
-
-// v62：一次遷移——把槽位裡的舊內置裁圖換成高清版，並把影片三張排到
-// 最前面（白第 1 張、粉第 2 張、綠第 3 張），其他用戶圖保持原順序
-// 跟在後面；當前圖設回第 1 張。沒找到影片圖就不動順序。只跑一次。
-static void GHLSSCardBgMigrateV62(NSBundle *bundle) {
-    char *done = GHLSSPrefsCString("cardBgV62Migrated");
-    if (done) { free(done); return; }
-    int n = GHLSSCardBgCountValue();
-    if (n <= 0) { GHLSSWritePrefsCString("cardBgV62Migrated", "1"); return; }
-    UIImage *imgs[6];
-    int kind[6];
-    for (int i = 0; i < n; i++) {
-        imgs[i] = [UIImage imageWithContentsOfFile:GHLSSCardBgSlotPath(i)];
-        kind[i] = GHLSSCardBgClassifyOldBuiltin(imgs[i]);
-    }
-    BOOL hasVideo = NO;
-    for (int i = 0; i < n; i++) if (kind[i] >= 0 && kind[i] <= 2) hasVideo = YES;
-    if (!hasVideo) { GHLSSWritePrefsCString("cardBgV62Migrated", "1"); return; }
-    static const char *kRes[4] = {"ghlss-bg-pink", "ghlss-bg-white", "ghlss-bg-green", NULL};
-    static const char *kColor[4] = {"粉", "白", "绿", NULL};
-    int order[6];
-    int m = 0;
-    int want[3] = {1, 0, 2};
-    for (int w = 0; w < 3; w++) for (int i = 0; i < n; i++) if (kind[i] == want[w]) order[m++] = i;
-    for (int i = 0; i < n; i++) if (kind[i] < 0 || kind[i] > 2) order[m++] = i;
-    NSFileManager *fm = [NSFileManager defaultManager];
-    for (int i = 0; i < n; i++) [fm removeItemAtPath:GHLSSCardBgSlotPath(i) error:nil];
-    for (int pos = 0; pos < m; pos++) {
-        int src = order[pos];
-        UIImage *img = nil;
-        const char *color = NULL;
-        if (kind[src] >= 0 && kind[src] <= 2) {
-            NSString *path = [bundle pathForResource:GHLSSRuntimeString(kRes[kind[src]]) ofType:GHLSSRuntimeString("jpg")];
-            img = path ? [UIImage imageWithContentsOfFile:path] : imgs[src];
-            color = kColor[kind[src]];
-        } else {
-            img = imgs[src];
-        }
-        UIImage *resized = img ? GHLSSPrefsResizeImageMax(img, 1024.0) : nil;
-        NSData *data = resized ? UIImageJPEGRepresentation(resized, 0.85) : nil;
-        if (data) [data writeToFile:GHLSSCardBgSlotPath(pos) atomically:YES];
-        GHLSSCardBgWriteColor(pos, color);
-    }
-    GHLSSCardBgWriteCount(m);
-    GHLSSCardBgSetCurrent(0);
-    GHLSSWritePrefsCString("cardBgV62Migrated", "1");
-    char buf[64];
-    snprintf(buf, sizeof(buf), "v62 bg migrated %d slots", m);
-    GHLSSPrefsLogLine(buf);
-}
 
 // v42：bundleID 轉 App 名字（固定 5 個先查，找不到再查後台緩存檔；
 // 還是找不到就回 bundleID 本身，不空白）。
@@ -824,27 +623,19 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
 }
 
-// （輪播頁在文件後面定義，這裡先給完整接口聲明——光是 @class 前向
-// 聲明不夠，[GHLSSCardBgCarouselListController class] 會報錯；
-// 後面只寫 @implementation，不再重複寫 @interface。）
-@interface GHLSSCardBgCarouselListController : PSListController <PHPickerViewControllerDelegate>
-@property (nonatomic, strong) UIView *headerView;
-@property (nonatomic, strong) UIView *stackView;
-@property (nonatomic, strong) NSMutableArray *stackButtons;
-@property (nonatomic, assign) BOOL headerInstalled;
-@property (nonatomic, strong) UILabel *wallStatusLabel;
-@property (nonatomic, strong) UILabel *wallOutputLabel;
-@property (nonatomic, strong) UILabel *wallHelpLabel;
-@property (nonatomic, strong) UIButton *wallDeleteButton;
-@property (nonatomic, strong) NSTimer *wallPickerTimer;
-@property (nonatomic, assign) BOOL wallPickerModeAdjust;
+// （v43.27：壁纸整栏删掉，换成歌词墙播放器。歌词墙页在文件后面定义，
+// 这里先给完整接口声明——光是 @class 前向声明不够，
+// [GHLSSLyricWallListController class] 会报错；
+// 后面只写 @implementation，不再重复写 @interface。）
+@interface GHLSSLyricWallListController : PSListController
+@property (nonatomic, strong) WKWebView *lyricWebView;
+@property (nonatomic, strong) UILabel *lyricFallbackLabel;
 @end
 
 @interface GuHaiLongSplitScreenRootListController : PSListController <UIDocumentPickerDelegate>
 @property (nonatomic, strong) UIImageView *ghlssBannerView;
 @property (nonatomic, strong) UIView *ghlssBannerContainer;
 @property (nonatomic, assign) BOOL ghlssBannerInstalled;
-@property (nonatomic, strong) NSTimer *ghlssBgTimer;
 @property (nonatomic, assign) int ghlssDocPickerKind;
 @end
 
@@ -921,94 +712,28 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             GHLSSPrefsLogLine("v57 prefs-banner: no table, header not mounted");
         }
     }
-    // v59：回來時刷一次橫幅（輪播頁裡換過圖），重開輪播計時。
+    // v43.27：回來時刷一次橫幅（歌词墙封面图）。
     [self ghlssRefreshBannerPreview];
-    [self ghlssRefreshWallpaperRowIcon];
-    [self ghlssStartBgTimer];
 }
 
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    [self ghlssStopBgTimer];
-}
 
 - (void)ghlssRefreshBannerPreview {
     @try {
-        UIImage *img = [UIImage imageWithContentsOfFile:GHLSSCardBgPath()];
+        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+        NSString *coverPath = [bundle pathForResource:GHLSSRuntimeString("cover-eyes") ofType:GHLSSRuntimeString("webp") inDirectory:GHLSSRuntimeString("lyricwall/assets")];
+        UIImage *img = coverPath ? [UIImage imageWithContentsOfFile:coverPath] : nil;
         self.ghlssBannerView.image = img;
     } @catch (NSException *e) {
         GHLSSPrefsLogLine("v57 prefs-banner: refresh EXCEPTION");
     }
 }
 
-// v61：設定首頁「壁紙」行左邊放當前壁紙小預覽（沒有圖就放綠圖）；
-// 回來時（挑選頁換過圖）重刷那一行，預覽跟著新。找不到行就靜默跳過。
-- (void)ghlssRefreshWallpaperRowIcon {
-    @try {
-        NSArray *specs = [self specifiers];
-        PSSpecifier *wall = nil;
-        NSInteger wallIndex = -1;
-        for (NSInteger i = 0; i < (NSInteger)[specs count]; i++) {
-            PSSpecifier *sp = [specs objectAtIndex:i];
-            NSString *detail = [sp propertyForKey:GHLSSRuntimeString("detail")];
-            if (detail && [detail isEqualToString:GHLSSRuntimeString("GHLSSCardBgCarouselListController")]) { wall = sp; wallIndex = i; break; }
-        }
-        if (!wall || wallIndex < 0) return;
-        UIImage *img = [UIImage imageWithContentsOfFile:GHLSSCardBgPath()];
-        if (!img) {
-            NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-            NSString *dpath = [bundle pathForResource:GHLSSRuntimeString("ghlss-bg-green") ofType:GHLSSRuntimeString("jpg")];
-            if (dpath) img = [UIImage imageWithContentsOfFile:dpath];
-        }
-        if (img) {
-            UIImage *thumb = GHLSSPrefsSquareCropImage(img, 58.0);
-            if (thumb) [wall setProperty:thumb forKey:GHLSSRuntimeString("iconImage")];
-        }
-        UITableView *tv = GHLSSSafeTableViewForController(self, "wallpapericon");
-        if (!tv) return;
-        NSInteger section = -1, row = -1;
-        for (NSInteger i = 0; i <= wallIndex; i++) {
-            PSSpecifier *sp = [specs objectAtIndex:i];
-            if (sp.cellType == PSGroupCell) { section++; row = -1; }
-            else { row++; }
-        }
-        if (section < 0 || row < 0) return;
-        NSIndexPath *ip = [NSIndexPath indexPathForRow:row inSection:section];
-        [tv reloadRowsAtIndexPaths:[NSArray arrayWithObject:ip] withRowAnimation:UITableViewRowAnimationNone];
-    } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v61 prefs-wallpapericon EXCEPTION");
-    }
-}
 
-// v59：背景圖輪播計時（設定主頁才跑，離開頁面就停）：兩張以上、
-// 間隔不是關閉時，按 cardBgInterval 換下一張（寫回當前圖＋刷橫幅＋記日誌）。
-- (void)ghlssStartBgTimer {
-    [self ghlssStopBgTimer];
-    if (GHLSSCardBgCountValue() < 2) return;
-    double iv = (double)GHLSSCardBgIntervalValue();
-    if (iv <= 0) return;
-    NSTimer *t = [NSTimer scheduledTimerWithTimeInterval:iv target:self selector:@selector(ghlssBgTimerFired:) userInfo:nil repeats:YES];
-    self.ghlssBgTimer = t;
-}
-
-- (void)ghlssStopBgTimer {
-    [self.ghlssBgTimer invalidate];
-    self.ghlssBgTimer = nil;
-}
-
-- (void)ghlssBgTimerFired:(NSTimer *)timer {
-    (void)timer;
-    int n = GHLSSCardBgCountValue();
-    if (n < 2 || !GHLSSCardBgRotateEnabled()) return;
-    int next = (GHLSSCardBgIndexValue() + 1) % n;
-    GHLSSCardBgSetCurrent(next);
-    [self ghlssRefreshBannerPreview];
-}
 
 - (void)ghlssBannerTapped:(UITapGestureRecognizer *)tap {
     (void)tap;
-    // v59：點橫幅進輪播頁選圖（不再直接開相冊單選）。
-    GHLSSCardBgCarouselListController *vc = [[GHLSSCardBgCarouselListController alloc] init];
+    // v43.27：点横幅进歌词墙播放器。
+    GHLSSLyricWallListController *vc = [[GHLSSLyricWallListController alloc] init];
     [self.navigationController pushViewController:vc animated:YES];
 }
 
@@ -1036,7 +761,6 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
                 }
             }
             _specifiers = loaded;
-            [self ghlssRefreshWallpaperRowIcon];
         } @catch (NSException *e) {
             const char *reason = [e reason] ? [[e reason] UTF8String] : "?";
             char buf[512];
@@ -1070,9 +794,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.101");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.102");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.101。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.102。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -2074,663 +1798,64 @@ static void GHLSSSetGameAppBid(const char *bid, BOOL on) {
 
 @end
 
-// v59：背景圖輪播頁——設定主頁橫幅點進來。做法學 CarPlayMaker 影片
-// （多張卡片扇形堆疊、選中的在前＋高亮邊框、兩張以上按間隔自動換、
-// 內置幾張點一下直接用），代碼與圖片全部自己寫／用自己的圖。
-// v43.9：內置九張（粉／白／綠＋五張新高清圖＋紅裙）；龍頭和哆啦A夢
-// 拿掉。槽位檔 cardbg-0..5.jpg＋count／index 鍵（見上面
-// GHLSSCardBgSlotPath 一組 helper）；當前圖仍寫回 cardbg.jpg，橫幅＋
-// 浮窗卡片不用改讀取方。計時器在設定主頁（root 控制器）跑，這頁只管選圖。
-// v61：壁紙挑選頁重做——照 CarPlayMaker 影片的挑選頁結構來排
-// （頁頭＋01 選擇照片＋大橫卡扇形疊＋狀態行＋藍色更換圖片鈕＋內置壁紙
-// 縮圖列），只學版式不抄名字／圖標／底欄／分辨率那排。內置九張：
-// 粉／白／綠三張動漫圖是皇上 2026-11-15 19:22 定的正式版內置（從皇上
-// 發來的 CarPlayMaker 影片錄屏裡裁出，皇上說正式版先用著），另加
-// 五張高清圖（皇上 2026-11-21 叫奴才去 Google 找的）＋紅裙圖。
-// v62：挑選頁細節再照影片改（無龍頭頁頭／01、粉紅選中邊、標籤改到底卡
-// 帶顏色字、無暫停鈕、灰調整、紅圓刪除），影片三張排前面（白第 1 張）；
-// 三張動漫圖換真高清（白 1920×1080 彼岸桌面、粉 1100×827 哲風預覽、
-// 綠＝初音穿出電腦屏幕 1920×1080 彼岸桌面），另加紅裙白髮少女（哲風
-// 4K）當第六張內置。舊槽位一次遷移：認出舊內置就換高清＋重排。
-// 槽位檔 cardbg-0..5.jpg＋count／index 鍵不動；計時器這頁自己跑（root
-// 主頁的計時器離開主頁就停，這頁進來才開始，出去就停）。
-@implementation GHLSSCardBgCarouselListController
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    // v43.10：輪播間隔行是 PSLinkListCell——這裡以前沒攔 LinkList 點按，
-    // 點了就走到框架原生的 PSListItemsController（v72 證明它生成／快取／
-    // 渲染子清單會出錯，鍵盤子清單只剩一個選項），皇上真機上間隔改不動
-    // 就是這個原因。跟主頁一樣先攔下來、推我們自己的 GHLSSLinkListController。
-    if (GHLSSHandleLinkListTap(self, tableView, indexPath)) return;
-    if (GHLSSDispatchButtonTap(self, tableView, indexPath)) return;
-    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
-}
+// v43.27：歌词墙播放器页——原来壁纸那一栏的位置，改成这个。
+// 播放器是 3D 水面立体歌词墙（The Truth That You Leave，Pianoboy 高至豪），
+// HTML + three.min.js + 三张封面全打进本 bundle 的 lyricwall/ 里，
+// 离线也能播；声音是页内 WebAudio 合成钢琴氛围音，不带原曲音频文件。
+// 原曲是纯音乐，墙上文字是配乐意境创作，页里已注明。
+@implementation GHLSSLyricWallListController
 
 - (void)viewDidLoad {
+    [super viewDidLoad];
+    GHLSSPrefsLogLine("v43.27 prefs-lyricwall opened");
+    self.title = GHLSSRuntimeString("歌词墙");
     @try {
-        [super viewDidLoad];
+        [self ghlssBuildLyricWallPage];
     } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v61 prefs-bgcarousel: super viewDidLoad EXCEPTION");
-    }
-    GHLSSPrefsLogLine("v61 prefs-page: CardBgCarousel");
-    self.title = GHLSSRuntimeString("壁纸");
-    @try {
-        [self ghlssBuildWallpaperPage];
-    } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v61 prefs-bgcarousel: build EXCEPTION");
+        GHLSSPrefsLogLine("v43.27 prefs-lyricwall build EXCEPTION");
     }
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-    @try {
-        [super viewDidAppear:animated];
-    } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v61 prefs-bgcarousel: super viewDidAppear EXCEPTION");
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (self.lyricWebView) {
+        CGRect f = self.view.bounds;
+        if (f.size.width > 0 && f.size.height > 0) self.lyricWebView.frame = f;
     }
-    if (self.headerView && !self.headerInstalled) {
-        UITableView *tv = GHLSSSafeTableViewForController(self, "bgcarousel");
-        if (tv) {
-            @try {
-                tv.tableHeaderView = self.headerView;
-                tv.backgroundColor = [UIColor whiteColor];
-                self.headerInstalled = YES;
-                GHLSSPrefsLogLine("v61 prefs-bgcarousel: header mounted");
-            } @catch (NSException *e) {
-                GHLSSPrefsLogLine("v61 prefs-bgcarousel: mount EXCEPTION");
-            }
-        } else {
-            GHLSSPrefsLogLine("v61 prefs-bgcarousel: no table, header not mounted");
-        }
-    }
-    [self ghlssRebuildCardStack];
-    // v43.9：回來時重組設定列（頁腳＋輪播間隔行跟著新選的間隔變）＋
-    // 更新說明行，再按新間隔重開計時。
-    _specifiers = nil;
-    [self reloadSpecifiers];
-    [self ghlssRefreshWallpaperHelp];
-    [self ghlssStartPickerTimer];
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    [self ghlssStopPickerTimer];
-}
-
-// v62：挑選頁整頁自定視圖（不再是普通設定列表的樣子），按 iPhone 11
-// 邏輯寬 414 排：標題 22＋說明 40＋卡片區 300＋狀態行 40＋操作行 56＋
-// 內置區 118，總高 606。卡片接近滿寬（屏寬減 32，16:10 橫向）。
-// v62：頁頭龍頭＋01 徽章拿掉（影片那頁只有「選擇照片」＋說明）。
-// 進頁先跑一次 v62 槽位遷移（舊內置換高清、影片三張排前面、白第 1 張）。
-- (void)ghlssBuildWallpaperPage {
-    @try {
-        GHLSSCardBgMigrateV62([NSBundle bundleForClass:[self class]]);
-    } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v62 prefs-bgcarousel: migrate EXCEPTION");
-    }
-    CGFloat w = [UIScreen mainScreen].bounds.size.width;
-    if (w <= 0) w = 414.0;
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 606)];
-    container.backgroundColor = [UIColor whiteColor];
-
-    // 選擇照片＋說明。
-    UILabel *secLb = [[UILabel alloc] initWithFrame:CGRectMake(16, 16, w - 32, 22)];
-    secLb.text = GHLSSRuntimeString("选择照片");
-    secLb.font = [UIFont boldSystemFontOfSize:16];
-    secLb.textColor = [UIColor blackColor];
-    [container addSubview:secLb];
-    UILabel *helpLb = [[UILabel alloc] initWithFrame:CGRectMake(16, 44, w - 32, 40)];
-    helpLb.text = GHLSSRuntimeString("点一张卡片选中它，再选图或调整；一次能选多张，按顺序填进空卡（满了就从当前卡往后替换）；有两张以上时 3 秒自动换一张。");
-    helpLb.font = [UIFont systemFontOfSize:12];
-    helpLb.textColor = [UIColor colorWithWhite:0.45 alpha:1.0];
-    helpLb.numberOfLines = 0;
-    [container addSubview:helpLb];
-    self.wallHelpLabel = helpLb;
-
-    // 大橫卡扇形區（卡片由 ghlssRebuildCardStack 動態填）。
-    UIView *stack = [[UIView alloc] initWithFrame:CGRectMake(0, 92, w, 300)];
-    stack.backgroundColor = [UIColor clearColor];
-    [container addSubview:stack];
-    self.stackView = stack;
-    self.stackButtons = [NSMutableArray array];
-
-    // 狀態行：綠勾「已選 X/6 張」＋右側輸出尺寸。v62：暫停鈕拿掉
-    //（影片那頁沒有），輪播開關移到下面設定列的「自動輪播」行。
-    UILabel *checkLb = [[UILabel alloc] initWithFrame:CGRectMake(16, 402, 20, 30)];
-    checkLb.text = GHLSSRuntimeString("✓");
-    checkLb.font = [UIFont boldSystemFontOfSize:16];
-    checkLb.textColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.25 alpha:1.0];
-    checkLb.textAlignment = NSTextAlignmentCenter;
-    [container addSubview:checkLb];
-    UILabel *countLb = [[UILabel alloc] initWithFrame:CGRectMake(40, 402, 120, 30)];
-    countLb.font = [UIFont systemFontOfSize:14];
-    countLb.textColor = [UIColor blackColor];
-    [container addSubview:countLb];
-    self.wallStatusLabel = countLb;
-    UILabel *outLb = [[UILabel alloc] initWithFrame:CGRectMake(w - 160, 402, 144, 30)];
-    outLb.font = [UIFont systemFontOfSize:13];
-    outLb.textColor = [UIColor colorWithWhite:0.45 alpha:1.0];
-    outLb.textAlignment = NSTextAlignmentRight;
-    [container addSubview:outLb];
-    self.wallOutputLabel = outLb;
-
-    // 操作行：藍色大鈕「更換圖片」＋「調整」＋紅色刪除。
-    UIButton *replaceBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    replaceBtn.frame = CGRectMake(16, 440, w - 164, 48);
-    replaceBtn.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];
-    replaceBtn.layer.cornerRadius = 12.0;
-    replaceBtn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    [replaceBtn setTitle:GHLSSRuntimeString("🖼 更换图片") forState:UIControlStateNormal];
-    [replaceBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    [replaceBtn addTarget:self action:@selector(ghlssReplaceWallpaperImages:) forControlEvents:UIControlEventTouchUpInside];
-    [container addSubview:replaceBtn];
-    UIButton *adjustBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    adjustBtn.frame = CGRectMake(w - 140, 440, 64, 48);
-    adjustBtn.backgroundColor = [UIColor colorWithWhite:0.93 alpha:1.0];
-    adjustBtn.layer.cornerRadius = 12.0;
-    adjustBtn.titleLabel.font = [UIFont systemFontOfSize:15];
-    [adjustBtn setTitle:GHLSSRuntimeString("调整") forState:UIControlStateNormal];
-    [adjustBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-    [adjustBtn addTarget:self action:@selector(ghlssAdjustCurrentWallpaper:) forControlEvents:UIControlEventTouchUpInside];
-    [container addSubview:adjustBtn];
-    UIButton *deleteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    deleteBtn.frame = CGRectMake(w - 64, 440, 48, 48);
-    deleteBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0];
-    deleteBtn.layer.cornerRadius = 24.0;
-    UIImage *trashImg = [UIImage systemImageNamed:GHLSSRuntimeString("trash")];
-    if (trashImg) [deleteBtn setImage:[trashImg imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
-    deleteBtn.tintColor = [UIColor whiteColor];
-    [deleteBtn addTarget:self action:@selector(ghlssDeleteCurrentWallpaper:) forControlEvents:UIControlEventTouchUpInside];
-    [container addSubview:deleteBtn];
-    self.wallDeleteButton = deleteBtn;
-
-    // 內置壁紙區：標題＋橫排小縮圖（點一張直接用）。
-    UILabel *builtinTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 504, 120, 20)];
-    builtinTitle.text = GHLSSRuntimeString("内置壁纸");
-    builtinTitle.font = [UIFont boldSystemFontOfSize:15];
-    builtinTitle.textColor = [UIColor blackColor];
-    [container addSubview:builtinTitle];
-    UILabel *builtinHint = [[UILabel alloc] initWithFrame:CGRectMake(w - 140, 504, 124, 20)];
-    builtinHint.text = GHLSSRuntimeString("点一张直接用");
-    builtinHint.font = [UIFont systemFontOfSize:12];
-    builtinHint.textColor = [UIColor colorWithWhite:0.45 alpha:1.0];
-    builtinHint.textAlignment = NSTextAlignmentRight;
-    [container addSubview:builtinHint];
-    UIScrollView *thumbScroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 530, w, 76)];
-    thumbScroll.showsHorizontalScrollIndicator = NO;
-    thumbScroll.backgroundColor = [UIColor clearColor];
-    thumbScroll.contentSize = CGSizeMake(16 + 9 * 110 + 8 * 10 + 16, 76);
-    for (int i = 0; i < 9; i++) {
-        NSString *res = nil, *type = nil;
-        if (![self ghlssWallBuiltinForTag:i resource:&res type:&type]) continue;
-        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-        NSString *path = [bundle pathForResource:res ofType:type];
-        UIImage *img = path ? [UIImage imageWithContentsOfFile:path] : nil;
-        UIButton *th = [UIButton buttonWithType:UIButtonTypeCustom];
-        th.frame = CGRectMake(16 + i * 120, 5, 110, 66);
-        th.layer.cornerRadius = 10.0;
-        th.clipsToBounds = YES;
-        th.layer.borderWidth = 1.0;
-        th.layer.borderColor = [[UIColor colorWithWhite:0.88 alpha:1.0] CGColor];
-        if (img) [th setBackgroundImage:img forState:UIControlStateNormal];
-        else th.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
-        th.tag = 2000 + i;
-        [th addTarget:self action:@selector(ghlssBuiltinThumbTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [thumbScroll addSubview:th];
-    }
-    [container addSubview:thumbScroll];
-
-    self.headerView = container;
-    // v43.9：說明行初次也按當前間隔寫（不是 3 秒時不閃一下舊文案）。
-    [self ghlssRefreshWallpaperHelp];
-}
-
-// 內置圖對照（tag 0..8：粉／白／綠三張動漫圖＋五張新高清圖＋紅裙；
-// v43.9：龍頭和哆啦A夢拿掉，換成五張高清圖）。
-- (BOOL)ghlssWallBuiltinForTag:(int)tag resource:(NSString **)outRes type:(NSString **)outType {
-    const char *res = NULL;
-    const char *type = "jpg";
-    if (tag == 0) res = "ghlss-bg-pink";
-    else if (tag == 1) res = "ghlss-bg-white";
-    else if (tag == 2) res = "ghlss-bg-green";
-    else if (tag == 3) res = "ghlss-bg-anya";
-    else if (tag == 4) res = "ghlss-bg-pinkhair";
-    else if (tag == 5) res = "ghlss-bg-cats";
-    else if (tag == 6) res = "ghlss-bg-rem";
-    else if (tag == 7) res = "ghlss-bg-mikustar";
-    else if (tag == 8) res = "ghlss-bg-reddress";
-    else return NO;
-    if (outRes) *outRes = GHLSSRuntimeString(res);
-    if (outType) *outType = GHLSSRuntimeString(type);
-    return YES;
-}
-
-- (void)ghlssBuiltinThumbTapped:(UIButton *)sender {
-    int tag = (int)sender.tag - 2000;
-    NSString *res = nil, *type = nil;
-    if (![self ghlssWallBuiltinForTag:tag resource:&res type:&type]) return;
-    const char *tagC = [res UTF8String];
-    [self ghlssAddBuiltinBgWithResource:res ofType:type tag:tagC];
-}
-
-// v61：挑選頁自己的輪播計時（進頁開始、離頁就停；間隔跟主頁橫幅
-// 共用 cardBgInterval，關閉就不自動換）。
-- (void)ghlssStartPickerTimer {
-    [self ghlssStopPickerTimer];
-    if (GHLSSCardBgCountValue() < 2) return;
-    double iv = (double)GHLSSCardBgIntervalValue();
-    if (iv <= 0) return;
-    NSTimer *t = [NSTimer scheduledTimerWithTimeInterval:iv target:self selector:@selector(ghlssPickerTimerFired:) userInfo:nil repeats:YES];
-    self.wallPickerTimer = t;
-}
-
-- (void)ghlssStopPickerTimer {
-    [self.wallPickerTimer invalidate];
-    self.wallPickerTimer = nil;
-}
-
-- (void)ghlssPickerTimerFired:(NSTimer *)timer {
-    (void)timer;
-    int n = GHLSSCardBgCountValue();
-    if (n < 2 || !GHLSSCardBgRotateEnabled()) return;
-    int next = (GHLSSCardBgIndexValue() + 1) % n;
-    GHLSSCardBgSetCurrent(next);
-    [self ghlssRebuildCardStack];
-}
-
-// v43.9：說明行跟著間隔變（3／5／10 秒，關閉就不寫秒數）。
-- (void)ghlssRefreshWallpaperHelp {
-    if (!self.wallHelpLabel) return;
-    int iv = GHLSSCardBgIntervalValue();
-    char buf[256];
-    if (iv > 0) snprintf(buf, sizeof(buf), "点一张卡片选中它，再选图或调整；一次能选多张，按顺序填进空卡（满了就从当前卡往后替换）；有两张以上时 %d 秒自动换一张。", iv);
-    else snprintf(buf, sizeof(buf), "点一张卡片选中它，再选图或调整；一次能选多张，按顺序填进空卡（满了就从当前卡往后替换）；自动轮播已关闭。");
-    self.wallHelpLabel.text = GHLSSRuntimeString(buf);
-}
-
-// 狀態行：已選張數、當前圖真實尺寸、刪除鈕可用與否。
-- (void)ghlssRefreshWallpaperStatus {
-    int n = GHLSSCardBgCountValue();
-    int cur = GHLSSCardBgIndexValue();
-    if (self.wallStatusLabel) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "已选 %d/6 张", n);
-        self.wallStatusLabel.text = GHLSSRuntimeString(buf);
-    }
-    if (self.wallOutputLabel) {
-        if (n > 0) {
-            UIImage *img = [UIImage imageWithContentsOfFile:GHLSSCardBgSlotPath(cur)];
-            if (img) {
-                char buf[64];
-                snprintf(buf, sizeof(buf), "输出 %d × %d", (int)img.size.width, (int)img.size.height);
-                self.wallOutputLabel.text = GHLSSRuntimeString(buf);
-            } else {
-                self.wallOutputLabel.text = GHLSSRuntimeString("输出 —");
-            }
-        } else {
-            self.wallOutputLabel.text = GHLSSRuntimeString("尚未选图");
-        }
-    }
-    if (self.wallDeleteButton) {
-        self.wallDeleteButton.enabled = (n > 0);
-        self.wallDeleteButton.alpha = (n > 0) ? 1.0 : 0.4;
+    if (self.lyricFallbackLabel) {
+        CGRect f = self.view.bounds;
+        if (f.size.width > 0 && f.size.height > 0) self.lyricFallbackLabel.frame = f;
     }
 }
 
-// 大橫卡扇形疊：卡片接近滿寬（屏寬減 32，16:10），只顯示已填的卡；
-// 當前那張在最前、擺正、深色邊＋陰影；前一張左上斜著露、後一張右下
-// 斜著露；兩張時只露一張在後；零張時一張灰卡＋提示。點卡選中它。
-- (void)ghlssRebuildCardStack {
-    if (!self.stackView) return;
-    @try {
-        for (UIView *v in self.stackButtons) [v removeFromSuperview];
-        [self.stackButtons removeAllObjects];
-        int n = GHLSSCardBgCountValue();
-        int cur = GHLSSCardBgIndexValue();
-        CGFloat w = self.stackView.bounds.size.width;
-        if (w <= 0) w = [UIScreen mainScreen].bounds.size.width;
-        CGFloat cardW = w - 32.0, cardH = cardW * 10.0 / 16.0;
-        CGFloat cx = w / 2.0, cy = 150.0;
-        if (n <= 0) {
-            UIView *ph = [[UIView alloc] initWithFrame:CGRectMake(16, cy - cardH / 2.0, cardW, cardH)];
-            ph.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
-            ph.layer.cornerRadius = 14.0;
-            UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, cardH / 2.0 - 12, cardW, 24)];
-            lb.text = GHLSSRuntimeString("还没有壁纸，点「更换图片」加入");
-            lb.font = [UIFont systemFontOfSize:15];
-            lb.textColor = [UIColor grayColor];
-            lb.textAlignment = NSTextAlignmentCenter;
-            [ph addSubview:lb];
-            UIButton *tap = [UIButton buttonWithType:UIButtonTypeCustom];
-            tap.frame = ph.bounds;
-            [tap addTarget:self action:@selector(ghlssReplaceWallpaperImages:) forControlEvents:UIControlEventTouchUpInside];
-            [ph addSubview:tap];
-            [self.stackView addSubview:ph];
-            [self.stackButtons addObject:ph];
-        } else {
-            int prev = (cur - 1 + n) % n;
-            int next = (cur + 1) % n;
-            if (n == 2) {
-                [self ghlssAddFanCardForSlot:next center:CGPointMake(cx + 16.0, cy + 18.0) angle:-0.10 front:NO label:YES cardW:cardW cardH:cardH];
-            } else if (n > 2) {
-                [self ghlssAddFanCardForSlot:prev center:CGPointMake(cx - 16.0, cy - 18.0) angle:0.12 front:NO label:NO cardW:cardW cardH:cardH];
-                [self ghlssAddFanCardForSlot:next center:CGPointMake(cx + 16.0, cy + 18.0) angle:-0.10 front:NO label:YES cardW:cardW cardH:cardH];
-            }
-            [self ghlssAddFanCardForSlot:cur center:CGPointMake(cx, cy) angle:0.0 front:YES label:NO cardW:cardW cardH:cardH];
-        }
-    } @catch (NSException *e) {
-        GHLSSPrefsLogLine("v61 prefs-bgcarousel: rebuild EXCEPTION");
-    }
-    [self ghlssRefreshWallpaperStatus];
-}
-
-// 一張扇形卡：容器（圓角＋前卡粉紅邊＋陰影）＋滿幅圖＋透明點按層；
-// v62：標籤改貼在下面那張卡左下角（影片那樣），格式「第 X 張 · 色」
-//（顏色名是槽位遷移／點內置時記的，沒記的只寫「第 X 張」）。
-- (void)ghlssAddFanCardForSlot:(int)slot center:(CGPoint)center angle:(CGFloat)angle front:(BOOL)front label:(BOOL)showLabel cardW:(CGFloat)cardW cardH:(CGFloat)cardH {
-    UIImage *img = [UIImage imageWithContentsOfFile:GHLSSCardBgSlotPath(slot)];
-    UIView *card = [[UIView alloc] init];
-    card.bounds = CGRectMake(0, 0, cardW, cardH);
-    card.center = center;
-    card.layer.cornerRadius = 14.0;
-    if (front) {
-        card.layer.borderWidth = 3.0;
-        card.layer.borderColor = [UIColor colorWithRed:1.0 green:0.176 blue:0.471 alpha:1.0].CGColor;
-        card.layer.shadowColor = [UIColor blackColor].CGColor;
-        card.layer.shadowOpacity = 0.4;
-        card.layer.shadowOffset = CGSizeMake(0, 4);
-        card.layer.shadowRadius = 10.0;
-    } else {
-        card.layer.borderWidth = 1.0;
-        card.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.8].CGColor;
-    }
-    UIImageView *iv = [[UIImageView alloc] initWithFrame:card.bounds];
-    iv.contentMode = UIViewContentModeScaleAspectFill;
-    iv.clipsToBounds = YES;
-    iv.layer.cornerRadius = 14.0;
-    iv.image = img;
-    iv.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
-    [card addSubview:iv];
-    if (showLabel) {
-        char *color = GHLSSCardBgColorValue(slot);
-        NSString *labelText = nil;
-        if (color && color[0] != '\0') {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "第 %d 张 · %s", slot + 1, color);
-            labelText = GHLSSRuntimeString(buf);
-        } else {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "第 %d 张", slot + 1);
-            labelText = GHLSSRuntimeString(buf);
-        }
-        if (color) free(color);
-        UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(12, cardH - 32, 120, 22)];
-        lb.text = labelText;
-        lb.font = [UIFont systemFontOfSize:12];
-        lb.textColor = [UIColor whiteColor];
-        lb.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.55];
-        lb.textAlignment = NSTextAlignmentCenter;
-        lb.layer.cornerRadius = 5.0;
-        lb.clipsToBounds = YES;
-        [card addSubview:lb];
-    }
-    UIButton *tap = [UIButton buttonWithType:UIButtonTypeCustom];
-    tap.frame = card.bounds;
-    tap.tag = 1000 + slot;
-    [tap addTarget:self action:@selector(ghlssCardTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [card addSubview:tap];
-    card.transform = CGAffineTransformMakeRotation(angle);
-    [self.stackView addSubview:card];
-    [self.stackButtons addObject:card];
-}
-
-- (void)ghlssCardTapped:(UIButton *)sender {
-    int slot = (int)sender.tag - 1000;
-    int n = GHLSSCardBgCountValue();
-    if (slot < 0 || slot >= GHLSS_CARD_BG_MAX) return;
-    if (slot < n) {
-        GHLSSCardBgSetCurrent(slot);
-        [self ghlssRebuildCardStack];
-    } else {
-        self.wallPickerModeAdjust = NO;
-        [self ghlssPickCardBgImages:nil];
-    }
-}
-
-// v62：這頁的設定列只剩一組說明＋一個輪播間隔行——上面整頁都是自定視圖。
-// v43.9：開關改成間隔清單（3／5／10 秒／關閉輪播，寫 cardBgInterval；
-// 沒寫過就沿用舊開關 cardBgRotate 遷移，見 GHLSSCardBgIntervalValue）。
-// 頁腳＋說明行跟著間隔變；回來時 viewDidAppear 重組設定列才刷新。
-- (NSArray *)specifiers {
-    if (!_specifiers) {
-        NSMutableArray *specs = [NSMutableArray array];
-        int iv = GHLSSCardBgIntervalValue();
-        char foot[256];
-        if (iv > 0) snprintf(foot, sizeof(foot), "点卡片换当前背景；有两张以上时每 %d 秒自动换一张。内置壁纸点一张直接用。", iv);
-        else snprintf(foot, sizeof(foot), "点卡片换当前背景；自动轮播已关闭。内置壁纸点一张直接用。");
-        PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
-        [group setProperty:GHLSSRuntimeString(foot) forKey:GHLSSRuntimeString("footerText")];
-        [specs addObject:group];
-        PSSpecifier *rot = [PSSpecifier preferenceSpecifierNamed:GHLSSRuntimeString("自动轮播") target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSLinkListCell edit:nil];
-        [rot setProperty:GHLSSRuntimeString("cardBgInterval") forKey:GHLSSRuntimeString("key")];
-        [rot setProperty:GHLSSRuntimeString("com.guhailong.splitscreen") forKey:GHLSSRuntimeString("defaults")];
-        [rot setProperty:GHLSSRuntimeString("3") forKey:GHLSSRuntimeString("default")];
-        [rot setProperty:[NSArray arrayWithObjects:GHLSSRuntimeString("3"), GHLSSRuntimeString("5"), GHLSSRuntimeString("10"), GHLSSRuntimeString("0"), nil] forKey:GHLSSRuntimeString("values")];
-        [rot setProperty:[NSArray arrayWithObjects:GHLSSRuntimeString("3 秒换一张"), GHLSSRuntimeString("5 秒换一张"), GHLSSRuntimeString("10 秒换一张"), GHLSSRuntimeString("关闭轮播"), nil] forKey:GHLSSRuntimeString("titles")];
-        [specs addObject:rot];
-        _specifiers = specs;
-    }
-    return _specifiers;
-}
-
-// v62：輪播開關撥動時立刻停／起計時器（不然關了再開要重進頁才生效）。
-// v43.9：間隔改了也立刻按新間隔重開計時（關閉就停）。
-- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
-    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
-    NSString *keyName = GHLSSRuntimeString("key");
-    NSString *key = specifier.properties[keyName];
-    if (key) {
-        CFStringRef cfKey = (__bridge CFStringRef)key;
-        CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, domain);
-        CFPreferencesAppSynchronize(domain);
-    }
-    if (domain) CFRelease(domain);
-    if (key && [key isEqualToString:GHLSSRuntimeString("cardBgInterval")]) {
-        if (GHLSSCardBgIntervalValue() > 0) [self ghlssStartPickerTimer];
-        else [self ghlssStopPickerTimer];
-        char buf[64];
-        snprintf(buf, sizeof(buf), "v43.9 bg interval %d", GHLSSCardBgIntervalValue());
-        GHLSSPrefsLogLine(buf);
-    }
-}
-
-// 藍色大鈕：相冊多選，按順序填進空卡（跟 v59 同一套寫法）。
-- (void)ghlssReplaceWallpaperImages:(UIButton *)sender {
-    (void)sender;
-    self.wallPickerModeAdjust = NO;
-    [self ghlssPickCardBgImages:nil];
-}
-
-// 「調整」：相冊單選，只換掉當前那張。
-- (void)ghlssAdjustCurrentWallpaper:(UIButton *)sender {
-    (void)sender;
-    if (GHLSSCardBgCountValue() <= 0) return;
-    self.wallPickerModeAdjust = YES;
-    PHPickerConfiguration *config = [[PHPickerConfiguration alloc] init];
-    config.filter = [PHPickerFilter imagesFilter];
-    config.selectionLimit = 1;
-    PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:config];
-    picker.delegate = self;
-    [self presentViewController:picker animated:YES completion:nil];
-}
-
-// 紅色刪除：刪當前卡，後面的槽位往前補，不留洞。
-- (void)ghlssDeleteCurrentWallpaper:(UIButton *)sender {
-    (void)sender;
-    int n = GHLSSCardBgCountValue();
-    if (n <= 0) return;
-    int cur = GHLSSCardBgIndexValue();
-    NSFileManager *fm = [NSFileManager defaultManager];
-    [fm removeItemAtPath:GHLSSCardBgSlotPath(cur) error:nil];
-    for (int i = cur + 1; i < n; i++) {
-        NSString *from = GHLSSCardBgSlotPath(i);
-        NSString *to = GHLSSCardBgSlotPath(i - 1);
-        if ([fm fileExistsAtPath:from]) {
-            [fm removeItemAtPath:to error:nil];
-            [fm moveItemAtPath:from toPath:to error:nil];
-        }
-    }
-    [fm removeItemAtPath:GHLSSCardBgSlotPath(n - 1) error:nil];
-    // v62：顏色名跟著槽位往前補（刪掉的槽位顏色清掉）。
-    for (int i = cur; i < n - 1; i++) {
-        char *c = GHLSSCardBgColorValue(i + 1);
-        GHLSSCardBgWriteColor(i, c);
-        if (c) free(c);
-    }
-    GHLSSCardBgWriteColor(n - 1, NULL);
-    int left = n - 1;
-    GHLSSCardBgWriteCount(left);
-    if (left > 0) {
-        int idx = cur < left ? cur : left - 1;
-        GHLSSCardBgSetCurrent(idx);
-    } else {
-        [fm removeItemAtPath:GHLSSCardBgPath() error:nil];
-        GHLSSCardBgWriteIndex(0);
-        GHLSSWritePrefsBool("cardBgCustom", NO);
-    }
-    [self ghlssStopPickerTimer];
-    [self ghlssRebuildCardStack];
-    [self ghlssStartPickerTimer];
-    char buf[64];
-    snprintf(buf, sizeof(buf), "v61 bg deleted, %d left", left);
-    GHLSSPrefsLogLine(buf);
-}
-
-- (void)ghlssPickCardBgImages:(PSSpecifier *)specifier {
-    (void)specifier;
-    PHPickerConfiguration *config = [[PHPickerConfiguration alloc] init];
-    config.filter = [PHPickerFilter imagesFilter];
-    config.selectionLimit = GHLSS_CARD_BG_MAX;
-    PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:config];
-    picker.delegate = self;
-    [self presentViewController:picker animated:YES completion:nil];
-}
-
-// 多選回來：調整模式只換當前那張；否則成功讀到的圖按順序寫進槽位
-// 0..k-1（中間失敗的不留洞），多出來的舊槽位清掉；第 1 張當當前圖。
-- (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
-    [picker dismissViewControllerAnimated:YES completion:nil];
-    if (!results || [results count] == 0) return;
-    NSInteger total = [results count];
-    if (total > GHLSS_CARD_BG_MAX) total = GHLSS_CARD_BG_MAX;
-    NSMutableArray *images = [NSMutableArray array];
-    for (NSInteger i = 0; i < total; i++) [images addObject:[NSNull null]];
-    dispatch_group_t group = dispatch_group_create();
-    for (NSInteger i = 0; i < total; i++) {
-        NSItemProvider *provider = [[results objectAtIndex:i] itemProvider];
-        if (!provider) continue;
-        dispatch_group_enter(group);
-        [provider loadObjectOfClass:[UIImage class] completionHandler:^(id object, NSError *error) {
-            (void)error;
-            if ([object isKindOfClass:[UIImage class]]) {
-                @synchronized (images) {
-                    [images replaceObjectAtIndex:i withObject:object];
-                }
-            }
-            dispatch_group_leave(group);
-        }];
-    }
-    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
-        if (self.wallPickerModeAdjust) {
-            self.wallPickerModeAdjust = NO;
-            UIImage *first = nil;
-            for (id obj in images) {
-                if ([obj isKindOfClass:[UIImage class]]) { first = (UIImage *)obj; break; }
-            }
-            if (first) {
-                UIImage *resized = GHLSSPrefsResizeImageMax(first, 1024.0);
-                NSData *data = resized ? UIImageJPEGRepresentation(resized, 0.85) : nil;
-                if (data) {
-                    int cur = GHLSSCardBgIndexValue();
-                    if ([data writeToFile:GHLSSCardBgSlotPath(cur) atomically:YES]) {
-                        GHLSSCardBgWriteColor(cur, NULL);
-                        GHLSSCardBgSetCurrent(cur);
-                        GHLSSWritePrefsBool("cardBgCustom", YES);
-                    }
-                }
-            }
-            [self ghlssRebuildCardStack];
-            char buf[64];
-            snprintf(buf, sizeof(buf), "v61 bg adjusted slot %d", GHLSSCardBgIndexValue());
-            GHLSSPrefsLogLine(buf);
-            return;
-        }
-        NSMutableArray *good = [NSMutableArray array];
-        for (id obj in images) {
-            if (![obj isKindOfClass:[UIImage class]]) continue;
-            UIImage *resized = GHLSSPrefsResizeImageMax((UIImage *)obj, 1024.0);
-            if (resized) [good addObject:resized];
-        }
-        NSFileManager *fm = [NSFileManager defaultManager];
-        int saved = 0;
-        for (UIImage *img in good) {
-            NSData *data = UIImageJPEGRepresentation(img, 0.85);
-            if (!data) continue;
-            if ([data writeToFile:GHLSSCardBgSlotPath(saved) atomically:YES]) saved++;
-        }
-        for (int i = saved; i < GHLSS_CARD_BG_MAX; i++) [fm removeItemAtPath:GHLSSCardBgSlotPath(i) error:nil];
-        // v62：相冊選進來的是用戶圖，顏色名全清（標籤只寫「第 X 張」）。
-        for (int i = 0; i < GHLSS_CARD_BG_MAX; i++) GHLSSCardBgWriteColor(i, NULL);
-        GHLSSCardBgWriteCount(saved);
-        GHLSSCardBgWriteIndex(0);
-        if (saved > 0) {
-            GHLSSCardBgSetCurrent(0);
-            GHLSSWritePrefsBool("cardBgCustom", YES);
-        }
-        [self ghlssRebuildCardStack];
-        char buf[128];
-        snprintf(buf, sizeof(buf), "v59 bg picked %d", saved);
-        GHLSSPrefsLogLine(buf);
-        int iv = GHLSSCardBgIntervalValue();
-        char msgBuf[256];
-        if (iv > 0) snprintf(msgBuf, sizeof(msgBuf), "点卡片可以换当前那张；两张以上每 %d 秒自动换。", iv);
-        else snprintf(msgBuf, sizeof(msgBuf), "点卡片可以换当前那张；自动轮播已关闭。");
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:GHLSSRuntimeString("背景图已换好") message:GHLSSRuntimeString(msgBuf) preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:GHLSSRuntimeString("好") style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-    });
-}
-
-// 內置圖加進第一個空槽位（滿了就換掉當前那張），當場設成當前圖。
-- (void)ghlssAddBuiltinBgWithResource:(NSString *)resource ofType:(NSString *)type tag:(const char *)tag {
+- (void)ghlssBuildLyricWallPage {
+    UITableView *tv = GHLSSSafeTableViewForController(self, "lyricwall");
+    if (tv) tv.scrollEnabled = NO;
     NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-    NSString *path = [bundle pathForResource:resource ofType:type];
-    UIImage *img = path ? [UIImage imageWithContentsOfFile:path] : nil;
-    if (!img) {
-        GHLSSPrefsLogLine("v59 bg builtin missing");
+    NSString *htmlPath = [bundle pathForResource:GHLSSRuntimeString("index") ofType:GHLSSRuntimeString("html") inDirectory:GHLSSRuntimeString("lyricwall")];
+    if (!htmlPath) {
+        UILabel *lb = [[UILabel alloc] initWithFrame:self.view.bounds];
+        lb.text = GHLSSRuntimeString("歌词墙文件没找到，请重装一次插件再试。");
+        lb.font = [UIFont systemFontOfSize:15];
+        lb.textColor = [UIColor grayColor];
+        lb.textAlignment = NSTextAlignmentCenter;
+        lb.numberOfLines = 0;
+        lb.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.view addSubview:lb];
+        self.lyricFallbackLabel = lb;
+        GHLSSPrefsLogLine("v43.27 prefs-lyricwall html missing");
         return;
     }
-    UIImage *resized = GHLSSPrefsResizeImageMax(img, 1024.0);
-    NSData *data = resized ? UIImageJPEGRepresentation(resized, 0.85) : nil;
-    if (!data) return;
-    int n = GHLSSCardBgCountValue();
-    int slot = (n < GHLSS_CARD_BG_MAX) ? n : GHLSSCardBgIndexValue();
-    if (![data writeToFile:GHLSSCardBgSlotPath(slot) atomically:YES]) return;
-    if (n < GHLSS_CARD_BG_MAX) GHLSSCardBgWriteCount(n + 1);
-    // v62：內置圖的顏色名跟著槽位記（下卡標籤用）；五張新高清圖沒顏色名。
-    const char *color = NULL;
-    if (tag) {
-        if (strcmp(tag, "ghlss-bg-pink") == 0) color = "粉";
-        else if (strcmp(tag, "ghlss-bg-white") == 0) color = "白";
-        else if (strcmp(tag, "ghlss-bg-green") == 0) color = "绿";
-        else if (strcmp(tag, "ghlss-bg-reddress") == 0) color = "红";
-    }
-    GHLSSCardBgWriteColor(slot, color);
-    GHLSSCardBgSetCurrent(slot);
-    GHLSSWritePrefsBool("cardBgCustom", YES);
-    [self ghlssRebuildCardStack];
-    char buf[128];
-    snprintf(buf, sizeof(buf), "v59 bg builtin %s slot %d", tag ? tag : "?", slot);
-    GHLSSPrefsLogLine(buf);
+    WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
+    WKWebView *wv = [[WKWebView alloc] initWithFrame:self.view.bounds configuration:config];
+    wv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    wv.backgroundColor = [UIColor blackColor];
+    wv.opaque = YES;
+    NSURL *fileURL = [NSURL fileURLWithPath:htmlPath];
+    NSURL *dirURL = [fileURL URLByDeletingLastPathComponent];
+    [wv loadFileURL:fileURL allowingReadAccessToURL:dirURL];
+    [self.view addSubview:wv];
+    self.lyricWebView = wv;
 }
 
 @end
@@ -3179,7 +2304,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.101\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.102\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {
