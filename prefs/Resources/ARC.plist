@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>在这里选要出现在启动器里的 App，最多 25 个（固定 5 个＋自选 20 个）。</string>
+			<string>在这里选要出现在启动器里的 App，数量不限（固定 5 个＋自选任意多个）。</string>
 			<key>label</key>
 			<string>启动器 App</string>
 		</dict>
@@ -26,7 +26,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>边缘滑动、哆啦A梦钮都能叫出启动器；浮窗也能从多窗设置里开。</string>
+			<string>边缘滑动、哆啦A梦钮都能叫出启动器。</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -86,7 +86,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>注意：横屏状态下，启动器上应用操作都是以浮窗模式显示！横屏里三屏侧窗还没做，选三屏也会先按浮窗开。</string>
+			<string>注意：横屏状态下，启动器上应用操作都是以浮窗模式显示！</string>
 			<key>label</key>
 			<string>启动器菜单 App 打开方式</string>
 		</dict>
@@ -107,20 +107,18 @@
 			<array>
 				<string>全屏打开</string>
 				<string>浮窗</string>
-				<string>三屏</string>
 			</array>
 			<key>validValues</key>
 			<array>
 				<string>fullscreen</string>
 				<string>floating</string>
-				<string>threescreen</string>
 			</array>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>「全屏打开」是探针：系统不一定放行，打不开时自动退回浮窗；浮窗和三屏是确定的。</string>
+			<string>「全屏打开」是探针：系统不一定放行，打不开时自动退回浮窗；浮窗是确定的。</string>
 		</dict>
 		<dict>
 			<key>cell</key>

@@ -39,6 +39,38 @@
 			</array>
 		</dict>
 		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>启动器从哪边滑出、贴边 peek 贴在哪边、哆啦A梦钮和启动器图标列默认在哪边，都跟着这个选。</string>
+			<key>label</key>
+			<string>小窗显示位置</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>right</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>windowPosition</string>
+			<key>label</key>
+			<string>小窗显示位置</string>
+			<key>validTitles</key>
+			<array>
+				<string>主屏左侧</string>
+				<string>主屏右侧</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>left</string>
+				<string>right</string>
+			</array>
+		</dict>
+		<dict>
 			<key>PostNotification</key>
 			<string>com.guhailong.splitscreen.prefschanged</string>
 			<key>cell</key>

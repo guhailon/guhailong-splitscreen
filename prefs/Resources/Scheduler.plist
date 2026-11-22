@@ -96,20 +96,6 @@
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
-			<string>sideWindowGestures</string>
-			<key>label</key>
-			<string>侧边小窗手势</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
 			<string>doraemonDoubleTapEnabled</string>
 			<key>label</key>
 			<string>哆啦A梦双击轮切</string>
@@ -118,7 +104,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗拖动关了，浮窗不能拖；侧边小窗手势关了，三屏分隔线不能拖；哆啦A梦双击轮切关了，双击哆啦A梦不轮切，只剩单击开启动器。</string>
+			<string>浮窗拖动关了，浮窗不能拖；哆啦A梦双击轮切关了，双击哆啦A梦不轮切，只剩单击开启动器。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
