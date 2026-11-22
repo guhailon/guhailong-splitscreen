@@ -325,4 +325,16 @@ static UIWindow *GHLSSKBDragTarget = nil;
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     [nc addObserver:helper selector:@selector(handleKeyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
     [nc addObserver:helper selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+    // v43.22: %ctor 標記——載入時寫 prefs 一個鍵＋記一行日誌，以後「helper 在不在」
+    // 看得見，不用再猜日誌（%ctor 本身以前不寫日誌，0 次只能證明 handler 沒跑過）。
+    {
+        char keyBuf[192];
+        snprintf(keyBuf, sizeof(keyBuf), "kbHelperLoaded-%s", bid);
+        char valBuf[64];
+        snprintf(valBuf, sizeof(valBuf), "%f", [NSDate timeIntervalSinceReferenceDate]);
+        GHLSSKBWritePrefsCString(keyBuf, valBuf);
+        char lbuf[192];
+        snprintf(lbuf, sizeof(lbuf), "v43.22 kb-helper loaded %s", bid);
+        GHLSSKBLogLine(lbuf);
+    }
 }

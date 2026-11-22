@@ -1252,8 +1252,7 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // v42：底部任務欄、ARC 設置入口、
 // 鍵盤上移、設定卡片（見下面卡片段；v53：懸浮球已拿掉）。
 - (void)handleTaskbarButton:(UIButton *)sender;
-// v43.16：任務欄芯片右上角紅 ×（關窗）、長按菜單。
-- (void)handleTaskbarCloseButton:(UIButton *)sender;
+// v43.20：任務欄芯片長按直接關窗（v43.22：紅 × 已拿掉）。
 - (void)handleTaskbarChipLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)openPairWithBundleIDs:(const char *)mainBid mainName:(const char *)mainName sideBid:(const char *)sideBid sideName:(const char *)sideName;
 - (void)openThreeScreenFromEdge;
@@ -1332,10 +1331,13 @@ static BOOL GHLSSHostedMinimized = NO;
 static BOOL GHLSSHostedLaunching = NO;
 static BOOL GHLSSRestoreGateActive = NO; // v71：恢复门控进行中（窗藏着等 scene 就绪）。
 // v72：门控 v2——不要有任何 App 闪黑边。超时不再直接显示黑窗：
-// 窗继续盖占位等、每 0.5 秒重看一次；卡在 contentState==0 满约 5 秒就重建 scene
-//（v35「session 内永不销毁」只对卡死 case 开例外）；占位是深灰底＋转圈＋App 名，绝不是全黑。
+// 窗继续盖占位等、每 0.5 秒重看一次；卡在 contentState==0 熔斷約 2 秒就重建 scene
+//（v43.22：37.log 證明微信卡 0 兩次、0 次在門控內自己恢復，5 秒是純黑時間；
+// 尺寸門仍是 5 秒，只針對 cs==0 縮短；v35「session 内永不销毁」只对卡死 case 开例外）；
+// 占位是深灰底＋转圈＋App 名，绝不是全黑。
 static NSTimeInterval GHLSSRestoreGateStart = 0; // v72：这次门控开始时间。
-static NSTimeInterval GHLSSRestoreGateDeadline = 0; // v72：重建时间点（开始＋5 秒；不是显示时间）。
+static NSTimeInterval GHLSSRestoreGateDeadline = 0; // v72：重建时间点（开始＋5 秒；不是显示时间——尺寸門用；卡 0 另有 2 秒熔斷）。
+static const NSTimeInterval GHLSSRestoreGateStuckZeroTimeout = 2.0; // v43.22：卡 0 熔斷（開始＋2 秒，約 4 個 tick，只針對 contentState==0；尺寸門維持 5 秒）。
 static NSTimeInterval GHLSSMinimizeTime = 0; // v43.17：这次收起的时间（点小卡 0.8 秒内不恢复，防误触）。
 static FBScene *GHLSSRestoreGateScene = nil; // v71：门控盯着的 scene（换了就取消门控）。
 static CGFloat GHLSSRestoreGateTargetAlpha = 1.0; // v71：淡入要回到的 alpha（游戏模式会调淡）。
@@ -1352,6 +1354,7 @@ static int prefsChangedToken = 0;
 static BOOL GHLSSRestoreGaveUp[GHLSS_APP_COUNT]; // v43.7：这扇窗重建一次还是卡 0、门控已停手（占位留着；下次手动恢复再试）。
 static int GHLSSRestoreGateMode = 0; // v72：门控模式——0 恢复（窗藏着，等就绪淡入显示）；1 已显示窗（promote／新窗，只盖占位、就绪淡出占位）。
 static UIView *GHLSSGatePlaceholders[GHLSS_APP_COUNT]; // v72：每窗一个载入占位（深灰底＋转圈＋App 名）。
+static UIView *GHLSSGateFrozenSnaps[GHLSS_APP_COUNT]; // v43.22：每窗一个凍結快照（門控等待期間顯示最後一幀活內容，不換深灰佔位；點不動，帶細微載入提示）。
 static BOOL GHLSSSuppressSlideInOnce = NO; // v72：重建 scene 时下一次建窗不滑入（直接出现在原位）。
 static UIWindow *GHLSSSnapshotAnimWindow = nil; // v72：快照动画的临时窗（播完就收掉）.
 static UIView *GHLSSRestorePreSnap = nil; // v43.6：恢复前预抓的快照（改尺寸之前抓，layer 里还是小卡最后一帧活内容；动画用完就清）。
@@ -1468,6 +1471,8 @@ static BOOL GHLSSKeyboardShifted = NO;
 static CGRect GHLSSKeyboardSavedFrame = {{0, 0}, {0, 0}};
 static BOOL GHLSSKeyboardEnlarged = NO; // v43.5：橫屏放大中（鍵盤彈出時放大、收起恢復原尺寸）。
 static CGRect GHLSSKeyboardEnlargedSavedFrame = {{0, 0}, {0, 0}}; // v43.5：放大前原尺寸。
+static NSTimeInterval GHLSSKeyboardHideLastTime = 0; // v43.22：上次 hide 的時間（1 秒內同一 bundle 第二次 hide 忽略）。
+static char GHLSSKeyboardHideLastBid[128] = {0}; // v43.22：上次 hide 的 bundle。
 // v42：上次的三屏組合用——上一個開著的窗的 bundleID（開側窗時存上次的組合用）。
 static char GHLSSPairPrevBid[128] = {0};
 // v42：側窗分隔線當次厚度（建窗時讀設定記下，拖動時用同一份）。
@@ -1643,7 +1648,9 @@ GHLSSCacheTopStrips[idx] = nil;
 GHLSSCacheContainers[idx] = nil;
 GHLSSCacheContentViews[idx] = nil;
 // v72：占位跟着 container 一起丢掉——指针清掉，不留野指针。
+// v43.22：凍結快照同理（container 丟了它也跟著丟，指標不清會變野指標）。
 GHLSSGatePlaceholders[idx] = nil;
+GHLSSGateFrozenSnaps[idx] = nil;
 GHLSSCacheResizeHandles[idx] = nil;
 GHLSSCacheSideDividers[idx] = nil;
 GHLSSCacheIsSideDock[idx] = NO;
@@ -1685,6 +1692,7 @@ GHLSSCacheTopStrips[idx] = nil;
 GHLSSCacheContainers[idx] = nil;
 GHLSSCacheContentViews[idx] = nil;
 GHLSSGatePlaceholders[idx] = nil;
+GHLSSGateFrozenSnaps[idx] = nil; // v43.22：凍結快照指標同清（窗藏了，凍結幀不留）。
 GHLSSCacheResizeHandles[idx] = nil;
 GHLSSCacheSideDividers[idx] = nil;
 GHLSSCacheIsSideDock[idx] = NO;
@@ -2358,11 +2366,6 @@ return GHLSSReadPrefsBool("enlargeOnKeyboardPortrait", YES);
 // v43.18：外置模式放大開關（enlargeOnExternalKeyboard，預設關）。
 static BOOL GHLSSReadEnlargeOnExternalKeyboard(void) {
 return GHLSSReadPrefsBool("enlargeOnExternalKeyboard", NO);
-}
-// v54：外置鍵盤收起同時關閉浮窗（closeWindowOnExternalKeyboardHide，
-// 預設開）：只在外彈出模式下生效；內彈出收起時照舊只回原位。
-static BOOL GHLSSReadCloseWindowOnExternalKeyboardHide(void) {
-return GHLSSReadPrefsBool("closeWindowOnExternalKeyboardHide", NO);
 }
 // C7 底部任務欄（預設關；開了 2 秒內建欄，不用 respring）。
 static BOOL GHLSSReadTaskbarEnabled(void) {
@@ -4670,25 +4673,10 @@ btn.imageView.layer.masksToBounds = YES;
 UILongPressGestureRecognizer *tbLP = [[UILongPressGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleTaskbarChipLongPress:)];
 [btn addGestureRecognizer:tbLP];
 [root addSubview:btn];
-// v43.16 B：芯片右上角紅 ×（關窗）。× 是 root 的子視圖（不是 btn 的，
-// 不然超出 btn 邊界的上半截點不到），後加所以在最上層；點 × 只走關窗，
-// 不會觸發芯片的切主窗（UIButton 子視圖自己吃掉觸摸）。
-UIButton *tbClose = [UIButton buttonWithType:UIButtonTypeCustom];
-tbClose.frame = CGRectMake(x + 36.0 * tbScale - 7.0 * tbScale, 8.0 * tbScale - 7.0 * tbScale, 14.0 * tbScale, 14.0 * tbScale);
-tbClose.tag = i;
-tbClose.backgroundColor = [UIColor redColor];
-tbClose.layer.cornerRadius = 7.0 * tbScale;
-tbClose.layer.borderWidth = 1.0;
-tbClose.layer.borderColor = [UIColor whiteColor].CGColor;
-[tbClose setTitle:[NSString stringWithCString:"\xC3\x97" encoding:NSUTF8StringEncoding] forState:UIControlStateNormal];
-[tbClose setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-tbClose.titleLabel.font = [UIFont boldSystemFontOfSize:10.0 * tbScale];
-[tbClose addTarget:GHLSSLauncherShared action:@selector(handleTaskbarCloseButton:) forControlEvents:UIControlEventTouchUpInside];
-[root addSubview:tbClose];
 BOOL isOpen = !GHLSSCacheWindows[i].hidden && !GHLSSCacheMinimized[i];
 BOOL isMain = (i == GHLSSActiveAppIndex);
 if (isOpen || GHLSSCacheMinimized[i]) {
-// v43.16 B：狀態點移到芯片右下角——右上角讓給紅 ×，不然兩個疊在一起。
+// v43.16 B：狀態點在芯片右下角（v43.22：紅 × 已拿掉，點的位置不動）。
 // 顏色不變：金點主窗、綠點已開。
 UIView *dot = [[UIView alloc] initWithFrame:CGRectMake(x + 26.0 * tbScale, 8.0 * tbScale + 36.0 * tbScale - 10.0 * tbScale, 10.0 * tbScale, 10.0 * tbScale)];
 dot.backgroundColor = isMain ? [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0] : [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:1.0];
@@ -6569,7 +6557,7 @@ GHLSSLogLine("v57 foreground retry2 failed");
 });
 // v72：新窗建好时 scene 还没就绪——盖占位等它（不要有任何 App 一开就是黑窗）。
 //（就绪的直接显示，不用门控；窗已显示，走已显示窗模式——只盖占位、就绪淡出占位。
-// 卡 0 满 5 秒走同一个重建。）
+// 卡 0 满约 2 秒走同一个重建，v43.22 熔斷。）
 {
 NSUInteger newCS = 2;
 if (scene) {
@@ -7013,6 +7001,15 @@ static void GHLSSShowPlaceholderForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 UIView *container = GHLSSCacheContainers[idx];
 if (!container) return;
+// v43.22：有凍結快照就繼續顯示它，不蓋深灰佔位（凍結幀是最後一幀活內容，
+// 比深灰好看；點不動，載入提示已在快照上；點按層／調尺寸手柄照舊提到它上面）。
+UIView *frozen = GHLSSGateFrozenSnaps[idx];
+if (frozen && frozen.superview == container) {
+[container bringSubviewToFront:frozen];
+if (GHLSSPeekTapOverlays[idx]) [container bringSubviewToFront:GHLSSPeekTapOverlays[idx]];
+if (GHLSSCacheResizeHandles[idx]) [container bringSubviewToFront:GHLSSCacheResizeHandles[idx]];
+return;
+}
 UIView *ph = GHLSSGatePlaceholders[idx];
 if (ph) {
 [container bringSubviewToFront:ph];
@@ -7035,8 +7032,14 @@ GHLSSLogLine("v74 static placeholder shown");
 }
 
 // v72：拿掉占位（0.2 秒淡出；没有占位就直接回，不重复淡）。
+// v43.22：佔位拿掉時凍結快照一起拿掉（活內容出來了，不再需要凍結幀）。
 static void GHLSSHidePlaceholderForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+UIView *frozen = GHLSSGateFrozenSnaps[idx];
+if (frozen) {
+GHLSSGateFrozenSnaps[idx] = nil;
+[frozen removeFromSuperview];
+}
 UIView *ph = GHLSSGatePlaceholders[idx];
 if (!ph) return;
 GHLSSGatePlaceholders[idx] = nil;
@@ -7112,7 +7115,8 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 
 // v72：恢复门控 tick v2——不要有任何 App 闪黑边，每 0.5 秒看一次。
 // 就绪（contentState==2）就再等多一帧（约 80ms）才淡入／淡出占位，让第一帧画好；
-// 还没就绪：窗继续盖占位等，绝不直接显示黑窗；卡在 0 超过约 5 秒就重建 scene
+// 还没就绪：窗继续盖占位等，绝不直接显示黑窗；卡在 0 超过约 2 秒就重建 scene
+//（v43.22 熔斷，只針對 cs==0；尺寸門仍是 5 秒）
 //（只重建一次；重建后还是 0 就继续等，占位一直盖着）。
 // 取消条件：窗／scene 没了、scene 换了、恢复中又被收起（这时把窗放出来，
 // 让 peek 看得见，占位由看门狗管）。门控只管显示，不管 resize（还是走 v65 的延后链）。
@@ -7210,7 +7214,7 @@ GHLSSUpdateDimOverlay();
 return;
 }
 // 还没就绪——绝不直接显示黑窗，继续等。
-if (cs == 0 && now >= GHLSSRestoreGateDeadline) {
+if (cs == 0 && now >= GHLSSRestoreGateStart + GHLSSRestoreGateStuckZeroTimeout) {
 if (!GHLSSRestoreGateRebuilt) {
 // v43.12：门控超时先读真实锁屏状态——锁屏通知会乱跳（31.log：锁→解→锁→解
 // 连跑几轮，旗标 GHLSSScreenLocked 停在假的 YES 上，门控永远 defer、重建永不
@@ -7239,7 +7243,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 });
 return;
 }
-// 卡在 0 超过约 5 秒——重建 scene（2a）。
+// 卡在 0 超过约 2 秒——重建 scene（v43.22 熔斷；鎖屏時仍先 defer，滿 6 次才重建）。
 GHLSSLogLine("v72 restore gate timeout, rebuilding scene");
 [self rebuildStuckHostedScene];
 return;
@@ -7278,8 +7282,8 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
 }
 
 - (void)rebuildStuckHostedScene {
-    // v72：scene 卡在 contentState==0 超过约 5 秒——只有销毁重建能让它重新就绪
-    //（v35「session 内永不销毁」在此开例外，只对卡死 case；24.log 时钟案：
+    // v72：scene 卡在 contentState==0 超过约 2 秒——只有销毁重建能让它重新就绪
+    //（v43.22 熔斷；v35「session 内永不销毁」在此开例外，只对卡死 case；24.log 时钟案：
     // 建时 state=1、推完 foreground 读 0，之后重试／恢复／解锁／看门狗全推过，
     // 一直是 0——不重建永远是黑窗）。重建后重新设门（新 scene 可能还在准备），
     // 只重建一次；重建后还是 0 就继续等，占位一直盖着。
@@ -7362,6 +7366,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
     vc.view.backgroundColor = [UIColor clearColor];
     overlay.rootViewController = vc;
     UIView *animView = snap;
+    BOOL isRealSnap = (snap != nil); // v43.22：是不是真快照（不是就是下面的深灰靜態塊）。
     if (!animView) {
         // 没活内容可拍——播一个深灰靜態块（App 圖標＋App 名，不轉圈），绝不播黑块。
         // 布局按目标框（toFrame）算，transform 会把它压回小卡尺寸。
@@ -7389,7 +7394,34 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), 
         animView.center = CGPointMake(CGRectGetMidX(toFrame), CGRectGetMidY(toFrame));
     } completion:^(BOOL finished) {
         (void)finished;
-        [animView removeFromSuperview];
+        // v43.22：沒就緒且是真快照——不要丟掉，留在窗上當凍結幀（門控等待期間
+        // 顯示最後一幀活內容，不換深灰佔位；就緒或沒真快照就照舊丟掉）。
+        // 凍結幀點不動（userInteractionEnabled=NO），底部帶一個細微的載入提示。
+        BOOL keepFrozen = (!ready && isRealSnap && GHLSSHostedWindow && !GHLSSHostedMinimized
+            && GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSS_APP_COUNT);
+        int fidx = GHLSSActiveAppIndex;
+        UIView *fcontainer = (keepFrozen && fidx >= 0 && fidx < GHLSS_APP_COUNT) ? GHLSSCacheContainers[fidx] : nil;
+        if (keepFrozen && fcontainer) {
+            UIView *oldFrozen = GHLSSGateFrozenSnaps[fidx];
+            if (oldFrozen && oldFrozen != animView) [oldFrozen removeFromSuperview];
+            animView.transform = CGAffineTransformIdentity;
+            animView.frame = fcontainer.bounds;
+            animView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            animView.userInteractionEnabled = NO;
+            UILabel *lz = [[UILabel alloc] initWithFrame:CGRectMake(0, fcontainer.bounds.size.height - 34.0, fcontainer.bounds.size.width, 20.0)];
+            lz.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
+            lz.text = [NSString stringWithCString:"載入中..." encoding:NSUTF8StringEncoding];
+            lz.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
+            lz.font = [UIFont systemFontOfSize:12];
+            lz.textAlignment = NSTextAlignmentCenter;
+            lz.userInteractionEnabled = NO;
+            [animView addSubview:lz];
+            [fcontainer addSubview:animView];
+            GHLSSGateFrozenSnaps[fidx] = animView;
+            GHLSSLogLine("v43.22 frozen snapshot kept during gate");
+        } else {
+            [animView removeFromSuperview];
+        }
         overlay.hidden = YES;
         if (GHLSSSnapshotAnimWindow == overlay) GHLSSSnapshotAnimWindow = nil;
         if (completion) completion();
@@ -8000,19 +8032,6 @@ if (!GHLSSCacheWindows[idx]) return;
 GHLSSUpdateTaskbar();
 }
 
-// v43.16 B：任務欄芯片右上角紅 ×——先升為主窗再走現有關窗路
-//（closeHostedWindow 自己調 GHLSSUpdateTaskbar，芯片跟著消失）。
-- (void)handleTaskbarCloseButton:(UIButton *)sender {
-NSInteger idx = sender.tag;
-if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
-if (!GHLSSCacheWindows[idx]) return;
-[self promoteWindowToMainIndex:(int)idx];
-[self closeHostedWindow];
-char buf[96];
-snprintf(buf, sizeof(buf), "v43.16 taskbar close chip %d", (int)idx);
-GHLSSLogLine(buf);
-}
-
 // v43.20：長按芯片直接關窗——不彈菜單。最小化（小卡）的項直接關，不先
 // promote／恢復成大窗（不會閃黑窗）；可見主窗走現有關窗路。關完芯片消失。
 - (void)closeCachedEntryAtIndex:(int)idx {
@@ -8404,7 +8423,7 @@ if (!GHLSSHostedSceneSizeMatchesWindow()) [self armSizeGateForResize];
 // 上移只動活動窗（鍵盤擋住它的底才移，移多少看鍵盤高度），收起回原位。
 // v54：彈出方式分內／外（keyboardPopupMode）：內彈出走老路上移；外彈出
 // 浮窗不動（鍵盤在浮窗外），橫屏時試著給鍵盤加拖動（見上）；
-// 收起時外彈出模式＋開關開著就關窗（見 handleKeyboardWillHide）。
+// 收起時不再關窗（v43.22：關窗分支＋開關整個刪掉，Lee 點頭）。
 // v43.5：鍵盤彈出／收起共用邏輯（舊 NSNotification 路徑＋Darwin 橋接共用）。
 // kbHeight：鍵盤高度（pt）；bid：發通知的 App 包名，NULL 表示不比對
 //（舊路徑沒有包名）。只對活動浮窗動作；橫屏放大不認「自動上移」開關，
@@ -8480,22 +8499,34 @@ GHLSSLogLine("v43.5 window restored after keyboard hide (enlarge)");
 // 其餘全黑，半黑）。直接清旗標走人，不要動窗框。
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) { GHLSSKeyboardShifted = NO; return; }
 if (bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0) return;
+// v43.22：記一行來源（Darwin 橋接帶包名；NSNotification 舊路徑 bid 是 NULL），
+// 以後不用猜 hide 是哪個通道送的。
+{
+char hbuf[192];
+snprintf(hbuf, sizeof(hbuf), "v43.22 keyboard hide src=%s", (bid && bid[0] != '\0') ? bid : "NSNotification");
+GHLSSLogLine(hbuf);
+}
+// v43.22：hide 去重——一次收鍵盤可能兩個通道各送一次（Darwin＋NSNotification），
+// 1 秒內同一 bundle 的第二次 hide 直接忽略（37.log L133 恢復後緊接 L134 關窗）。
+// 關窗分支整個刪掉了（Lee 點頭），去重照做：第二次不能再有副作用。
+{
+NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+const char *keyBid = (bid && bid[0] != '\0') ? bid : GHLSSHostedBundleID;
+if (keyBid && keyBid[0] != '\0' && GHLSSKeyboardHideLastBid[0] != '\0'
+    && strcmp(keyBid, GHLSSKeyboardHideLastBid) == 0
+    && (now - GHLSSKeyboardHideLastTime) < 1.0) {
+GHLSSLogLine("v43.22 keyboard hide ignored, duplicate within 1s");
+return;
+}
+if (keyBid && keyBid[0] != '\0') {
+strncpy(GHLSSKeyboardHideLastBid, keyBid, sizeof(GHLSSKeyboardHideLastBid) - 1);
+GHLSSKeyboardHideLastBid[sizeof(GHLSSKeyboardHideLastBid) - 1] = '\0';
+}
+GHLSSKeyboardHideLastTime = now;
+}
 // 放大中先恢復尺寸（放大時 shift 沒跑，恢復尺寸就夠了，不關窗）。
 if (GHLSSKeyboardEnlarged) {
 [self ghlssRestoreEnlargedWindowForKeyboard];
-return;
-}
-CGRect screenBounds = [UIScreen mainScreen].bounds;
-BOOL landscape = screenBounds.size.width > screenBounds.size.height;
-int mode = GHLSSReadKeyboardPopupModeForOrientation(landscape);
-// v54：外彈出模式——鍵盤收起時，開關開著（預設開）就把活動浮窗一起關掉
-//（走現有關窗路徑）；內彈出模式收起時照舊只回原位。跟「自動上移」
-// 開關無關（那個只管上移）；只認模式＋這個開關。
-if (mode == 1 && GHLSSReadCloseWindowOnExternalKeyboardHide()) {
-if (!GHLSSHostedMinimized) {
-GHLSSLogLine("v43.5 keyboard hide closing window (outer mode)");
-[self closeHostedWindow];
-}
 return;
 }
 if (!GHLSSKeyboardShifted) return;
