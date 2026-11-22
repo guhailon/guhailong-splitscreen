@@ -527,6 +527,23 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @property (nonatomic, assign) int ghlssDocPickerKind;
 @end
 
+// v43.31：歌词墙控制行太挤（皇上 2026-11-22 定，设置页这边改，播放器文件不动）：
+// 给两只歌词墙 WKWebView（主页嵌的＋详情页的）注入一段 <style>，藏掉控制行
+// 中间的「抖音听原唱」按钮（#dyBtn），其余按钮不换行、间距收紧。只藏按钮，
+// 歌单里每首后面的「抖音听原唱」链接（.dy-link）和试听完的提示条链接不动，
+// 去抖音听原唱的功能还在；applySong 还在写 dyBtn.href，元素还在 DOM 里，
+// 藏起来而已，不报错。脆弱点：注入认的是播放器现在的 class 名／id
+// （.btn-row、.list-btn、#dyBtn）；网页版以后改了名字，注入就悄悄失效，
+// 到时再跟。注意：这里不能用 ObjC 写死字串字面量（工具链编出来的写死字串是坏的），
+// JS 全走 GHLSSRuntimeString 现做；脚本在 AtDocumentEnd 跑，每次加载都注入。
+static void GHLSSAddLyricWallCSSInjection(WKWebViewConfiguration *config) {
+    if (!config) return;
+    NSString *js = GHLSSRuntimeString("(function(){var s=document.createElement('style');s.textContent='#dyBtn{display:none!important}.list-btn{white-space:nowrap!important}.btn-row{gap:8px!important}';(document.head||document.documentElement).appendChild(s);})();");
+    WKUserScript *script = [[WKUserScript alloc] initWithSource:js injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
+    [config.userContentController addUserScript:script];
+    GHLSSPrefsLogLine("v43.31 lyricwall css injected");
+}
+
 @implementation GuHaiLongSplitScreenRootListController
 
 // v43：記進了哪一頁（PlistPage 繼承這裡，類名是 GHLSSPlistPageController，
@@ -536,7 +553,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     char buf[160];
     snprintf(buf, sizeof(buf), "v57 prefs-page: %s", [NSStringFromClass([self class]) UTF8String]);
     GHLSSPrefsLogLine(buf);
-    // v43.30：設定主頁頂上直接嵌整个 3D 立体歌词墙播放器（480pt 高的
+    // v43.30：設定主頁頂上直接嵌整个 3D 立体歌词墙播放器（760pt 高的
     // WKWebView 头，跟歌词墙那栏同一份 lyricwall/index.html，不是两套
     // 播放器；触摸进墙里，不再点横幅进详情页）。只挂在設定主頁本身
     //（isMemberOfClass），子頁（GHLSSPlistPageController 繼承這裡）不掛。
@@ -545,7 +562,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     if ([self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) {
         @try {
             CGFloat w = [UIScreen mainScreen].bounds.size.width;
-            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 480)];
+            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 760)];
             container.backgroundColor = [UIColor blackColor];
             container.clipsToBounds = YES;
             NSBundle *bundle = [NSBundle bundleForClass:[self class]];
@@ -553,7 +570,8 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             WKWebView *wv = nil;
             if (htmlPath) {
                 WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
-                wv = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, w, 480) configuration:config];
+                GHLSSAddLyricWallCSSInjection(config);
+                wv = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, w, 760) configuration:config];
                 wv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
                 wv.backgroundColor = [UIColor blackColor];
                 wv.opaque = YES;
@@ -562,7 +580,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
                 [wv loadFileURL:fileURL allowingReadAccessToURL:dirURL];
                 [container addSubview:wv];
             } else {
-                UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, w, 480)];
+                UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, w, 760)];
                 lb.text = GHLSSRuntimeString("歌词墙文件没找到，请重装一次插件再试。");
                 lb.font = [UIFont systemFontOfSize:15];
                 lb.textColor = [UIColor grayColor];
@@ -595,8 +613,8 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
             @try {
                 CGFloat w = tv.bounds.size.width;
                 if (w <= 0) w = [UIScreen mainScreen].bounds.size.width;
-                self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, 480);
-                if (self.ghlssInlineLyricView) self.ghlssInlineLyricView.frame = CGRectMake(0, 0, w, 480);
+                self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, 760);
+                if (self.ghlssInlineLyricView) self.ghlssInlineLyricView.frame = CGRectMake(0, 0, w, 760);
                 tv.tableHeaderView = self.ghlssBannerContainer;
                 self.ghlssBannerInstalled = YES;
                 GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: header mounted");
@@ -609,7 +627,7 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
     }
 }
 
-// v43.30：主页嵌了整个歌词墙（480pt WKWebView 头）：离开主页时暂停内嵌
+// v43.30：主页嵌了整个歌词墙（760pt WKWebView 头）：离开主页时暂停内嵌
 // 播放器（停声音＋停渲染），防主页墙与详情页墙同时出声；回来时只恢复
 // 渲染，不自动续播（声音等用户再点播放）。
 - (void)viewWillAppear:(BOOL)animated {
@@ -678,9 +696,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.105");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.106");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.105。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.106。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1594,6 +1612,7 @@ static UIImage *GHLSSAppIconForBundleID(NSString *bid) {
         return;
     }
     WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
+    GHLSSAddLyricWallCSSInjection(config);
     WKWebView *wv = [[WKWebView alloc] initWithFrame:self.view.bounds configuration:config];
     wv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     wv.backgroundColor = [UIColor blackColor];
@@ -2050,7 +2069,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.105\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.106\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {
@@ -2268,7 +2287,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
                     NSString *txt = [GHLSSRuntimeString("iOS ") stringByAppendingString:(ver ? ver : GHLSSRuntimeString("?"))];
                     [spec setProperty:txt forKey:GHLSSRuntimeString("valueText")];
                 } else if ([vk isEqualToString:GHLSSRuntimeString("pluginVersion")]) {
-                    [spec setProperty:GHLSSRuntimeString("1.0.105") forKey:GHLSSRuntimeString("valueText")];
+                    [spec setProperty:GHLSSRuntimeString("1.0.106") forKey:GHLSSRuntimeString("valueText")];
                 }
             }
             _specifiers = loaded;
