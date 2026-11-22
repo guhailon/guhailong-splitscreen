@@ -668,9 +668,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.103");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.104");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.103。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.104。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -722,11 +722,15 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         CFPreferencesAppSynchronize(domain);
         // v43：記開關／滑桿／分段改了什麼值（只記用戶改動，不記讀取；
         // readPreferenceValue 每行渲染都跑，記了會刷爆日誌）。
-        char buf[256];
-        const char *keyC = [key UTF8String];
-        const char *valC = [[value description] UTF8String];
-        snprintf(buf, sizeof(buf), "v57 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
-        GHLSSPrefsLogLine(buf);
+        // v43.29：激活码绝不写日志——key 是 activationCode 时跳过这行
+        //（值本身照常写 prefs，检查要读它；只不记日志，码不进日志文件）。
+        if (![key isEqualToString:GHLSSRuntimeString("activationCode")]) {
+            char buf[256];
+            const char *keyC = [key UTF8String];
+            const char *valC = [[value description] UTF8String];
+            snprintf(buf, sizeof(buf), "v57 prefs-set: %s = %s", keyC ? keyC : "?", valC ? valC : "?");
+            GHLSSPrefsLogLine(buf);
+        }
     }
     if (domain) CFRelease(domain);
 }
@@ -2156,7 +2160,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.103\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.104\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {

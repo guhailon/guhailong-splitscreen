@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>SeaDragon Split v1.0.103（实验版 v103）</string>
+			<string>SeaDragon Split v1.0.104（实验版 v104）</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -22,13 +22,15 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSTextFieldCell</string>
+			<string>PSEditTextCell</string>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
 			<string>activationCode</string>
 			<key>label</key>
 			<string>激活码</string>
+			<key>noAutoCorrect</key>
+			<true/>
 		</dict>
 		<dict>
 			<key>action</key>
