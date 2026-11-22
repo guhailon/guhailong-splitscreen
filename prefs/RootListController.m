@@ -1,10 +1,10 @@
 // 顾海龙集团分屏 — 设置页（PreferenceLoader）。
 // v50：主頁順序＝版本頭／常用開關／壁紙／三屏／ARC／浮窗／其他功能／
-// 遊戲模式／遊戲模式自動觸發／操作性功能（含檢查更新）／
+// 遊戲模式／遊戲模式自動觸發／配置管理（含檢查更新）／
 // 新手模式殿後；子頁是獨立 plist（浮窗／三屏／ARC／其他＋調度／陰影／
 // 橫幅／鍵盤／搜索／桌面圖標／懸浮圖標／ARC 按鈕／兩個排序頁＋手勢自定義／
 // 狀態頁），由 PreferenceLoader 的預設控制器
-// 載入；「選擇應用」是動態頁（GHLSSAppPickerListController，下面），
+// 載入；「加入 App」是動態頁（GHLSSAppPickerListController，下面），
 // 按後台緩存的已安裝 App 清單即時建開關；日誌查看器、三屏組合、卡片頭像／
 // 背景圖、搜索、每頁重置也都是動態頁（下面）。
 //
@@ -47,6 +47,12 @@ static NSString *GHLSSPrefsFilePath(void) {
 }
 
 static NSString *GHLSSBackupFilePath(void) {
+    return [GHLSSPrefsDir() stringByAppendingPathComponent:GHLSSRuntimeString("顾海龙分屏备份.plist")];
+}
+
+// v43.23：第 2 件——舊備份檔名（改名前備份寫在這裡）；恢復時新檔名找不到
+// 就回頭找它，舊備份不斷檔（遷移選了「恢復時雙檔名都找」，不是只改注腳）。
+static NSString *GHLSSLegacyBackupFilePath(void) {
     return [GHLSSPrefsDir() stringByAppendingPathComponent:GHLSSRuntimeString("GuHaiLongSplitScreen-backup.plist")];
 }
 
@@ -954,9 +960,9 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.97");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.98");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.97。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.98。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -1132,7 +1138,7 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
         snprintf(buf, sizeof(buf), "v57 prefs-config backup: wrote %lu keys, %llu bytes to %s", (unsigned long)count, bytes, [dst UTF8String]);
         GHLSSPrefsLogLine(buf);
         // v43.10：成功後直接把檔案遞給皇上（分享表），不用自己去文件找。
-        [self ghlssShareConfigFile:dst title:GHLSSRuntimeString("已备份配置") what:GHLSSRuntimeString("备份") restoreRow:GHLSSRuntimeString("从备份文件恢复配置")];
+        [self ghlssShareConfigFile:dst title:GHLSSRuntimeString("已备份配置") what:GHLSSRuntimeString("备份") restoreRow:GHLSSRuntimeString("从备份恢复")];
     } else {
         GHLSSPrefsLogLine("v57 prefs-config backup: write failed");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("备份失败") message:GHLSSRuntimeString("复制配置文件时出错。")];
@@ -1197,7 +1203,7 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
         snprintf(buf, sizeof(buf), "v57 prefs-config export: wrote %lu keys, %llu bytes to %s", (unsigned long)count, bytes, [dst UTF8String]);
         GHLSSPrefsLogLine(buf);
         // v43.10：成功後直接把檔案遞給皇上（分享表），不用自己去文件找。
-        [self ghlssShareConfigFile:dst title:GHLSSRuntimeString("已导出配置") what:GHLSSRuntimeString("导出") restoreRow:GHLSSRuntimeString("从文件中导入配置")];
+        [self ghlssShareConfigFile:dst title:GHLSSRuntimeString("已导出配置") what:GHLSSRuntimeString("导出") restoreRow:GHLSSRuntimeString("导入配置文件")];
     } else {
         GHLSSPrefsLogLine("v57 prefs-config export: write failed");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("导出失败") message:GHLSSRuntimeString("复制配置文件时出错。")];
@@ -1286,7 +1292,7 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
     NSString *src = GHLSSExportFilePath();
     if (![fm fileExistsAtPath:src]) {
         GHLSSPrefsLogLine("v57 prefs-config import: no export file");
-        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有找到导出的配置文件") message:GHLSSRuntimeString("先点「导出配置」，再导入。")];
+        [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有找到导出的配置文件") message:GHLSSRuntimeString("先点「导出当前配置」，再导入。")];
         return;
     }
     NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:src];
@@ -1309,9 +1315,19 @@ static BOOL GHLSSWriteLivePrefsToFile(NSString *dst, NSUInteger *outCount, unsig
 }
 
 // v43.10：挑選器彈不出來時的 fallback——讀固定備份檔（舊做法）。
+// v43.23：第 2 件——備份檔名改了（顾海龙分屏备份.plist），舊檔名
+// （GuHaiLongSplitScreen-backup.plist）的備份恢復時也找得到：新檔沒有
+// 就用舊檔，找到舊檔記一行（下次備份會寫成新檔名）。
 - (void)ghlssRestoreConfigFromFixedPath {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *src = GHLSSBackupFilePath();
+    if (![fm fileExistsAtPath:src]) {
+        NSString *legacy = GHLSSLegacyBackupFilePath();
+        if ([fm fileExistsAtPath:legacy]) {
+            GHLSSPrefsLogLine("v43.23 prefs-config restore: using legacy backup filename");
+            src = legacy;
+        }
+    }
     if (![fm fileExistsAtPath:src]) {
         GHLSSPrefsLogLine("v57 prefs-config restore: no backup file");
         [self ghlssShowAlertWithTitle:GHLSSRuntimeString("没有找到备份文件") message:GHLSSRuntimeString("先点「备份配置」，再恢复。")];
@@ -1748,7 +1764,7 @@ static void GHLSSSortCellFixUp(UITableViewCell *cell) {
             PSSpecifier *group = [PSSpecifier emptyGroupSpecifier];
             NSString *footerKey = GHLSSRuntimeString("footerText");
             if ([self.orderedBids count] == 0) {
-                [group setProperty:GHLSSRuntimeString("启动器里还没有 App，先去「选择应用」加几个再来排。") forKey:footerKey];
+                [group setProperty:GHLSSRuntimeString("启动器里还没有 App，先去「加入 App」加几个再来排。") forKey:footerKey];
             } else {
                 [group setProperty:GHLSSRuntimeString("拖右边的手柄换顺序，松手立刻存；下次开启动器，「全部 App」那段就按这个顺序排（置顶／最近两段不动；新加的 App 排最后）。") forKey:footerKey];
             }
@@ -3035,7 +3051,7 @@ static BOOL GHLSSHandleLinkListTap(PSListController *controller, UITableView *ta
 // PlistPage 繼承主頁控制器（同一個 didSelectRow），所以子頁裡的嵌套
 // plist 連結（浮窗設置裡的陰影／橫幅／鍵盤／調度、其他雜項裡的
 // 桌面圖標／懸浮圖標、三屏／ARC／高級設置裡的調度／手勢自定義）走同
-// 一個攔截，一次全修；類名 detail 的嵌套行（排序頁、選擇應用、
+// 一個攔截，一次全修；類名 detail 的嵌套行（排序頁、加入 App、
 // 日誌／頭像／背景）繼續走框架，本來就正常。
 // 回傳 YES 表示這一行已經處理了（呼叫方直接 return，不要再走 super）。
 static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView *tableView, NSIndexPath *indexPath) {
@@ -3114,6 +3130,11 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
         // 內置只留內置兩行（enlargeOnKeyboardPortrait／
         // landscapeEnlargeOnKeyboard）。模式變了回這一頁時 viewWillAppear
         // 已清快取重組（v71），讀到的就是新值。
+        // v43.23：第 8 件——鍵盤頁只剩圖裡的行（模式＋兩行）：其餘三行
+        //（真外置鍵盤（實驗）／橫屏時可拖動外置鍵盤／鍵盤彈出時浮窗自動上移）
+        // 已從 Keyboard.plist 拿掉，鍵的值不動（kill switch keyboardExternalEnabled
+        // 還留著 ON，helper 還靠它；四個放大／圓角鍵的值／預設也不動）。
+        // 這裡的過濾不動——外置只留外置兩行、內置只留內置兩行，頁面就是 3 行。
         if (targetPlist && [targetPlist isEqualToString:GHLSSRuntimeString("Keyboard")]) {
             char *kmode = GHLSSPrefsCString("keyboardMode");
             BOOL outerMode = (kmode && strcmp(kmode, "outer") == 0);
@@ -3265,6 +3286,33 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
 
 @end
 
+// v43.23：第 8 件——讀 kbHelperLoaded-<bid> 標記（97 的 %ctor 寫的 prefs 鍵）：
+// helper 載入過哪個 App，這裡列哪個；主 dylib 以前沒有任何代碼讀這個鍵。
+// 用 CopyKeyList 列舉 domain 裡 kbHelperLoaded- 開頭的鍵。沒找到回 nil。
+static NSString *GHLSSKbHelperMarkersText(void) {
+    NSMutableString *marks = [NSMutableString string];
+    CFStringRef domain = GHLSSRuntimeCFString("com.guhailong.splitscreen");
+    if (domain) {
+        CFArrayRef keys = CFPreferencesCopyKeyList(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keys) {
+            CFIndex n = CFArrayGetCount(keys);
+            for (CFIndex i = 0; i < n; i++) {
+                CFStringRef kr = (CFStringRef)CFArrayGetValueAtIndex(keys, i);
+                if (!kr || CFGetTypeID(kr) != CFStringGetTypeID()) continue;
+                char kbuf[192] = {0};
+                if (!CFStringGetCString(kr, kbuf, sizeof(kbuf), kCFStringEncodingUTF8)) continue;
+                if (strncmp(kbuf, "kbHelperLoaded-", 15) != 0) continue;
+                if ([marks length] > 0) [marks appendString:GHLSSRuntimeString("、")];
+                [marks appendString:GHLSSRuntimeString(kbuf + 15)];
+            }
+            CFRelease(keys);
+        }
+        CFRelease(domain);
+    }
+    if ([marks length] == 0) return nil;
+    return marks;
+}
+
 // v50：狀態頁——版本、插件開關狀態（開關值，不是即時載入狀態）、日誌最後
 // 5 行、查看完整日誌、複製診斷信息、聯繫與源（QQ／QQ群／越獄源）。
 // 繼承主頁控制器，所以按鈕派發（冒號 SEL）與提示框都是現成的。
@@ -3316,6 +3364,12 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
                     BOOL on = GHLSSPrefsBool("enabled", NO);
                     NSString *txt = on ? GHLSSRuntimeString("启用分屏开关：开（这是系统设定里的开关状态，不是即时载入状态）") : GHLSSRuntimeString("启用分屏开关：关（这是系统设定里的开关状态，不是即时载入状态）");
                     [spec setProperty:txt forKey:GHLSSRuntimeString("footerText")];
+                } else if ([k isKindOfClass:[NSString class]] && [k isEqualToString:GHLSSRuntimeString("statusKbHelperMarkers")]) {
+                    // v43.23：第 8 件——狀態頁顯示 kbHelperLoaded-<bid> 標記，
+                    // 讓 Lee 在手機上看得到微信／QQ 的 helper 到底載入沒有。
+                    NSString *marks = GHLSSKbHelperMarkersText();
+                    NSString *txt = marks ? [GHLSSRuntimeString("键盘助手已载入：") stringByAppendingString:marks] : GHLSSRuntimeString("键盘助手：未检测到已载入标记（helper 还没进过任何 App）");
+                    [spec setProperty:txt forKey:GHLSSRuntimeString("footerText")];
                 }
             }
             _specifiers = loaded;
@@ -3341,7 +3395,12 @@ static BOOL GHLSSHandlePlistDetailTap(PSListController *controller, UITableView 
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.97\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.98\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
+    NSString *marks = GHLSSKbHelperMarkersText();
+    if (marks) {
+        diag = [[diag stringByAppendingString:GHLSSRuntimeString("\n键盘助手已载入：")] stringByAppendingString:marks];
+    }
     [UIPasteboard generalPasteboard].string = diag;
     GHLSSPrefsLogLine("v57 prefs-status diagnostics copied");
     [self ghlssShowAlertWithTitle:GHLSSRuntimeString("已复制") message:GHLSSRuntimeString("诊断信息已复制到剪贴板。")];

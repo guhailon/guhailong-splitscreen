@@ -115,18 +115,20 @@
 			<array>
 				<string>左侧边出</string>
 				<string>右侧边出</string>
+				<string>从底部出</string>
 			</array>
 			<key>validValues</key>
 			<array>
 				<string>left</string>
 				<string>right</string>
+				<string>bottom</string>
 			</array>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>启动器 App 图标从左／右侧边缘扇形滑出，弧心锚在边缘（哆啦A梦钮或滑动手指的位置）；改了下次开启动器生效。跟浮窗滑出方向是两个设定，各管各的。</string>
+			<string>启动器 App 图标从左／右侧边缘扇形滑出，弧心锚在边缘（哆啦A梦钮或滑动手指的位置）；从底部出时，圆环从底部往上展开、圆心跟着触发位置走。改了下次开启动器生效。跟浮窗滑出方向是两个设定，各管各的。</string>
 		</dict>
 	</array>
 	<key>title</key>

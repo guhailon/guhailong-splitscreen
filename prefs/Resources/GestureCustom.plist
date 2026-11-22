@@ -10,7 +10,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>浮窗上的手势自己绑动作：手势绑在窗顶上 24pt 手柄上（不是内容区，免得误触 App 里的滑动）；动作只能从现有动作里选。预设：三击窗＝钉选、下滑窗＝收起贴边、左滑窗＝关掉；双击哆啦A梦轮切不动。改完立刻生效。</string>
+			<string>浮窗上的手势自己绑动作：手势绑在窗顶上 24pt 手柄上（不是内容区，免得误触 App 里的滑动）；动作只能从现有动作里选。预设：三击窗＝钉选、下滑窗＝收起贴边、左滑窗＝关掉、双指点窗＝分屏对子（当前窗＋上一个 App 左右配对）；双击哆啦A梦轮切不动。改完立刻生效。</string>
 			<key>label</key>
 			<string>手势自定义</string>
 		</dict>
@@ -34,6 +34,7 @@
 				<string>关掉</string>
 				<string>轮切主窗</string>
 				<string>放大全屏</string>
+				<string>分屏对子</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -42,6 +43,7 @@
 				<string>close</string>
 				<string>cycle</string>
 				<string>maximize</string>
+				<string>splitpair</string>
 			</array>
 		</dict>
 		<dict>
@@ -64,6 +66,7 @@
 				<string>关掉</string>
 				<string>轮切主窗</string>
 				<string>放大全屏</string>
+				<string>分屏对子</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -72,6 +75,7 @@
 				<string>close</string>
 				<string>cycle</string>
 				<string>maximize</string>
+				<string>splitpair</string>
 			</array>
 		</dict>
 		<dict>
@@ -94,6 +98,7 @@
 				<string>关掉</string>
 				<string>轮切主窗</string>
 				<string>放大全屏</string>
+				<string>分屏对子</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -102,6 +107,7 @@
 				<string>close</string>
 				<string>cycle</string>
 				<string>maximize</string>
+				<string>splitpair</string>
 			</array>
 		</dict>
 		<dict>
@@ -110,7 +116,7 @@
 			<key>cell</key>
 			<string>PSLinkListCell</string>
 			<key>default</key>
-			<string>maximize</string>
+			<string>splitpair</string>
 			<key>defaults</key>
 			<string>com.guhailong.splitscreen</string>
 			<key>key</key>
@@ -124,6 +130,7 @@
 				<string>关掉</string>
 				<string>轮切主窗</string>
 				<string>放大全屏</string>
+				<string>分屏对子</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -132,6 +139,7 @@
 				<string>close</string>
 				<string>cycle</string>
 				<string>maximize</string>
+				<string>splitpair</string>
 			</array>
 		</dict>
 	</array>

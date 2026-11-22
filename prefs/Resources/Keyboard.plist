@@ -10,29 +10,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>1.0.80 起：键盘弹出／收起由 App 行程内的键盘助手桥接给 SpringBoard，下面各行才真正生效。真外置键盘是实验功能，默认关。</string>
+			<string>1.0.80 起：键盘弹出／收起由 App 行程内的键盘助手桥接给 SpringBoard，下面各行才真正生效。外置模式下，键盘由键盘助手移到屏幕底部全宽。</string>
 			<key>label</key>
 			<string>浮窗键盘设置</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>keyboardExternalEnabled</string>
-			<key>label</key>
-			<string>真外置键盘（实验）</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>开：浮窗 App 打字时，键盘移到屏幕底部浮窗外面（全宽）。关：键盘留在浮窗内。实验功能，未真机验证；打字异常立刻关掉，下次弹键盘就恢复，不用 respring。只对外弹出模式生效。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -125,52 +105,6 @@
 			<string>landscapeEnlargeOnKeyboard</string>
 			<key>label</key>
 			<string>输入时放大浮窗→横屏</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>只在外弹出模式下生效；键盘收起时活动浮窗一起关掉。</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>landscapeMoveExternalKeyboard</string>
-			<key>label</key>
-			<string>横屏时可拖动外置键盘</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>仅横屏且是外置键盘时生效；要开真外置键盘开关。</string>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.guhailong.splitscreen.prefschanged</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.guhailong.splitscreen</string>
-			<key>key</key>
-			<string>keyboardAvoidEnabled</string>
-			<key>label</key>
-			<string>键盘弹出时浮窗自动上移</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>内弹出模式下生效：浮窗底被键盘挡住才上移，收起回原位。</string>
 		</dict>
 	</array>
 	<key>title</key>

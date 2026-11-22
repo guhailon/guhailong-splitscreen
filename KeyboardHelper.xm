@@ -11,8 +11,15 @@
 //     就恢復原樣，不用 respring。
 // 安全邊界：%ctor 先排 bundle——SpringBoard、抖音（兩個包名，
 // DYYY.plist Filter 原文）、設定 App（kill switch 必須永遠能關）
-// 都不進；全屏 App 不動（鍵盤本來就在屏幕底部全寬，移了等於沒移；
-// 另有 keyWindow 尺寸比對守衛）。橫屏鍵盤能不能真的出浮窗外，
+// 都不進。
+// v43.23：第 8 件——全屏守衛修法。舊守衛「keyWindow 是全屏尺寸就不搬」
+// 對托管 App 幾乎永遠觸發（托管 App 的主窗口本來就是屏尺寸），所以
+// helper 從來沒搬過鍵盤（全倉庫 0 次 keyboard moved）。新區分：
+// 主窗口全屏是常態，不能拿它當「不要搬」的理由；只有兩種情況不搬——
+// (a) 鍵盤窗已經在屏幕底部全寬（本來就是外置，搬了等於沒搬）；
+// (b) 正在全屏看影片（有 AVFullScreen／AVPlayerViewController 全屏播放器
+// 在場，鍵盤不該被強制改位置）。玩遊戲全屏時鍵盤本來就該在屏底全寬，
+// 搬移的目標位置跟原生一致，不另擋。橫屏鍵盤能不能真的出浮窗外，
 // 要 Lee 真機測（鍵盤窗在託管 scene 裡怎麼合成，沒真機證實不了）。
 // 參考：Konban（nicho1asdev/Konban，MIT）README 寫鍵盤在託管視圖裡
 // 看不見但能打字；floatingView 實拍證明外置鍵盤存在，但它是付費
@@ -28,6 +35,7 @@
 #import <string.h>
 #import <stdio.h>
 #import <stdlib.h>
+#import <math.h>
 
 #define GHLSS_KB_DOMAIN "com.guhailong.splitscreen"
 #define GHLSS_KB_LOG_PATH "/var/mobile/Library/Logs/GuHaiLongSplitScreen.log"
@@ -171,6 +179,30 @@ static UIWindow *GHLSSKBKeyWindow(void) {
     return nil;
 }
 
+// v43.23：第 8 件——全屏影片偵測：掃全部窗口＋已呈現的控制器，類名裡有
+// AVFullScreen（全屏播放器窗）或 AVPlayerViewController（影片全屏控制器）
+// 才算真的在全屏看影片。主窗口本身是全屏尺寸不算——托管 App 的主窗口
+// 本來就是屏尺寸（舊守衛就是在這裡誤殺）。回傳 YES＝不要搬鍵盤。
+static BOOL GHLSSKBIsFullscreenVideoPlaying(void) {
+    UIApplication *app = [UIApplication sharedApplication];
+    if (!app) return NO;
+    for (id sc in [app connectedScenes]) {
+        if (![sc isKindOfClass:[UIWindowScene class]]) continue;
+        UIWindowScene *ws = (UIWindowScene *)sc;
+        for (UIWindow *w in [ws windows]) {
+            const char *cls = class_getName([w class]);
+            if (cls && strstr(cls, "AVFullScreen")) return YES;
+            UIViewController *vc = w.rootViewController;
+            while (vc) {
+                const char *vcCls = class_getName([vc class]);
+                if (vcCls && strstr(vcCls, "AVPlayerViewController")) return YES;
+                vc = vc.presentedViewController;
+            }
+        }
+    }
+    return NO;
+}
+
 static UIWindow *GHLSSKBDragTarget = nil;
 
 @interface GHLSSKeyboardHelper : NSObject
@@ -215,16 +247,28 @@ static UIWindow *GHLSSKBDragTarget = nil;
         GHLSSKBLogLine(buf);
     }
     // (2) 真外置：三道門——kill switch、當方向外彈出、本 App 正被託管。
+    // v43.23：第 8 件——舊第三道門「keyWindow 是全屏就不搬」刪掉：托管 App 的
+    // 主窗口本來就是屏尺寸，那道門對托管 App 幾乎永遠觸發，helper 從來沒搬過
+    // 鍵盤。改成兩道新門：(a) 鍵盤窗已經在屏幕底部全寬＝本來就是外置，不用搬；
+    // (b) 真的在全屏看影片（GHLSSKBIsFullscreenVideoPlaying）＝不要搬。
+    // 主窗口全屏≠全屏看影片；玩遊戲全屏時鍵盤本來就該在屏底全寬，不另擋。
     if (!GHLSSKBReadPrefsBool("keyboardExternalEnabled", NO)) return;
     if (GHLSSKBReadKeyboardPopupMode() != 1) return;
     CGRect screenBounds = [UIScreen mainScreen].bounds;
     UIWindow *keyWindow = GHLSSKBKeyWindow();
     if (!keyWindow) return;
-    CGSize winSize = keyWindow.bounds.size;
-    if (winSize.width == screenBounds.size.width && winSize.height == screenBounds.size.height) return;
     UIWindow *kbWindow = GHLSSKBFindKeyboardWindow();
     if (!kbWindow) {
         GHLSSKBLogLine("v43.5 kb-helper no keyboard window");
+        return;
+    }
+    if (GHLSSKBIsFullscreenVideoPlaying()) {
+        GHLSSKBLogLine("v43.23 kb-helper skip move, fullscreen video");
+        return;
+    }
+    CGRect kbFrame = kbWindow.frame;
+    if (fabs(kbFrame.size.width - screenBounds.size.width) < 1.0 && fabs(kbFrame.origin.x) < 1.0 && fabs(kbFrame.origin.y + kbFrame.size.height - screenBounds.size.height) < 1.0) {
+        GHLSSKBLogLine("v43.23 kb-helper keyboard already external");
         return;
     }
     CGRect oldFrame = kbWindow.frame;

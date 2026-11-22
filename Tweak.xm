@@ -1227,6 +1227,12 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)handleDrawerPan:(UIPanGestureRecognizer *)recognizer;
 - (void)carouselUpdateForScrollView:(UIScrollView *)scrollView;
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView;
+// v43.23：輪盤 Cover Flow 按鍵反饋——點下縮＋震、鬆手才開；點左右卡先滑到中間再開。
+- (void)handleCarouselCardTouchDown:(UIButton *)sender;
+- (void)handleCarouselCardTouchUpInside:(UIButton *)sender;
+- (void)handleCarouselCardTouchCancelled:(UIButton *)sender;
+- (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView;
+- (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView;
 - (UIButton *)arcIconButtonForBundleID:(const char *)bid name:(const char *)name tag:(NSInteger)tag action:(SEL)action atCenter:(CGPoint)center size:(CGFloat)size withName:(BOOL)withName;
 // v43.2：圓環中央大設定齒輪。
 - (UIButton *)arcRadialGearButtonAtCenter:(CGPoint)center size:(CGFloat)size;
@@ -1237,6 +1243,8 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // 新窗建好不再弹「已打開 <App>」横幅；低电量那两条走 showNotificationBannerWithText，不动。
 - (void)handleBannerTap:(UITapGestureRecognizer *)recognizer;
 - (void)openAppFullscreen:(const char *)bundleID;
+// v43.23：第 6 件——全屏開了，同 App 的小浮窗自己退出（關掉，scene 留著）。
+- (void)closeDockedPeekForFullscreenBid:(const char *)bundleID;
 - (void)handleScreenCaptureChanged:(NSNotification *)note;
 // v42：尺寸預設 + 手勢自定義（綁細條）；v60：控制條整個拿掉，
 // 釘選鈕（handlePinButton）跟著刪——釘選只剩手勢動作 "pin"（三擊預設）。
@@ -1248,6 +1256,8 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 - (void)handleGestureSwipeHorizontal:(UISwipeGestureRecognizer *)recognizer;
 - (void)handleGestureTwoFingerTap:(UITapGestureRecognizer *)recognizer;
 - (void)performGestureAction:(const char *)action;
+// v43.23：第 4 件——雙指點預設改開分屏對子（當前窗＋FrontOrder 第二個）。
+- (void)openSplitPairWithPrevious;
 - (void)resizeActiveWindowToFrame:(CGRect)frame;
 // v42：底部任務欄、ARC 設置入口、
 // 鍵盤上移、設定卡片（見下面卡片段；v53：懸浮球已拿掉）。
@@ -1280,7 +1290,9 @@ static UIScrollView *GHLSSCarouselScrollView = nil;
 static NSArray *GHLSSCarouselCards = nil;
 static UIPageControl *GHLSSCarouselPageControl = nil;
 static CGFloat GHLSSCarouselPageWidth = 0;
+static int GHLSSCarouselPendingOpenIdx = -1; // v43.23：輪盤點左右卡後待打開的下標（滑到中間才開）。
 static CGFloat GHLSSLauncherAnchorY = -1; // v55：啟動器弧心 Y（哆啦A夢鈕中心或邊緣滑動手指位置）。
+static CGFloat GHLSSLauncherAnchorX = -1; // v43.23：啟動器弧心 X（底部出時圓心跟觸發位置的 X 走）。
 static UIWindow *GHLSSLauncherBackdropWindow = nil;
 static char GHLSSAppPickerBids[256][128]; // v41：選 App 頁每一行的 bundleID（開關 tag = 行號）。
 static int GHLSSAppPickerCount = 0;
@@ -1355,6 +1367,7 @@ static BOOL GHLSSRestoreGaveUp[GHLSS_APP_COUNT]; // v43.7：这扇窗重建一�
 static int GHLSSRestoreGateMode = 0; // v72：门控模式——0 恢复（窗藏着，等就绪淡入显示）；1 已显示窗（promote／新窗，只盖占位、就绪淡出占位）。
 static UIView *GHLSSGatePlaceholders[GHLSS_APP_COUNT]; // v72：每窗一个载入占位（深灰底＋转圈＋App 名）。
 static UIView *GHLSSGateFrozenSnaps[GHLSS_APP_COUNT]; // v43.22：每窗一个凍結快照（門控等待期間顯示最後一幀活內容，不換深灰佔位；點不動，帶細微載入提示）。
+static UIView *GHLSSPeekDockSnaps[GHLSS_APP_COUNT]; // v43.23：第 7 件——每窗一个 dock 快照（收成小卡當下抓的活幀；scene 掉 0 時小卡顯示它，平時藏著；不能跟門控凍結幀共用一個槽位——看門狗每 2 秒清一次凍結幀）。
 static BOOL GHLSSSuppressSlideInOnce = NO; // v72：重建 scene 时下一次建窗不滑入（直接出现在原位）。
 static UIWindow *GHLSSSnapshotAnimWindow = nil; // v72：快照动画的临时窗（播完就收掉）.
 static UIView *GHLSSRestorePreSnap = nil; // v43.6：恢复前预抓的快照（改尺寸之前抓，layer 里还是小卡最后一帧活内容；动画用完就清）。
@@ -1651,6 +1664,7 @@ GHLSSCacheContentViews[idx] = nil;
 // v43.22：凍結快照同理（container 丟了它也跟著丟，指標不清會變野指標）。
 GHLSSGatePlaceholders[idx] = nil;
 GHLSSGateFrozenSnaps[idx] = nil;
+GHLSSPeekDockSnaps[idx] = nil; // v43.23：第 7 件——dock 快照指標同清。
 GHLSSCacheResizeHandles[idx] = nil;
 GHLSSCacheSideDividers[idx] = nil;
 GHLSSCacheIsSideDock[idx] = NO;
@@ -1693,6 +1707,7 @@ GHLSSCacheContainers[idx] = nil;
 GHLSSCacheContentViews[idx] = nil;
 GHLSSGatePlaceholders[idx] = nil;
 GHLSSGateFrozenSnaps[idx] = nil; // v43.22：凍結快照指標同清（窗藏了，凍結幀不留）。
+GHLSSPeekDockSnaps[idx] = nil; // v43.23：第 7 件——dock 快照指標同清。
 GHLSSCacheResizeHandles[idx] = nil;
 GHLSSCacheSideDividers[idx] = nil;
 GHLSSCacheIsSideDock[idx] = NO;
@@ -2442,7 +2457,8 @@ return GHLSSReadPrefsBool("closeThreeScreenAlsoClosesSide", NO);
 }
 // v41：ARC 打開方式（arcOpenMode，字串：fullscreen / floating /
 // threescreen，預設 floating；橫屏下強制 floating）、ARC 圖標大小
-// （arcIconSize 40–72，預設 56）、啟動器滑出方向（arcSlideSide，左／右，預設右）、
+// （arcIconSize 40–72，預設 56）、啟動器滑出方向（arcSlideSide，左／右／
+// 從底部出，預設右）、
 // 顯示已開綠點（arcShowOpenDots，預設開）、顯示 App 名（arcShowNames，
 // 預設開）、截圖錄屏隱藏 ARC（arcHideOnScreenshot，預設開）、震動反饋
 // （arcHaptics，預設開）、觸控音效（arcTouchSound，預設開）。
@@ -2466,14 +2482,23 @@ return (CGFloat)v;
 // v55：啟動器滑出方向（arcSlideSide，ARCButtons.plist）：左邊出就從左緣
 // 往裡扇、右邊出就從右緣往裡扇；沒設預設右（現有行為）。跟浮窗滑出方向
 //（floatingWindowSlideSide）是兩個設定，各管各的。
-static BOOL GHLSSIsARCSlideLeft(void) {
+// v43.23：第 3 件——加第三檔「從底部出」（bottom）：圓環版從底部往上展開、
+// 圓心跟觸發位置走；左／右兩檔行為不動（圓心仍是屏幕中心）。
+static int GHLSSReadARCSlideSide(void) {
 char *side = GHLSSReadPrefsCString("arcSlideSide");
-BOOL isLeft = NO;
+int s = 1;
 if (side) {
-isLeft = (strcmp(side, "left") == 0);
+if (strcmp(side, "left") == 0) s = 0;
+else if (strcmp(side, "bottom") == 0) s = 2;
 free(side);
 }
-return isLeft;
+return s;
+}
+static BOOL GHLSSIsARCSlideLeft(void) {
+return GHLSSReadARCSlideSide() == 0;
+}
+static BOOL GHLSSIsARCSlideBottom(void) {
+return GHLSSReadARCSlideSide() == 2;
 }
 // v54 M：ARC 層數（arcLayerCount，ARCButtons.plist）：ARC 浮窗裡 App 圖標
 // 的弧圈層數（同心弧），1–5 層，預設 2 層。改了下次開 ARC 生效
@@ -3936,6 +3961,34 @@ GHLSSCacheResizeHandles[idx].frame = CGRectMake(dispW - 36, dispH - 36, 36, 36);
 }
 // v53：收成 peek 時把 scene 推到 peek 尺寸（App 按小窗重排版，不再是左上切片）。
 GHLSSPushPeekScaleForIndex(idx, dispW, dispH);
+// v43.23：第 7 件——黑小卡 dock 快照：dock 當下抓一張活快照，存進 dock 快照槽位
+//（GHLSSPeekDockSnaps；97 的 C 凍結幀只在主窗恢復門控裡，小卡沒有；也不能共用
+// 那個槽位——看門狗每 2 秒清一次凍結幀，dock 快照放那裡活不過一輪）。
+// scene 之後掉到 contentState==0 時，看門狗走 GHLSSShowPlaceholderForIndex——
+// 那裡優先顯示 dock 快照而不是深灰佔位，所以小卡顯示最後一幀而不是黑的；
+// scene 恢復活了（cs==2），看門狗走 GHLSSHidePlaceholderForIndex 把快照藏回去，
+// 換回 live。快照平時藏著（hidden=YES），不蓋活內容；97 的 A（熔斷 2 秒）＋
+// C（主窗凍結幀）不動。
+{
+UIView *oldDockSnap = GHLSSPeekDockSnaps[idx];
+if (oldDockSnap && oldDockSnap.superview == container) [oldDockSnap removeFromSuperview];
+GHLSSPeekDockSnaps[idx] = nil;
+UIView *dockSnap = nil;
+@try { dockSnap = [container snapshotViewAfterScreenUpdates:NO]; } @catch (NSException *e) { (void)e; dockSnap = nil; }
+if (dockSnap) {
+dockSnap.frame = container.bounds;
+dockSnap.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+dockSnap.userInteractionEnabled = NO;
+dockSnap.hidden = YES;
+[container addSubview:dockSnap];
+if (GHLSSPeekTapOverlays[idx]) [container bringSubviewToFront:GHLSSPeekTapOverlays[idx]];
+if (GHLSSCacheResizeHandles[idx]) [container bringSubviewToFront:GHLSSCacheResizeHandles[idx]];
+GHLSSPeekDockSnaps[idx] = dockSnap;
+char dbuf[192];
+snprintf(dbuf, sizeof(dbuf), "v43.23 dock snapshot captured %s", GHLSSCacheBundleIDs[idx]);
+GHLSSLogLine(dbuf);
+}
+}
 // v63：修黑 peek——peek 顯示時把它的 scene 推回前景（所有 peek 的必經之路：
 // 手動收起、自動 peek、遊戲模式收小都在這裡）。scene 一旦因鎖屏推後台、
 // 或進程被掛起而丟了前景，就停止合成、peek 全黑；推前景把它喚回來
@@ -3974,6 +4027,12 @@ GHLSSLogLine(buf);
 static void GHLSSHideDockPeekForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 GHLSSCacheMinimized[idx] = NO;
+// v43.23：第 7 件——小卡恢復／關掉時 dock 快照一起清掉（下次收起再抓新的）。
+UIView *dockSnap = GHLSSPeekDockSnaps[idx];
+if (dockSnap) {
+[dockSnap removeFromSuperview];
+GHLSSPeekDockSnaps[idx] = nil;
+}
 if (GHLSSPeekTapOverlays[idx]) GHLSSPeekTapOverlays[idx].hidden = YES;
 if (GHLSSCacheResizeHandles[idx] && GHLSSCacheContainers[idx]) {
 UIView *handle = GHLSSCacheResizeHandles[idx];
@@ -5011,6 +5070,7 @@ if (!GHLSSReadEnabled()) return;
 // 下次開 ARC 會重記；感應帶窗是全屏高，窗座標 Y 就是屏幕 Y）。
 CGPoint swipeLoc = [recognizer locationInView:nil];
 GHLSSLauncherAnchorY = swipeLoc.y;
+GHLSSLauncherAnchorX = swipeLoc.x;
 // v42：邊緣滑動直接開三屏（開關開著時，邊緣滑動不再開 ARC、改開三屏；
 // 次數/邊照調度設定走——下面那套計數邏輯不動，只換終點）。
 if (GHLSSReadEdgeSwipeOpensThreeScreen()) {
@@ -5085,6 +5145,7 @@ return;
 }
 if (GHLSSDoraemonButtonWindow) {
 GHLSSLauncherAnchorY = GHLSSDoraemonButtonWindow.frame.origin.y + GHLSSDoraemonButtonWindow.frame.size.height / 2.0;
+GHLSSLauncherAnchorX = GHLSSDoraemonButtonWindow.frame.origin.x + GHLSSDoraemonButtonWindow.frame.size.width / 2.0;
 }
 GHLSSLogLine("v57 handle button tapped, opening ARC");
 [self showLauncher];
@@ -5566,12 +5627,39 @@ if (opened) {
 char buf[256];
 snprintf(buf, sizeof(buf), "v57 fullscreen open %s", bundleID);
 GHLSSLogLine(buf);
+// v43.23：第 6 件——全屏開了，同 App 的浮窗副本自己退出（見下面）。
+[self closeDockedPeekForFullscreenBid:bundleID];
 } else {
 GHLSSLogLine("v57 fullscreen open unavailable, falling back to floating");
 int fidx = GHLSSAppIndexForBundleID(bundleID);
 const char *fname = (fidx >= 0) ? GHLSSAppNames[fidx] : bundleID;
 [self launchHostedApp:bundleID name:fname];
 }
+}
+
+// v43.23：第 6 件——App 全屏開了，同 App 的小浮窗自己退出。
+// 什麼算「全屏開」：只有 openAppFullscreen 經 SBApplicationController
+// 成功把 App 叫到前台（opened==YES）才算；失敗退回浮窗的不算。
+// 小卡是整個關掉（closeCachedEntryAtIndex：load→closeHostedWindow→
+// drop entry，scene 留著），不是只藏起來——關了重開再托管現有 scene。
+// 搭檔：豁免取消——全屏開的那半是分屏搭檔時先結束分屏會話
+//（endSplitPairSession，另一半留作普通浮窗，不一起關）；三屏側窗同理，
+// 只關全屏開那個 App 自己的浮窗副本，主窗不動。
+- (void)closeDockedPeekForFullscreenBid:(const char *)bundleID {
+if (!bundleID || bundleID[0] == '\0') return;
+int idx = GHLSSAppIndexForBundleID(bundleID);
+if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
+if (!GHLSSCacheWindows[idx]) return;
+BOOL wasSplitPartner = GHLSSIsSplitPartnerIndex(idx);
+BOOL wasMinimized = GHLSSCacheMinimized[idx];
+BOOL wasSideDock = GHLSSCacheIsSideDock[idx];
+if (wasSplitPartner) [self endSplitPairSession];
+if (!GHLSSCacheWindows[idx]) return;
+[self closeCachedEntryAtIndex:idx];
+const char *kind = wasMinimized ? "docked peek" : (wasSplitPartner ? "split half" : (wasSideDock ? "side window" : "floating window"));
+char buf[256];
+snprintf(buf, sizeof(buf), "v43.23 fullscreen open closed %s %s%s", kind, bundleID, wasSplitPartner ? " (split pair ended)" : "");
+GHLSSLogLine(buf);
 }
 
 // v25：启动必须在主线程做——v24 把它放后台队列，BSTransaction 的 begin
@@ -6473,6 +6561,14 @@ GHLSSActiveAppIndex = newCacheIdx;
 GHLSSSaveActiveToCache();
 }
 GHLSSLogLine("v57 window shown");
+// v43.23：第 9 件——建窗日誌補原點（40.log §6 建議 3）：window shown 時
+// finalFrame 已定（滑入動畫只改 slideWin.frame，finalFrame 是最終框），
+// 把尺寸＋屏幕原點一起印出來，診斷不用再靠夾取反推位置。
+{
+char wbuf[128];
+snprintf(wbuf, sizeof(wbuf), "v43.23 window shown frame %dx%d@%d,%d", (int)finalFrame.size.width, (int)finalFrame.size.height, (int)finalFrame.origin.x, (int)finalFrame.origin.y);
+GHLSSLogLine(wbuf);
+}
 // v42：浮窗透明度（每窗 winOpacity_<bid>，沒設走全域；調窗的 alpha）。
 GHLSSHostedWindow.alpha = GHLSSReadWindowOpacityForBundleID(bundleID);
 // v40：新窗带到最前（别的窗回基础层级，这个窗升到最前层级、活动量
@@ -7003,9 +7099,23 @@ UIView *container = GHLSSCacheContainers[idx];
 if (!container) return;
 // v43.22：有凍結快照就繼續顯示它，不蓋深灰佔位（凍結幀是最後一幀活內容，
 // 比深灰好看；點不動，載入提示已在快照上；點按層／調尺寸手柄照舊提到它上面）。
+// v43.23：第 7 件——dock 快照平時是藏著的（hidden=YES，不蓋活內容），
+// 佔位要顯示時才在這裡打開它（scene 掉 0 時小卡顯示最後一幀）。
 UIView *frozen = GHLSSGateFrozenSnaps[idx];
 if (frozen && frozen.superview == container) {
+frozen.hidden = NO;
 [container bringSubviewToFront:frozen];
+if (GHLSSPeekTapOverlays[idx]) [container bringSubviewToFront:GHLSSPeekTapOverlays[idx]];
+if (GHLSSCacheResizeHandles[idx]) [container bringSubviewToFront:GHLSSCacheResizeHandles[idx]];
+return;
+}
+// v43.23：第 7 件——dock 快照：scene 掉 0 時小卡顯示 dock 當下抓的最後一幀，
+// 而不是深灰佔位（97 的 C 只蓋主窗恢復門控，小卡沒有自己的幀）。快照平時藏著，
+// 這裡才打開；點按層／調尺寸手柄照舊提到它上面。
+UIView *dockSnap = GHLSSPeekDockSnaps[idx];
+if (dockSnap && dockSnap.superview == container) {
+dockSnap.hidden = NO;
+[container bringSubviewToFront:dockSnap];
 if (GHLSSPeekTapOverlays[idx]) [container bringSubviewToFront:GHLSSPeekTapOverlays[idx]];
 if (GHLSSCacheResizeHandles[idx]) [container bringSubviewToFront:GHLSSCacheResizeHandles[idx]];
 return;
@@ -7033,6 +7143,9 @@ GHLSSLogLine("v74 static placeholder shown");
 
 // v72：拿掉占位（0.2 秒淡出；没有占位就直接回，不重复淡）。
 // v43.22：佔位拿掉時凍結快照一起拿掉（活內容出來了，不再需要凍結幀）。
+// v43.23：第 7 件——dock 快照只藏回去（hidden=YES），不拿掉：小卡還收著，
+// scene 下次再掉 0 還要靠它顯示最後一幀；小卡恢復／關掉時由
+// GHLSSHideDockPeekForIndex／銷毀入口清掉。
 static void GHLSSHidePlaceholderForIndex(int idx) {
 if (idx < 0 || idx >= GHLSS_APP_COUNT) return;
 UIView *frozen = GHLSSGateFrozenSnaps[idx];
@@ -7040,6 +7153,8 @@ if (frozen) {
 GHLSSGateFrozenSnaps[idx] = nil;
 [frozen removeFromSuperview];
 }
+UIView *dockSnap = GHLSSPeekDockSnaps[idx];
+if (dockSnap) dockSnap.hidden = YES;
 UIView *ph = GHLSSGatePlaceholders[idx];
 if (!ph) return;
 GHLSSGatePlaceholders[idx] = nil;
@@ -7605,7 +7720,7 @@ if (cs3 == 0) GHLSSLogLine("v68 restore scene still not ready");
 }
 {
 char gbuf[256];
-snprintf(gbuf, sizeof(gbuf), "v57 window restored frame %dx%d geo %dx%d preset %dx%d", (int)targetW, (int)targetH, hasGeo ? (int)geoW : -1, hasGeo ? (int)geoH : -1, (int)presetW, (int)presetH);
+snprintf(gbuf, sizeof(gbuf), "v57 window restored frame %dx%d@%d,%d geo %dx%d preset %dx%d", (int)targetW, (int)targetH, (int)(targetCX - targetW / 2.0), (int)(targetCY - targetH / 2.0), hasGeo ? (int)geoW : -1, hasGeo ? (int)geoH : -1, (int)presetW, (int)presetH);
 GHLSSLogLine(gbuf);
 }
 if (GHLSSHostedSideDivider) GHLSSHostedSideDivider.hidden = YES;
@@ -7943,7 +8058,61 @@ GHLSSLogLine(buf);
 } else if (strcmp(action, "maximize") == 0) {
 // v63：尺寸固定——maximize 手勢停用（拉大拉小後續再做）。
 GHLSSLogLine("v68 maximize gesture disabled, fixed size");
+} else if (strcmp(action, "splitpair") == 0) {
+// v43.23：第 4 件——雙指點預設：當前窗＋上一個 App 左右配對開分屏對子。
+[self openSplitPairWithPrevious];
 }
+}
+
+// v43.23：第 4 件——雙指點開分屏對子：當前活動窗＋「上一個 App」。
+// 「上一個 App」取 FrontOrder 第二個（最近一次被帶到最前的另一個窗，
+// 是代碼裡現成的最合理定義——帶到最前／恢復／建新窗時都更新這張表；
+// 不是 recentAppIDs，那份只記「開過」，不記「最後在看哪個」）。
+// 表裡找不到（只有一扇窗）就退回 recentAppIDs 第一個不是當前窗的 App；
+// 還是沒有就不開，只記一行。
+- (void)openSplitPairWithPrevious {
+int curIdx = GHLSSActiveAppIndex;
+if (curIdx < 0 || curIdx >= GHLSS_APP_COUNT) curIdx = GHLSSAppIndexForWindow(GHLSSHostedWindow);
+if (curIdx < 0 || curIdx >= GHLSS_APP_COUNT || GHLSSCacheBundleIDs[curIdx][0] == '\0') {
+GHLSSLogLine("v43.23 two finger split no current window");
+return;
+}
+int prevIdx = -1;
+for (int k = 1; k < GHLSS_APP_COUNT; k++) {
+int i = GHLSSFrontOrder[k];
+if (i == curIdx) continue;
+if (i < 0 || i >= GHLSS_APP_COUNT) continue;
+if (!GHLSSCacheWindows[i] || GHLSSCacheBundleIDs[i][0] == '\0') continue;
+prevIdx = i;
+break;
+}
+char prevBid[128] = {0};
+if (prevIdx < 0) {
+NSArray *recent = GHLSSReadIDList("recentAppIDs");
+for (id item in recent) {
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *r = [(NSString *)item UTF8String];
+if (!r || !r[0] || strcmp(r, GHLSSCacheBundleIDs[curIdx]) == 0) continue;
+if (GHLSSAppIndexForBundleID(r) < 0) continue;
+strncpy(prevBid, r, sizeof(prevBid) - 1);
+break;
+}
+if (prevBid[0] == '\0') {
+GHLSSLogLine("v43.23 two finger split no previous app");
+return;
+}
+} else {
+strncpy(prevBid, GHLSSCacheBundleIDs[prevIdx], sizeof(prevBid) - 1);
+}
+char prevName[128];
+GHLSSAppNameForBundleID(prevBid, prevName, sizeof(prevName));
+char sbuf[300];
+snprintf(sbuf, sizeof(sbuf), "v43.23 two finger split %s + %s", GHLSSCacheBundleIDs[curIdx], prevBid);
+GHLSSLogLine(sbuf);
+GHLSSForceSplitPairOnce = YES;
+char curName[128];
+GHLSSAppNameForBundleID(GHLSSCacheBundleIDs[curIdx], curName, sizeof(curName));
+[self openPairWithBundleIDs:GHLSSCacheBundleIDs[curIdx] mainName:curName sideBid:prevBid sideName:prevName];
 }
 
 
@@ -7976,7 +8145,8 @@ GHLSSLogLine(buf);
 }
 
 // v42：手勢自定義（細條上的手勢；動作走設定，沒設回預設：
-// 三擊=釘選、上下滑=收起貼邊、左右滑=關掉、雙指點=放大）。
+// 三擊=釘選、上下滑=收起貼邊、左右滑=關掉、雙指點=分屏對子
+//（v43.23：原預設「放大全屏」從 v68 起停用，換成開分屏對子）。
 - (void)handleGestureTripleTap:(UITapGestureRecognizer *)recognizer {
 UIWindow *w = GHLSSWindowForView(recognizer.view);
 if (w) GHLSSSetActiveToWindow(w);
@@ -8008,7 +8178,7 @@ GHLSSLogLine("v57 gesture swipe horizontal");
 UIWindow *w = GHLSSWindowForView(recognizer.view);
 if (w) GHLSSSetActiveToWindow(w);
 char *action = GHLSSReadPrefsCString("gestureTwoFingerTap");
-const char *a = action ? action : "maximize";
+const char *a = action ? action : "splitpair";
 [self performGestureAction:a];
 if (action) free(action);
 GHLSSLogLine("v57 gesture two finger tap");
@@ -8471,14 +8641,22 @@ GHLSSLogLine(buf);
 // v43.5：橫屏鍵盤彈起放大浮窗——把活動窗放大到鍵盤上方空位，收起恢復原尺寸。
 // 用 resizeActiveWindowToFrame（走現成夾取＋scene 改尺寸＋尺寸門）；
 // 放大前原尺寸存靜態量，收起時同一條路縮回去，存的幾何也跟著回去。
+// v43.23：第 9 件——放大不改寬度（40.log §413）：targetW 用當前窗口寬度，
+// 不再用屏寬−32（398）。寬度不變，webview 視口寬度就不變，鍵盤收起縮回
+// 346×749 時頁面不會橫向偏、左邊不再被切。只改高度／位置：targetH＝
+// 屏高−鍵盤高−60（530）不變，窗口居中在鍵盤上方空位；X 跟著當前窗口中心走，
+// 不拉回屏幕中心（Lee 拖過的位置不動）。守衛也跟著改：以前是「寬高任一
+// 會變大才動」，寬度固定後那個條件在正常情況（749→530）會誤擋——現在只看
+// 窗底是不是已經在鍵盤上方，已經在上面就不用動。
 - (void)ghlssEnlargeWindowForKeyboardHeight:(CGFloat)kbHeight {
 if (GHLSSKeyboardEnlarged || !GHLSSHostedWindow || GHLSSHostedMinimized) return;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGRect winFrame = GHLSSHostedWindow.frame;
-CGFloat targetW = screenBounds.size.width - 32.0;
+CGFloat targetW = winFrame.size.width;
 CGFloat targetH = screenBounds.size.height - kbHeight - 60.0;
-if (targetW <= winFrame.size.width && targetH <= winFrame.size.height) return;
-CGFloat cx = screenBounds.size.width / 2.0;
+CGFloat kbTop = screenBounds.size.height - kbHeight;
+if (winFrame.origin.y + winFrame.size.height <= kbTop) return;
+CGFloat cx = winFrame.origin.x + winFrame.size.width / 2.0;
 CGFloat cy = (screenBounds.size.height - kbHeight) / 2.0;
 GHLSSKeyboardEnlargedSavedFrame = winFrame;
 GHLSSKeyboardEnlarged = YES;
@@ -9480,12 +9658,25 @@ return total;
 // 设定值；装不下就往小缩（每次减 4，最小 40pt，跟以前一样）；缩到 40pt
 // 还装不下（单圈约 20 个）才开多圈——多圈走原来的同心圆环逻辑
 //（GHLSSRadialRingLayout），25 个 App 时是 3 圈（2 圈在 40pt 下只装得下 22 个）。
+// v43.23：第 3 件——滑出方向選「從底部出」時圓心改跟觸發位置走（貼底緣），
+// 圖標只排上半扇、按半圓弧長重算每環容量；左／右兩檔圓心仍是屏幕中心。
 - (CGFloat)addRadialARCIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
 if (!bids || bids.count == 0) return 0;
 NSInteger total = bids.count;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGPoint center = CGPointMake(screenBounds.size.width / 2.0, screenBounds.size.height / 2.0);
 CGFloat gearSize = 76.0;
+// v43.23：第 3 件——從底部出：圓心不再是屏幕中心，改跟觸發位置走
+//（邊緣滑動手指的 X／哆啦A夢鈕中心 X），貼在底緣上方；左／右兩檔不動。
+BOOL slideBottom = GHLSSIsARCSlideBottom();
+if (slideBottom) {
+CGFloat ax = GHLSSLauncherAnchorX;
+if (ax < 0) ax = screenBounds.size.width / 2.0;
+CGFloat axMargin = 76.0;
+if (ax < axMargin) ax = axMargin;
+if (ax > screenBounds.size.width - axMargin) ax = screenBounds.size.width - axMargin;
+center = CGPointMake(ax, screenBounds.size.height - 76.0);
+}
 CGFloat icon = size;
 if (icon < 40.0) icon = 40.0;
 if (icon > 72.0) icon = 72.0;
@@ -9538,6 +9729,63 @@ GHLSSLogLine(cbuf);
 }
 }
 }
+// v43.23：第 3 件——從底部出：環按半圓扇面重算（全圓容量在扇面裡會擠成一團）。
+// 半徑從齒輪外緣起、環距＝圖標＋14，半圓弧長／間距＝每環容量；裝不下就把圖標
+// 往小縮（最小 40pt）；縮到底還裝不下，最外環收掉剩下的（間距變緊，總比漏 App 好）。
+if (slideBottom) {
+CGFloat pitch = icon + 14.0;
+CGFloat maxR = center.x;
+if (screenBounds.size.width - center.x < maxR) maxR = screenBounds.size.width - center.x;
+CGFloat topRoom = center.y - GHLSSScreenSafeTopInset();
+if (topRoom < maxR) maxR = topRoom;
+maxR -= icon / 2.0 + 8.0;
+if (maxR < 40.0) maxR = 40.0;
+int rr = 0;
+int capSum = 0;
+CGFloat rr0 = gearSize / 2.0 + icon / 2.0 + 16.0;
+while (rr < 6 && capSum < (int)total) {
+CGFloat r = rr0 + rr * pitch;
+if (r > maxR) break;
+int fanCap = (int)(M_PI * r / pitch);
+if (fanCap < 1) fanCap = 1;
+radii[rr] = r;
+caps[rr] = fanCap;
+capSum += fanCap;
+rr++;
+}
+if (capSum < (int)total && icon > 40.0) {
+icon = 40.0;
+pitch = icon + 14.0;
+rr = 0;
+capSum = 0;
+rr0 = gearSize / 2.0 + icon / 2.0 + 16.0;
+while (rr < 6 && capSum < (int)total) {
+CGFloat r = rr0 + rr * pitch;
+if (r > maxR) break;
+int fanCap = (int)(M_PI * r / pitch);
+if (fanCap < 1) fanCap = 1;
+radii[rr] = r;
+caps[rr] = fanCap;
+capSum += fanCap;
+rr++;
+}
+}
+if (rr == 0) {
+radii[0] = maxR;
+caps[0] = (int)total;
+rr = 1;
+capSum = (int)total;
+}
+if (rr > 0 && capSum < (int)total) {
+caps[rr - 1] += (int)total - capSum;
+capSum = (int)total;
+}
+rings = rr;
+for (int r = rr; r < 6; r++) { radii[r] = 0; caps[r] = 0; }
+char bbuf[128];
+snprintf(bbuf, sizeof(bbuf), "v43.23 radial bottom fan center=%d,%d rings=%d cap=%d", (int)center.x, (int)center.y, rings, capSum);
+GHLSSLogLine(bbuf);
+}
 CGFloat maxBottom = 0;
 NSInteger idx = 0;
 for (int ring = 0; ring < rings; ring++) {
@@ -9553,6 +9801,16 @@ if (!bid || bid[0] == '\0') continue;
 double step = (count == 1) ? 0.0 : 2.0 * M_PI / (double)count;
 double stagger = (ring % 2 == 1) ? step / 2.0 : 0.0;
 double angle = -M_PI_2 + stagger + step * (double)j;
+// v43.23：第 3 件——從底部出：只排上半扇（角度 π..2π，從底緣往上展開），
+// 奇數環錯半格（跟全圓版同一做法，扇面裡也錯開）。
+if (slideBottom) {
+if (count == 1) angle = -M_PI_2;
+else {
+double fanStep = M_PI / (double)(count - 1);
+angle = M_PI + fanStep * (double)j + ((ring % 2 == 1) ? fanStep / 2.0 : 0.0);
+if (angle > 2.0 * M_PI) angle = 2.0 * M_PI;
+}
+}
 CGPoint p = CGPointMake(center.x + radius * cos(angle), center.y + radius * sin(angle));
 char name[128];
 GHLSSAppNameForBundleID(bid, name, sizeof(name));
@@ -9741,8 +9999,12 @@ panel.frame = CGRectMake(panel.frame.origin.x, GHLSSDrawerPanelBaseY, panel.fram
 // 兩邊的小一點＋淡一點，下面有圓點和頁數。點卡片開浮窗。scroll view 框只有
 // 一頁寬、居中，clipsToBounds 關掉才看得到兩邊的卡片（兩邊卡片點不到，滑到
 // 中間再點）。
+// v43.23：第 5 件——輪盤改 A Cover Flow 透視（Lee 2026-11-22 定，見
+// hidden_files/carousel-3d-options.png 的 A）：中間卡正著最大、鑲金邊、
+// 底下有影子；左右卡斜著排、透視傾斜；下面圓點保留。B 層疊縱深不做。
 - (CGFloat)addCarouselLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
 (void)size;
+(void)action;
 if (!bids || [bids count] == 0) return 0;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGFloat screenW = screenBounds.size.width;
@@ -9780,7 +10042,11 @@ card.frame = CGRectMake(cx - cardW / 2.0, 10.0, cardW, cardH);
 card.tag = tag;
 card.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
 card.layer.cornerRadius = 20.0;
-[card addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+// v43.23：按鍵反饋——點下縮＋震、鬆手才打開；點左右卡先滑到中間再開
+//（不用 TouchUpInside 直開，1.0.94「兩邊點不到」的限制就改掉了）。
+[card addTarget:self action:@selector(handleCarouselCardTouchDown:) forControlEvents:UIControlEventTouchDown];
+[card addTarget:self action:@selector(handleCarouselCardTouchUpInside:) forControlEvents:UIControlEventTouchUpInside];
+[card addTarget:self action:@selector(handleCarouselCardTouchCancelled:) forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel];
 CGFloat bigIcon = 96.0;
 UIImage *icon = GHLSSAppIcon(bid);
 UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake((cardW - bigIcon) / 2.0, 44.0, bigIcon, bigIcon)];
@@ -9827,13 +10093,37 @@ return cardH;
 - (void)carouselUpdateForScrollView:(UIScrollView *)sv {
 if (!GHLSSCarouselCards) return;
 CGFloat cx = sv.contentOffset.x + sv.bounds.size.width / 2.0;
-for (UIView *card in GHLSSCarouselCards) {
+// v43.23 A Cover Flow 透視：中間卡正著最大、鑲金邊、底下有影子；
+// 左右卡斜著排（繞 Y 軸透視傾斜，越遠越斜、越小、越暗）；下面圓點保留。
+NSInteger centerIdx = -1;
+CGFloat bestD = 1e9;
+for (NSInteger ci = 0; ci < (NSInteger)[GHLSSCarouselCards count]; ci++) {
+UIView *card = [GHLSSCarouselCards objectAtIndex:ci];
+CGFloat d = fabs(card.center.x - cx);
+if (d < bestD) { bestD = d; centerIdx = ci; }
+}
+for (NSInteger ci = 0; ci < (NSInteger)[GHLSSCarouselCards count]; ci++) {
+UIView *card = [GHLSSCarouselCards objectAtIndex:ci];
 CGFloat d = fabs(card.center.x - cx);
 CGFloat t = d / GHLSSCarouselPageWidth;
 if (t > 1.0) t = 1.0;
+CATransform3D tr = CATransform3DIdentity;
+tr.m34 = -1.0 / 500.0;
+CGFloat rotY = 0;
+if (t > 0.02) rotY = (card.center.x < cx) ? -0.6 * t : 0.6 * t;
+tr = CATransform3DRotate(tr, rotY, 0, 1, 0);
 CGFloat scale = 1.0 - 0.18 * t;
-card.transform = CGAffineTransformMakeScale(scale, scale);
-card.alpha = 1.0 - 0.3 * t;
+tr = CATransform3DScale(tr, scale, scale, 1.0);
+card.layer.transform = tr;
+card.alpha = 1.0 - 0.25 * t;
+BOOL isCenter = (ci == centerIdx);
+card.layer.borderWidth = isCenter ? 2.0 : 0.0;
+card.layer.borderColor = [UIColor colorWithRed:0.83 green:0.68 blue:0.21 alpha:1.0].CGColor;
+card.layer.shadowColor = [UIColor blackColor].CGColor;
+card.layer.shadowOpacity = isCenter ? 0.5f : 0.15f;
+card.layer.shadowRadius = isCenter ? 12.0 : 6.0;
+card.layer.shadowOffset = CGSizeMake(0, isCenter ? 8.0 : 4.0);
+card.layer.zPosition = isCenter ? 10.0 : 10.0 - t * 10.0;
 }
 if (GHLSSCarouselPageControl) {
 NSInteger page = (NSInteger)lround(sv.contentOffset.x / GHLSSCarouselPageWidth);
@@ -9845,6 +10135,57 @@ GHLSSCarouselPageControl.currentPage = page;
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
 if (scrollView == GHLSSCarouselScrollView) [self carouselUpdateForScrollView:scrollView];
+}
+
+// v43.23：第 5 件——輪盤按鍵反饋：點下卡片縮一下＋輕震一下，鬆手才打開；
+// 點左右卡片先滑到中間，滑到了再打開（scrollViewDidEndScrollingAnimation 接）。
+- (void)handleCarouselCardTouchDown:(UIButton *)sender {
+sender.transform = CGAffineTransformMakeScale(0.95, 0.95);
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
+}
+
+- (void)handleCarouselCardTouchUpInside:(UIButton *)sender {
+sender.transform = CGAffineTransformIdentity;
+if (!GHLSSCarouselScrollView || !GHLSSCarouselCards) return;
+NSInteger page = (NSInteger)lround(GHLSSCarouselScrollView.contentOffset.x / GHLSSCarouselPageWidth);
+if (page < 0) page = 0;
+if (page >= (NSInteger)[GHLSSCarouselCards count]) page = (NSInteger)[GHLSSCarouselCards count] - 1;
+NSInteger tapped = [GHLSSCarouselCards indexOfObject:sender];
+if (tapped < 0) return;
+if (tapped == page) {
+[self handleAppButton:sender];
+return;
+}
+GHLSSCarouselPendingOpenIdx = (int)tapped;
+[GHLSSCarouselScrollView setContentOffset:CGPointMake(GHLSSCarouselPageWidth * tapped, 0) animated:YES];
+char buf[96];
+snprintf(buf, sizeof(buf), "v43.23 carousel side card %d centering first", (int)tapped);
+GHLSSLogLine(buf);
+}
+
+- (void)handleCarouselCardTouchCancelled:(UIButton *)sender {
+sender.transform = CGAffineTransformIdentity;
+}
+
+- (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView {
+if (scrollView != GHLSSCarouselScrollView) return;
+if (GHLSSCarouselPendingOpenIdx < 0) return;
+int idx = GHLSSCarouselPendingOpenIdx;
+GHLSSCarouselPendingOpenIdx = -1;
+if (!GHLSSCarouselCards || idx >= (NSInteger)[GHLSSCarouselCards count]) return;
+UIButton *card = [GHLSSCarouselCards objectAtIndex:idx];
+[self handleAppButton:card];
+}
+
+- (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView {
+if (scrollView == GHLSSCarouselScrollView) GHLSSCarouselPendingOpenIdx = -1;
 }
 
 // v43.19：磁貼式——深色大卡片裡大方塊（第一個 App，2×2）加小方塊拼著排，
