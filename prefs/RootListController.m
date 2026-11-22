@@ -320,7 +320,6 @@ static UIImage *GHLSSPrefsSquareCropImage(UIImage *image, CGFloat size) {
 }
 
 
-
 // v42：bundleID 轉 App 名字（固定 5 個先查，找不到再查後台緩存檔；
 // 還是找不到就回 bundleID 本身，不空白）。
 // （固定表在下面定義，這裡先前向聲明，免得隱式聲明報錯。）
@@ -521,14 +520,12 @@ static BOOL GHLSSDispatchButtonTap(PSListController *controller, UITableView *ta
 @end
 
 @interface GuHaiLongSplitScreenRootListController : PSListController <UIDocumentPickerDelegate>
-@property (nonatomic, strong) WKWebView *ghlssInlineLyricView;
-@property (nonatomic, strong) UIView *ghlssBannerContainer;
-@property (nonatomic, assign) BOOL ghlssBannerInstalled;
 @property (nonatomic, assign) int ghlssDocPickerKind;
 @end
 
 // v43.31：歌词墙控制行太挤（皇上 2026-11-22 定，设置页这边改，播放器文件不动）：
-// 给两只歌词墙 WKWebView（主页嵌的＋详情页的）注入一段 <style>，藏掉控制行
+// 给详情页歌词墙 WKWebView 注入一段 <style>，藏掉控制行
+// （追加 C：主页嵌的那块拿掉了，注入只剩详情页这一只在用。）
 // 中间的「抖音听原唱」按钮（#dyBtn），其余按钮不换行、间距收紧。只藏按钮，
 // 歌单里每首后面的「抖音听原唱」链接（.dy-link）和试听完的提示条链接不动，
 // 去抖音听原唱的功能还在；applySong 还在写 dyBtn.href，元素还在 DOM 里，
@@ -553,97 +550,9 @@ static void GHLSSAddLyricWallCSSInjection(WKWebViewConfiguration *config) {
     char buf[160];
     snprintf(buf, sizeof(buf), "v57 prefs-page: %s", [NSStringFromClass([self class]) UTF8String]);
     GHLSSPrefsLogLine(buf);
-    // v43.30：設定主頁頂上直接嵌整个 3D 立体歌词墙播放器（760pt 高的
-    // WKWebView 头，跟歌词墙那栏同一份 lyricwall/index.html，不是两套
-    // 播放器；触摸进墙里，不再点横幅进详情页）。只挂在設定主頁本身
-    //（isMemberOfClass），子頁（GHLSSPlistPageController 繼承這裡）不掛。
-    // 主页列表滚动从播放器下面开始拖；主页消失时暂停内嵌播放器（见下面
-    // viewWillDisappear），防主页墙与详情页墙同时出声。
-    if ([self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) {
-        @try {
-            CGFloat w = [UIScreen mainScreen].bounds.size.width;
-            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 760)];
-            container.backgroundColor = [UIColor blackColor];
-            container.clipsToBounds = YES;
-            NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-            NSString *htmlPath = [bundle pathForResource:GHLSSRuntimeString("index") ofType:GHLSSRuntimeString("html") inDirectory:GHLSSRuntimeString("lyricwall")];
-            WKWebView *wv = nil;
-            if (htmlPath) {
-                WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
-                GHLSSAddLyricWallCSSInjection(config);
-                wv = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, w, 760) configuration:config];
-                wv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-                wv.backgroundColor = [UIColor blackColor];
-                wv.opaque = YES;
-                NSURL *fileURL = [NSURL fileURLWithPath:htmlPath];
-                NSURL *dirURL = [fileURL URLByDeletingLastPathComponent];
-                [wv loadFileURL:fileURL allowingReadAccessToURL:dirURL];
-                [container addSubview:wv];
-            } else {
-                UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, w, 760)];
-                lb.text = GHLSSRuntimeString("歌词墙文件没找到，请重装一次插件再试。");
-                lb.font = [UIFont systemFontOfSize:15];
-                lb.textColor = [UIColor grayColor];
-                lb.textAlignment = NSTextAlignmentCenter;
-                lb.numberOfLines = 0;
-                lb.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-                [container addSubview:lb];
-                GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall html missing");
-            }
-            self.ghlssInlineLyricView = wv;
-            self.ghlssBannerContainer = container;
-        } @catch (NSException *e) {
-            GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall viewDidLoad EXCEPTION");
-        }
-    }
-}
-
-// v43.30：内嵌歌词墙挂载（viewDidAppear 才碰 table；只挂設定主頁本身）。
-// v54：掛載前核對取到的表就是主表（dataSource 是自己才掛），寬度改這時重取。
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
-    if (self.ghlssBannerContainer && !self.ghlssBannerInstalled) {
-        UITableView *tv = GHLSSSafeTableViewForController(self, "inline-lyricwall");
-        if (tv && tv.dataSource && (id)tv.dataSource != (id)self) {
-            GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: table mismatch, header not mounted");
-            return;
-        }
-        if (tv) {
-            @try {
-                CGFloat w = tv.bounds.size.width;
-                if (w <= 0) w = [UIScreen mainScreen].bounds.size.width;
-                self.ghlssBannerContainer.frame = CGRectMake(0, 0, w, 760);
-                if (self.ghlssInlineLyricView) self.ghlssInlineLyricView.frame = CGRectMake(0, 0, w, 760);
-                tv.tableHeaderView = self.ghlssBannerContainer;
-                self.ghlssBannerInstalled = YES;
-                GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: header mounted");
-            } @catch (NSException *e) {
-                GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: mount EXCEPTION");
-            }
-        } else {
-            GHLSSPrefsLogLine("v43.30 prefs-inline-lyricwall: no table, header not mounted");
-        }
-    }
-}
-
-// v43.30：主页嵌了整个歌词墙（760pt WKWebView 头）：离开主页时暂停内嵌
-// 播放器（停声音＋停渲染），防主页墙与详情页墙同时出声；回来时只恢复
-// 渲染，不自动续播（声音等用户再点播放）。
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
-    if (self.ghlssInlineLyricView) {
-        [self.ghlssInlineLyricView evaluateJavaScript:GHLSSRuntimeString("window.ghlssResumeView && window.ghlssResumeView()") completionHandler:nil];
-    }
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
-    if (self.ghlssInlineLyricView) {
-        [self.ghlssInlineLyricView evaluateJavaScript:GHLSSRuntimeString("window.ghlssPausePlayer && window.ghlssPausePlayer()") completionHandler:nil];
-    }
+    // v43.31 追加 C：主页嵌的歌词墙拿掉了（皇上 2026-11-22 点了 C）——
+    // 播放器只住在「歌词墙播放器」那页（GHLSSLyricWallListController，全屏），
+    // 主页只剩设置行。
 }
 
 
@@ -1402,7 +1311,6 @@ static UIImage *GHLSSAppIconForBundleID(NSString *bid) {
 }
 
 @end
-
 
 
 // v53：悬浮图标——相冊選圖（PHPicker）、居中裁方形 512、
