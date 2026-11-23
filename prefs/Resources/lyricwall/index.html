@@ -179,6 +179,7 @@
       }
       @keyframes pulse { 0%,100% { box-shadow: 0 12px 44px rgba(10,4,34,.5), 0 0 0 8px rgba(255,255,255,.05);} 50% { box-shadow: 0 12px 44px rgba(10,4,34,.5), 0 0 0 16px rgba(255,255,255,.02);} }
       .big-play svg { width: 34px; height: 34px; margin-left: 5px; }
+      .big-play #bigPauseIcon { margin-left: 0; } /* v43.41：暂停符对称，居中不偏移（三角形的光学居中偏移只给播放符） */
       .big-play.hidden { opacity: 0; pointer-events: none; transform: translate(-50%, -50%) scale(.82); animation: none; }
       .tap-hint {
         position: absolute; left: 0; right: 0; bottom: 108px; text-align: center;
@@ -389,7 +390,8 @@
             <div class="player-note" id="playerNote">点播放听 30 秒原唱试听</div>
           </div>
           <button class="big-play" id="bigPlay" type="button" aria-label="播放">
-            <svg viewBox="0 0 24 24" fill="#fff"><path d="M7 4.8c0-1.1 1.2-1.8 2.2-1.3l11 6.7c.9.6.9 1.9 0 2.5l-11 6.7c-1 .6-2.2-.1-2.2-1.3V4.8z"/></svg>
+            <svg id="bigPlayIcon" viewBox="0 0 24 24" fill="#fff"><path d="M7 4.8c0-1.1 1.2-1.8 2.2-1.3l11 6.7c.9.6.9 1.9 0 2.5l-11 6.7c-1 .6-2.2-.1-2.2-1.3V4.8z"/></svg>
+            <svg id="bigPauseIcon" viewBox="0 0 24 24" fill="#fff" style="display:none"><rect x="6" y="4.5" width="4.2" height="15" rx="1.4"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.4"/></svg>
           </button>
           <div class="tap-hint" id="tapHint">轻 点 水 面 · 泛 起 涟 漪</div>
           <div class="pv-toast" id="pvToast" role="status">
@@ -451,10 +453,6 @@
               <span class="btn-spacer"></span>
               <button class="cbtn" id="prevBtn" type="button" aria-label="上一首">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5.5A1.5 1.5 0 0 1 7.5 4v16A1.5 1.5 0 0 1 6 18.5v-13zM19 5.2c.8-.5 1.9.1 1.9 1.1v11.4c0 1-1.1 1.6-1.9 1.1L9.6 13a1.25 1.25 0 0 1 0-2L19 5.2z"/></svg>
-              </button>
-              <button class="cbtn main" id="playBtn" type="button" aria-label="播放或暂停">
-                <svg id="playIcon" viewBox="0 0 24 24" fill="#fff"><path d="M7 4.8c0-1.1 1.2-1.8 2.2-1.3l11 6.7c.9.6.9 1.9 0 2.5l-11 6.7c-1 .6-2.2-.1-2.2-1.3V4.8z"/></svg>
-                <svg id="pauseIcon" viewBox="0 0 24 24" fill="#fff" style="display:none"><rect x="6" y="4.5" width="4.2" height="15" rx="1.4"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.4"/></svg>
               </button>
               <button class="cbtn" id="nextBtn" type="button" aria-label="下一首">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 5.5A1.5 1.5 0 0 0 16.5 4v16A1.5 1.5 0 0 0 18 18.5v-13zM5 5.2C4.2 4.7 3.1 5.3 3.1 6.3v11.4c0 1 1.1 1.6 1.9 1.1L14.4 13a1.25 1.25 0 0 0 0-2L5 5.2z"/></svg>
@@ -1598,8 +1596,8 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
 
         /* ================= 播放控制 ================= */
         var bigPlay = document.getElementById('bigPlay');
-        var playIcon = document.getElementById('playIcon');
-        var pauseIcon = document.getElementById('pauseIcon');
+        var bigPlayIcon = document.getElementById('bigPlayIcon');
+        var bigPauseIcon = document.getElementById('bigPauseIcon');
         var tapHint = document.getElementById('tapHint');
         function setPlaying(on) {
           playing = on;
@@ -1624,10 +1622,9 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
             try { customAudio.pause(); } catch (e) {}
             stopBgm();
           }
-          bigPlay.classList.toggle('hidden', playing);
-          playIcon.style.display = playing ? 'none' : '';
-          pauseIcon.style.display = playing ? '' : 'none';
-          document.getElementById('playBtn').setAttribute('aria-label', playing ? '暂停' : '播放');
+          bigPlayIcon.style.display = playing ? 'none' : '';
+          bigPauseIcon.style.display = playing ? '' : 'none';
+          bigPlay.setAttribute('aria-label', playing ? '暂停' : '播放');
         }
         /* v43.30：主页内嵌播放器暂停钩子（设置主页消失时由原生侧调用，
            防主页墙与详情页墙同时出声；只停声音＋停渲染，不改曲目／进度）。
@@ -1646,8 +1643,8 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
             setPlaying(true);
           }
         };
-        bigPlay.addEventListener('click', function () { setPlaying(true); spawnRipple(0, 1.8, 1.0); });
-        document.getElementById('playBtn').addEventListener('click', function () { setPlaying(!playing); });
+        /* v43.41（1.0.114）：下面一排的 B 键删了，大圆键 A 改成真正的播放／暂停切换——播时显示 ⏸、常驻不隐藏，点一下切状态。 */
+        bigPlay.addEventListener('click', function () { setPlaying(!playing); spawnRipple(0, 1.8, 1.0); });
         document.getElementById('prevBtn').addEventListener('click', function () {
           applySong(songIdx - 1);
           spawnRipple(0, 1.8, 0.8);
