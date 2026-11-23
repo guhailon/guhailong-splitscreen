@@ -386,7 +386,7 @@
             <span class="badge">3D 水面立体歌词墙</span>
             <div class="player-title" id="pTitle">The Truth That You Leave</div>
             <div class="player-artist" id="pArtist">PIANOBOY 高至豪 · 纯音乐钢琴</div>
-            <div class="player-note" id="playerNote">点播放先听 30 秒原唱试听 · 没有试听时自动接合成钢琴</div>
+            <div class="player-note" id="playerNote">点播放听 30 秒原唱试听</div>
           </div>
           <button class="big-play" id="bigPlay" type="button" aria-label="播放">
             <svg viewBox="0 0 24 24" fill="#fff"><path d="M7 4.8c0-1.1 1.2-1.8 2.2-1.3l11 6.7c.9.6.9 1.9 0 2.5l-11 6.7c-1 .6-2.2-.1-2.2-1.3V4.8z"/></svg>
@@ -532,7 +532,7 @@
 
         /* ================= 歌单数据：123 首（原曲 + 历批清单 + 抖音热歌榜 20 首） =================
            每首：[中文名, 英文名, 演奏/作曲, 意境意象(英), 意境意象(中)]
-           旋律由 WebAudio 按每首的调式模板+移调实时合成；歌词墙文字由意象生成，为意境创作，非原曲歌词。 */
+           歌词墙文字由意象生成，为意境创作，非原曲歌词；音乐只放 30 秒原唱试听（0 号歌放本地钢琴文件）。 */
         var ORIG_LINES = [
           { en: 'The truth that you leave',        zh: '你留下的真相',        dur: 5.2 },
           { en: 'falls like rain on quiet keys',   zh: '像雨，落在安静的琴键上', dur: 5.2 },
@@ -783,136 +783,17 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           sheet.classList.remove('open');
         });
 
-        /* ================= 音乐：WebAudio 合成钢琴 =================
-           每首曲子按自己的调式模板与移调实时合成钢琴音，切换歌单即换旋律走向。 */
-        /* v43.30 同步：0 号真歌主通道走 <audio> 媒体播放（iOS 上 WebAudio 会被静音开关压制、
-           合成音量也偏小，所以钢琴曲已渲染成 assets/piano.m4a 直接播放；文件加载/播放失败
-           时才回退到下面的 WebAudio 实时合成。1/122 号合成歌走 useSynth=true 的合成支路。 */
+        /* ================= 音乐：只有两路真声 =================
+           v43.39 合成声取消：0 号歌走本地 assets/piano.m4a 文件直接放；1/122 号
+           只放 30 秒原唱试听，试听失败就停住，不再回落任何合成声。 */
         var bgm = document.getElementById('bgm');
-        var useSynth = false;
         function startBgm() {
-          if (useSynth) { ensureAudio(); if (AC && AC.state === 'suspended') AC.resume(); return; }
+          if (songIdx !== 0) return; // 只有 0 号歌走本地钢琴文件
           var p = bgm.play();
-          if (p && p.catch) p.catch(function () {
-            useSynth = true;
-            ensureAudio();
-            if (AC && AC.state === 'suspended') AC.resume();
-          });
+          if (p && p.catch) p.catch(function () {});
         }
         function stopBgm() {
           try { bgm.pause(); } catch (e) {}
-          if (AC && AC.state === 'running') AC.suspend();
-        }
-        bgm.addEventListener('error', function () { useSynth = true; }, true);
-
-        /* ================= WebAudio 合成钢琴 ================= */
-        var AC = null, master = null, wet = null, schedTimer = null, nextNoteTime = 0, stepIdx = 0;
-        function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-        var TEMPLATES = [
-          { chords: [
-            { root: 50, tones: [62, 66, 69, 76] },
-            { root: 47, tones: [59, 62, 66, 73] },
-            { root: 43, tones: [55, 59, 62, 69] },
-            { root: 45, tones: [57, 61, 64, 71] }
-          ], penta: [74, 76, 78, 81, 83, 86] },
-          { chords: [
-            { root: 45, tones: [57, 60, 64, 71] },
-            { root: 41, tones: [53, 57, 60, 69] },
-            { root: 48, tones: [60, 64, 67, 76] },
-            { root: 43, tones: [55, 59, 62, 71] }
-          ], penta: [69, 72, 74, 76, 79, 81] },
-          { chords: [
-            { root: 48, tones: [60, 64, 67, 74] },
-            { root: 43, tones: [55, 59, 62, 71] },
-            { root: 45, tones: [57, 60, 64, 72] },
-            { root: 41, tones: [53, 57, 60, 69] }
-          ], penta: [72, 74, 76, 79, 81, 84] }
-        ];
-        var CHORDS = TEMPLATES[0].chords;
-        var PENTA = TEMPLATES[0].penta;
-        var stepDur = 0.6;
-        function makeImpulse(ctx, dur, decay) {
-          var rate = ctx.sampleRate, len = rate * dur;
-          var buf = ctx.createBuffer(2, len, rate);
-          for (var c = 0; c < 2; c++) {
-            var d = buf.getChannelData(c);
-            for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
-          }
-          return buf;
-        }
-        function piano(freq, t, vel, dur) {
-          var g = AC.createGain();
-          var flt = AC.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 2600; flt.Q.value = 0.4;
-          var o1 = AC.createOscillator(); o1.type = 'sine'; o1.frequency.value = freq;
-          var o2 = AC.createOscillator(); o2.type = 'triangle'; o2.frequency.value = freq * 2;
-          var g2 = AC.createGain(); g2.gain.value = 0.32;
-          var o3 = AC.createOscillator(); o3.type = 'sine'; o3.frequency.value = freq * 3;
-          var g3 = AC.createGain(); g3.gain.value = 0.1;
-          o1.connect(g); o2.connect(g2); g2.connect(g); o3.connect(g3); g3.connect(g);
-          g.connect(flt); flt.connect(master); flt.connect(wet);
-          g.gain.setValueAtTime(0, t);
-          g.gain.linearRampToValueAtTime(vel, t + 0.006);
-          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-          o1.start(t); o2.start(t); o3.start(t);
-          o1.stop(t + dur + 0.1); o2.stop(t + dur + 0.1); o3.stop(t + dur + 0.1);
-        }
-        function pad(freq, t, dur) {
-          var g = AC.createGain();
-          var flt = AC.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 750;
-          [0, 4, -3].forEach(function (det) {
-            var o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = freq; o.detune.value = det;
-            o.connect(g); o.start(t); o.stop(t + dur + 0.5);
-          });
-          g.connect(flt); flt.connect(master);
-          g.gain.setValueAtTime(0, t);
-          g.gain.linearRampToValueAtTime(0.045, t + 1.6);
-          g.gain.setValueAtTime(0.045, t + dur - 1.2);
-          g.gain.linearRampToValueAtTime(0, t + dur);
-        }
-        function scheduler() {
-          if (!AC) return;
-          var STEP = stepDur, BAR = 8; // 每小节 8 步，一个和弦
-          while (nextNoteTime < AC.currentTime + 0.7) {
-            var bar = Math.floor(stepIdx / BAR), s = stepIdx % BAR;
-            var ch = CHORDS[bar % CHORDS.length];
-            if (s === 0) {
-              piano(mtof(ch.root), nextNoteTime, 0.3, 3.6); // 低音根音
-              ch.tones.forEach(function (m) { pad(mtof(m - 12), nextNoteTime, BAR * STEP); });
-            }
-            var pat = [0, 1, 2, 3, 2, 3, 1, 2];
-            piano(mtof(ch.tones[pat[s]]), nextNoteTime, 0.19, 2.4);
-            if (s % 2 === 0 && Math.random() < 0.55) {
-              melIdx = Math.max(0, Math.min(PENTA.length - 1, melIdx + (Math.random() < 0.5 ? -1 : 1) * (Math.random() < 0.25 ? 2 : 1)));
-              piano(mtof(PENTA[melIdx]), nextNoteTime + 0.05, 0.13, 3.4);
-            }
-            nextNoteTime += STEP;
-            stepIdx++;
-          }
-        }
-        function blip() {
-          if (!AC || AC.state !== 'running') return;
-          var t = AC.currentTime;
-          var o = AC.createOscillator(); o.type = 'sine';
-          o.frequency.setValueAtTime(640, t);
-          o.frequency.exponentialRampToValueAtTime(170, t + 0.4);
-          var g = AC.createGain();
-          g.gain.setValueAtTime(0.0001, t);
-          g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
-          o.connect(g); g.connect(master); g.connect(wet);
-          o.start(t); o.stop(t + 0.5);
-        }
-        function ensureAudio() {
-          if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
-          var Ctor = window.AudioContext || window.webkitAudioContext;
-          if (!Ctor) return;
-          AC = new Ctor();
-          master = AC.createGain(); master.gain.value = 0.9; master.connect(AC.destination);
-          var conv = AC.createConvolver(); conv.buffer = makeImpulse(AC, 2.4, 2.6);
-          wet = AC.createGain(); wet.gain.value = 0.5;
-          wet.connect(conv); conv.connect(master);
-          nextNoteTime = AC.currentTime + 0.15; stepIdx = 0;
-          schedTimer = setInterval(scheduler, 240);
         }
 
         /* ================= Three.js 场景 ================= */
@@ -1345,8 +1226,8 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
         applyWall(0);
 
         /* ---- 原唱试听：123 首的 30 秒原唱地址已逐首查好写进歌单（PREVIEW_URLS），
-               点播放默认放原唱试听，不再默认放合成钢琴；没有试听、或试听加载失败，
-               才回落合成钢琴，不会没声。试听放完自动切下一首，下一首同样先放试听。 ---- */
+               点播放只放原唱试听；试听加载失败就停住、不自动切歌（离线时别连锁跳歌）。
+               v43.39 合成声取消：不再回落任何合成声。试听放完自动切下一首，下一首同样先放试听。 ---- */
         var noteEl = document.getElementById('playerNote');
         var baseNote = noteEl.textContent;
         var previewAudio = new Audio();
@@ -1383,11 +1264,11 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
             if (previewAudio.src !== url) previewAudio.src = url;
             previewAudio.currentTime = 0;
             var p = previewAudio.play();
-            if (p && p.catch) p.catch(function () { previewActive = false; previewDone = true; if (playing) startBgm(); });
+            if (p && p.catch) p.catch(function () { previewActive = false; previewDone = true; setPlaying(false); noteEl.textContent = '这首试听加载失败，点下一首继续'; });
             previewActive = true;
             stopBgm();
             noteEl.textContent = '原唱试听中 · 30 秒，放完自动切下一首';
-          } catch (e) { previewActive = false; startBgm(); }
+          } catch (e) { previewActive = false; previewDone = true; playing = false; noteEl.textContent = '这首试听加载失败，点下一首继续'; }
         }
         function stopPreview() {
           if (previewActive) { try { previewAudio.pause(); } catch (e) {} }
@@ -1408,8 +1289,8 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           if (!previewActive) return;
           previewActive = false;
           previewDone = true;
-          noteEl.textContent = baseNote;
-          if (playing) startBgm();
+          setPlaying(false);
+          noteEl.textContent = '这首试听加载失败，点下一首继续';
         });
         /* ---- 导入歌曲的播放：独立音频，只在本次打开有效 ---- */
         var customAudio = new Audio();
@@ -1438,22 +1319,13 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           try { customAudio.pause(); } catch (e) {}
           if (s.custom) { customAudio.src = s.url; customAudio.load(); }
           if (songIdx === 0) {
-            if (AC && AC.state === 'running') AC.suspend();
-            useSynth = false;
             if (bgm.getAttribute('src') !== 'assets/piano.m4a') {
               bgm.setAttribute('src', 'assets/piano.m4a');
               try { bgm.load(); } catch (e) {}
             }
           } else {
             try { bgm.pause(); } catch (e) {}
-            useSynth = true;
           }
-          var tpl = TEMPLATES[s.tpl];
-          CHORDS = tpl.chords.map(function (c) {
-            return { root: c.root + s.tr, tones: c.tones.map(function (m) { return m + s.tr; }) };
-          });
-          PENTA = tpl.penta.map(function (m) { return m + s.tr; });
-          stepDur = s.step; stepIdx = 0;
           try {
             buildLyrics();
             layoutLyrics(0);
@@ -1472,7 +1344,7 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           document.getElementById('tTot').textContent = fmt(TOTAL);
           document.getElementById('lineTag').textContent = (songIdx + 1) + ' / ' + SONGS.length + ' 首';
           baseNote = s.custom ? '导入的歌曲 · 墙面用默认风格 · 仅本次打开有效'
-            : (s.lyrics ? '这首有原版歌词 · 全文逐行上墙 · 点播放先听 30 秒原唱试听' : '点播放先听 30 秒原唱试听 · 没有试听时自动接合成钢琴');
+            : (s.lyrics ? '这首有原版歌词 · 全文逐行上墙 · 点播放听 30 秒原唱试听' : '点播放听 30 秒原唱试听');
           noteEl.textContent = baseNote;
           document.getElementById('dyBtn').href = dySearch(s);
           if (!customCover) setCover(COVERS[songIdx % COVERS.length]);
@@ -1483,7 +1355,7 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           if (sel && document.getElementById('playlist').classList.contains('open')) {
             sel.scrollIntoView({ block: 'nearest' });
           }
-          if (playing) startBgm();
+          if (playing) setPlaying(true);
         }
 
         function dySearch(s) {
@@ -1625,7 +1497,6 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
                 var hx = o.x + dir.x * tt, hz = o.z + dir.z * tt;
                 if (Math.abs(hx) < 22 && Math.abs(hz) < 22) {
                   spawnRipple(hx, hz, 1.25);
-                  blip();
                   if (!playing) setPlaying(true);
                 }
               }
@@ -1741,23 +1612,22 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
               if (cp && cp.catch) cp.catch(function () {});
             } else if (previewActive) {
               var pp = previewAudio.play();
-              if (pp && pp.catch) pp.catch(function () { previewActive = false; previewDone = true; startBgm(); });
+              if (pp && pp.catch) pp.catch(function () { previewActive = false; previewDone = true; setPlaying(false); noteEl.textContent = '这首试听加载失败，点下一首继续'; });
             } else if (!previewDone && previewUrlFor(songIdx)) {
               startPreview();
             } else {
               startBgm();
             }
-            bigPlay.classList.add('hidden');
             tapHint.classList.add('dim');
           } else {
             if (previewActive) { try { previewAudio.pause(); } catch (e) {} }
             try { customAudio.pause(); } catch (e) {}
             stopBgm();
-            bigPlay.classList.remove('hidden');
           }
-          playIcon.style.display = on ? 'none' : '';
-          pauseIcon.style.display = on ? '' : 'none';
-          document.getElementById('playBtn').setAttribute('aria-label', on ? '暂停' : '播放');
+          bigPlay.classList.toggle('hidden', playing);
+          playIcon.style.display = playing ? 'none' : '';
+          pauseIcon.style.display = playing ? '' : 'none';
+          document.getElementById('playBtn').setAttribute('aria-label', playing ? '暂停' : '播放');
         }
         /* v43.30：主页内嵌播放器暂停钩子（设置主页消失时由原生侧调用，
            防主页墙与详情页墙同时出声；只停声音＋停渲染，不改曲目／进度；
@@ -1787,11 +1657,22 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
               currentTime = customAudio.currentTime || 0;
             }
           } else if (previewActive) {
-            try { previewAudio.pause(); } catch (e) {}
-            previewActive = false; previewDone = true;
-            noteEl.textContent = baseNote;
-            if (playing) startBgm();
-            currentTime = seekEl.value / 1000 * TOTAL;
+            /* v43.39：拖动进度条时试听从拖到的位置继续放（钳制进 30 秒试听内）；
+               合成声已取消，拖动后不再回落合成，试听续播失败就停住。 */
+            var target = seekEl.value / 1000 * TOTAL;
+            currentTime = target;
+            var pvDur = previewAudio.duration || 30;
+            var pt = Math.min(target, Math.max(0, pvDur - 0.5));
+            try {
+              previewAudio.currentTime = pt;
+              var sp2 = previewAudio.play();
+              if (sp2 && sp2.catch) sp2.catch(function () { previewActive = false; previewDone = true; setPlaying(false); noteEl.textContent = '这首试听加载失败，点下一首继续'; });
+              noteEl.textContent = '原唱试听中 · 30 秒，放完自动切下一首';
+            } catch (e) {
+              previewActive = false; previewDone = true;
+              setPlaying(false);
+              noteEl.textContent = '这首试听加载失败，点下一首继续';
+            }
           } else {
             currentTime = seekEl.value / 1000 * TOTAL;
           }
