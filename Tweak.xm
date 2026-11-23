@@ -1320,6 +1320,8 @@ static UIWindow *GHLSSStripWindow = nil;
 static UIWindow *GHLSSStripWindowLeft = nil; // v43.32：左边缘感应带（触发侧左／双侧时用，右带不动）。
 static UIWindow *GHLSSDebugTriggerWindow = nil; // v43.32：调试模式画触发区的窗（平时藏着，不接手势）。
 static UIView *GHLSSDebugTriggerView = nil; // v43.32：调试画布（普通 UIView，红框／扇形／竖条都画在这里）。
+static int GHLSSFlashZoneSide = -1; // v43.39：被挡闪框（-1＝没有闪，0＝闪左区，1＝闪右区）。
+static int GHLSSFlashZoneGen = 0; // v43.39：闪框世代号（1.5 秒内再被挡就重开一轮，旧的收尾不盖新的）。
 static UIWindow *GHLSSLauncherWindow = nil;
 static UIView *GHLSSLauncherContentView = nil; // v55：ARC 啟動器透明覆蓋層（只有 App 圖標，沒有面板）。
 // v43.19：抽屜下滑關閉記面板起點 Y；橫向輪盤記 scroll view／卡片／
@@ -3318,6 +3320,28 @@ return screenBounds.size.width - peekW - 2.0;
 //（prefschanged／感应带重定位时都调）。关了／分屏关了就藏窗。
 static void GHLSSUpdateTriggerDebugOverlay(void) {
 if (!GHLSSDebugTriggerWindow || !GHLSSDebugTriggerView) return;
+// v43.39：被挡闪框优先——调试开关关着时也画，只画被滑的那一侧
+// （重用调试画法的红框；闪完由 GHLSSFlashTriggerZone 的收尾再调一次
+// 本函数，恢复常态画法）。
+if (GHLSSFlashZoneSide >= 0) {
+CGRect sb = [UIScreen mainScreen].bounds;
+GHLSSDebugTriggerWindow.frame = sb;
+GHLSSDebugTriggerView.frame = CGRectMake(0, 0, sb.size.width, sb.size.height);
+for (CALayer *ly in [[GHLSSDebugTriggerView.layer sublayers] copy]) [ly removeFromSuperlayer];
+for (UIView *sv in [[GHLSSDebugTriggerView subviews] copy]) [sv removeFromSuperview];
+BOOL landscape = sb.size.height < sb.size.width;
+CGRect z = GHLSSReadTriggerZoneRect(GHLSSFlashZoneSide == 0, landscape);
+UIView *box = [[UIView alloc] initWithFrame:z];
+box.backgroundColor = [[UIColor redColor] colorWithAlphaComponent:0.15];
+box.layer.borderColor = [UIColor redColor].CGColor;
+box.layer.borderWidth = 1.0;
+[GHLSSDebugTriggerView addSubview:box];
+GHLSSDebugTriggerWindow.hidden = NO;
+char dbuf[160];
+snprintf(dbuf, sizeof(dbuf), "v43.39 debug overlay flash side=%s frame=%.0f,%.0f,%.0f,%.0f", GHLSSFlashZoneSide == 0 ? "left" : "right", z.origin.x, z.origin.y, z.size.width, z.size.height);
+GHLSSLogLine(dbuf);
+return;
+}
 if (!GHLSSReadTriggerDebugMode() || !GHLSSReadEnabled()) {
 GHLSSDebugTriggerWindow.hidden = YES;
 return;
@@ -3341,6 +3365,9 @@ box.backgroundColor = fill;
 box.layer.borderColor = edge.CGColor;
 box.layer.borderWidth = 1.0;
 [GHLSSDebugTriggerView addSubview:box];
+char dbuf[160];
+snprintf(dbuf, sizeof(dbuf), "v43.39 debug overlay edge left frame=%.0f,%.0f,%.0f,%.0f", z.origin.x, z.origin.y, z.size.width, z.size.height);
+GHLSSLogLine(dbuf);
 }
 if (side == 1 || side == 2) {
 CGRect z = GHLSSReadTriggerZoneRect(NO, landscape);
@@ -3349,6 +3376,9 @@ box.backgroundColor = fill;
 box.layer.borderColor = edge.CGColor;
 box.layer.borderWidth = 1.0;
 [GHLSSDebugTriggerView addSubview:box];
+char dbuf[160];
+snprintf(dbuf, sizeof(dbuf), "v43.39 debug overlay edge right frame=%.0f,%.0f,%.0f,%.0f", z.origin.x, z.origin.y, z.size.width, z.size.height);
+GHLSSLogLine(dbuf);
 }
 } else if (mode == 0) {
 // ARC：扇形（起始角从右侧基准逆时针算，扇角是整扇跨度，跟转盘同一套数）。
@@ -3367,6 +3397,9 @@ layer.fillColor = fill.CGColor;
 layer.strokeColor = edge.CGColor;
 layer.lineWidth = 1.0;
 [GHLSSDebugTriggerView.layer addSublayer:layer];
+char dbuf[160];
+snprintf(dbuf, sizeof(dbuf), "v43.39 debug overlay arc center=%.0f,%.0f r=%.0f", c.x, c.y, r);
+GHLSSLogLine(dbuf);
 } else {
 // 悬浮条：一条竖条（宽 12，长度＝大小，中心 Y＝位置 Y%×屏高；
 // 边跟触发侧走，双侧画左边）。
@@ -3381,8 +3414,41 @@ bar.layer.borderColor = edge.CGColor;
 bar.layer.borderWidth = 1.0;
 bar.layer.cornerRadius = 6.0;
 [GHLSSDebugTriggerView addSubview:bar];
+char dbuf[160];
+snprintf(dbuf, sizeof(dbuf), "v43.39 debug overlay bar side=%s frame=%.0f,%.0f,%.0f,%.0f", side == 1 ? "right" : "left", bar.frame.origin.x, bar.frame.origin.y, bar.frame.size.width, bar.frame.size.height);
+GHLSSLogLine(dbuf);
 }
 GHLSSDebugTriggerWindow.hidden = NO;
+}
+
+// v43.39：被挡闪框——边缘滑动起手 Y 落在触发区外面时，闪一下被滑那侧
+// 的触发区矩形（重用调试画法的红框，约 1.5 秒自收；调试开关关着时也闪，
+// 只闪被滑的那一侧）＋一下轻震（沿用 ARC 震动开关）。闪完调一次
+// GHLSSUpdateTriggerDebugOverlay() 恢复常态（调试开着就画回调试框，
+// 关着就藏窗）；1.5 秒内再被挡就重开一轮，旧的收尾凭世代号让路。
+static void GHLSSFlashTriggerZone(BOOL fromLeft) {
+if (!GHLSSDebugTriggerWindow || !GHLSSDebugTriggerView) return;
+GHLSSFlashZoneSide = fromLeft ? 0 : 1;
+GHLSSFlashZoneGen++;
+int gen = GHLSSFlashZoneGen;
+GHLSSUpdateTriggerDebugOverlay();
+if (GHLSSReadARCHaptics()) {
+@try {
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
+char dbuf[160];
+snprintf(dbuf, sizeof(dbuf), "v43.39 trigger zone flash side=%s gen=%d", fromLeft ? "left" : "right", gen);
+GHLSSLogLine(dbuf);
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+if (gen != GHLSSFlashZoneGen) return;
+GHLSSFlashZoneSide = -1;
+GHLSSUpdateTriggerDebugOverlay();
+GHLSSLogLine("v43.39 trigger zone flash done");
+});
 }
 
 // v40：感应带跟小窗位置设定走（左/右）。%ctor 建带时调一次（初始位置）；
@@ -4657,6 +4723,9 @@ if (swipeStartY < zone.origin.y || swipeStartY > zone.origin.y + zone.size.heigh
 char dbuf[160];
 snprintf(dbuf, sizeof(dbuf), "v43.32 edge swipe outside trigger zone y=%.0f side=%s zone y=%.0f..%.0f", swipeStartY, fromLeft ? "left" : "right", zone.origin.y, zone.origin.y + zone.size.height);
 GHLSSLogLine(dbuf);
+// v43.39：被挡时闪一下被滑那侧的区间框＋轻震（调试关着也闪），让皇上
+// 知道滑到了、只是位置不对；不计入 1x/2x 计数、不开启动器。
+GHLSSFlashTriggerZone(fromLeft);
 return;
 }
 // v53：分屏關著時邊緣滑動不觸發（開關關了就真的停用）。
@@ -8200,19 +8269,28 @@ return;
 }
 // v40：每次打开都重建（设定页的 App 开关、左右位置可能改了，重建
 // 才能立刻生效；窗很轻（几个视图），重建不贵）。旧窗先放掉。
+// v43.39：崩窗口逐行日志（1.0.112）——trollfan 第 4 次开死在 built 到
+// opened 之间；每步一行，下次再崩直接定位到步，不用猜。
+GHLSSLogLine("v43.39 showLauncher enter");
 GHLSSLauncherWindow = nil;
 [self buildLauncherWindow];
+GHLSSLogLine("v43.39 showLauncher build returned");
+GHLSSLogLine("v43.39 showLauncher strip update begin");
 // v40：感应带跟小窗位置设定走（设定改了，下次开启动器时带子就跟到
 // 对的边；哆啦A夢鈕一直在右邊，永遠能開啟動器）。
 GHLSSUpdateStripPosition();
+GHLSSLogLine("v43.39 showLauncher strip update done");
 // v55：層級固定在建窗時（覆蓋層 1999.25、背景 1999，都在浮窗之上、
 // 鎖屏之下），不再按有沒有窗切換。背景窗先顯示、覆蓋層後顯示。
+GHLSSLogLine("v43.39 showLauncher unhide begin");
 GHLSSLauncherBackdropWindow.hidden = NO;
 GHLSSLauncherWindow.hidden = NO;
+GHLSSLogLine("v43.39 showLauncher unhide done");
 GHLSSLauncherVisible = YES;
 // v43.2：啟動器背景暗度跟樣式走——圓環 0.65（S2 那種明顯變暗），格狀照舊
 // 0.55。每次打開都重設（關閉四散動畫會把背景根視圖 alpha 收到 0，
 // 這裡順手復原，免得下次打開背景是透明的）。
+GHLSSLogLine("v43.39 showLauncher dim reset begin");
 if (GHLSSLauncherBackdropWindow) {
 UIView *bgRoot = GHLSSLauncherBackdropWindow.rootViewController.view;
 if (bgRoot) {
@@ -8221,6 +8299,8 @@ bgRoot.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:dimAlpha]
 bgRoot.alpha = 1.0;
 }
 }
+GHLSSLogLine("v43.39 showLauncher dim reset done");
+GHLSSLogLine("v43.39 showLauncher before opened");
 GHLSSLogLine("v57 launcher opened");
 // v41：叫出 ARC 時給一下震動（ARC 設置的震動反饋開關，預設開）。
 if (GHLSSReadARCHaptics()) {
