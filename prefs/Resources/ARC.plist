@@ -151,10 +151,54 @@
 			<string>转盘音效（水滴声）</string>
 		</dict>
 		<dict>
+			<key>PostNotification</key>
+			<string>com.guhailong.splitscreen.prefschanged</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>drop</string>
+			<key>defaults</key>
+			<string>com.guhailong.splitscreen</string>
+			<key>key</key>
+			<string>dialSoundChoice</string>
+			<key>label</key>
+			<string>转盘音效选择</string>
+			<key>validTitles</key>
+			<array>
+				<string>水滴</string>
+				<string>木桶</string>
+				<string>默认</string>
+				<string>发送</string>
+				<string>接收</string>
+				<string>触感</string>
+				<string>齿轮</string>
+				<string>滴答</string>
+				<string>气泡</string>
+				<string>玻璃</string>
+				<string>木鱼</string>
+				<string>清脆</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>drop</string>
+				<string>bucket</string>
+				<string>default</string>
+				<string>sent</string>
+				<string>received</string>
+				<string>touch</string>
+				<string>gear</string>
+				<string>tick</string>
+				<string>bubble</string>
+				<string>glass</string>
+				<string>woodblock</string>
+				<string>crisp</string>
+			</array>
+		</dict>
+		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>扇形转盘只在「扇形轉盤」样式下生效（1.0.110 起是独立第 6 档，不再挂在圆环上）：手指拨动，图标沿弧线转着切页；每转过一格给一次震动＋水滴音。转盘震动／音效跟上面的启动器震动／触控音效分开，只管转盘。水滴声用的是系统 1104 音效，音色到底像不像水滴，真机上听了才知道。</string>
+			<string>扇形转盘只在「扇形轉盤」样式下生效（1.0.110 起是独立第 6 档，不再挂在圆环上）：手指拨动，图标沿弧线转着切页；每转过一格给一次震动＋水滴音。转盘震动／音效跟上面的启动器震动／触控音效分开，只管转盘。转盘音效有 12 个可选（水滴／木桶／默认／发送／接收／触感／齿轮／滴答／气泡／玻璃／木鱼／清脆），预设水滴（系统 1057 Tink），比旧的 1104 响亮得多；每个选项对应一个系统音效，皇上在真机上按耳朵挑。</string>
 			<key>label</key>
 			<string>扇形转盘</string>
 		</dict>

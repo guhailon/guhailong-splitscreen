@@ -2517,7 +2517,7 @@ static BOOL GHLSSReadCarouselEnabled(void) {
 return GHLSSReadPrefsBool("dialEnabled", YES);
 }
 // 轉盤專用震動／音效（跟 1.0.99 的 arcHaptics／arcTouchSound 分開，
-// 只管轉盤轉動與選中；水滴聲沿用現有 1104 音效 ID）。
+// 只管轉盤轉動與選中；音效走 dialSoundChoice 12 選一，預設水滴 1057）。
 static BOOL GHLSSReadDialHapticEnabled(void) {
 return GHLSSReadPrefsBool("dialHapticEnabled", YES);
 }
@@ -2536,9 +2536,35 @@ return style;
 static BOOL GHLSSReadDialSoundEnabled(void) {
 return GHLSSReadPrefsBool("dialSoundEnabled", YES);
 }
+// v43.42（1.0.115，轉盤音效 12 選一）：dialSoundChoice 字串 → 系統音效 ID。
+// 預設 drop（1057 Tink，清脆高亮的水滴聲，比舊 1104 Tock 響得多）；
+// 沒設／不認識的值也回 1057，保證預設音一定響。映射是最佳推測，
+// 皇上在真機上按耳朵挑。
+static SystemSoundID GHLSSReadDialSoundID(void) {
+char *s = GHLSSReadPrefsCString("dialSoundChoice");
+SystemSoundID sid = 1057;
+if (s) {
+if (strcmp(s, "drop") == 0) sid = 1057;
+else if (strcmp(s, "bucket") == 0) sid = 1111;
+else if (strcmp(s, "default") == 0) sid = 1104;
+else if (strcmp(s, "sent") == 0) sid = 1004;
+else if (strcmp(s, "received") == 0) sid = 1003;
+else if (strcmp(s, "touch") == 0) sid = 1156;
+else if (strcmp(s, "gear") == 0) sid = 1107;
+else if (strcmp(s, "tick") == 0) sid = 1155;
+else if (strcmp(s, "bubble") == 0) sid = 1106;
+else if (strcmp(s, "glass") == 0) sid = 1000;
+else if (strcmp(s, "woodblock") == 0) sid = 1110;
+else if (strcmp(s, "crisp") == 0) sid = 1108;
+free(s);
+}
+return sid;
+}
 // v43.37（1.0.110，扇形轉盤）：轉盤專用 tick 反饋——震動強度走
-// dialHapticStrength（重／中／輕），音效固定水滴聲（AudioServices 1104，
-// 跟現有點按音效同一 ID；水滴音色到底像不像，要皇上在真機上聽）。
+// dialHapticStrength（重／中／輕），音效走 dialSoundChoice 12 選一
+//（GHLSSReadDialSoundID，預設水滴 1057 Tink）。
+// v43.42（1.0.115）：舊 1104 是鍵盤 Tock，又短又輕，皇上在真機上聽不見
+//（只感到震動）；預設改成 1057 Tink，響亮得多，另加 12 選一讓皇上按耳朵挑。
 // 放 readers 後面（它讀 prefs，定義要在 readers 之後）。
 static void GHLSSDialTickFeedback(void) {
 if (GHLSSReadDialHapticEnabled()) {
@@ -2554,7 +2580,7 @@ UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithS
 }
 }
 if (GHLSSReadDialSoundEnabled()) {
-AudioServicesPlaySystemSound(1104);
+AudioServicesPlaySystemSound(GHLSSReadDialSoundID());
 }
 }
 // v70：浮窗大小百分比（windowSizePercent 50–100，預設 100（1.0.80 改回：
