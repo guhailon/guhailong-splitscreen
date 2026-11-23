@@ -479,6 +479,8 @@
            在 30 秒内不重弹（渲染每帧都抛同一错时也不会一直盖着控制行）。
            不在渲染成功时清除：那样条子一闪就没，诊断（档名／行号）来不及截图。 */
         var errTimer = null, errLastMsg = '', errLastHide = 0;
+        /* v43.38 心跳：tick 每帧更新；裸 Script error. 判播放器还活不活就看它。 */
+        var lastFrameAt = 0;
         function hideErr() {
           errBox.style.display = 'none';
           errLastHide = Date.now();
@@ -498,7 +500,18 @@
           /* v43.37 诊断：把档名／行号／列号／堆叠一起写进错条，下次截图就能
              直接看到是哪个档案哪一行。"Script error." 是浏览器抹掉资讯后的
              通用字（外部脚本错），那时档名／行号／堆叠本来就是空的，条子会
-             如实写「浏览器未提供档名／行号」，不是诊断坏了。 */
+             如实写「浏览器未提供档名／行号」，不是诊断坏了。
+             v43.38：裸 "Script error."（没档名、没堆叠、完全抹掉）且播放器还
+             在渲染（最近 2 秒内有帧），就不弹整条横幅——播放器没死，条子只
+             会盖住控制行。悄悄记一行 console 诊断就好。带资讯的错、或播放
+             器真的动不了，才弹条。 */
+          var stk = (e.error && e.error.stack) ? String(e.error.stack) : '';
+          var wiped = (e.message === 'Script error.') && !e.filename && !stk;
+          var alive = lastFrameAt && (Date.now() - lastFrameAt < 2000);
+          if (wiped && alive) {
+            console.log('[lyricwall] wiped Script error suppressed, player alive, last frame ' + (Date.now() - lastFrameAt) + 'ms ago');
+            return;
+          }
           var msg = '页面出错了：' + (e.message || '未知错误');
           var where = [];
           if (e.filename) where.push(e.filename);
@@ -506,7 +519,6 @@
           if (e.colno) where.push('第' + e.colno + '列');
           if (where.length) msg += '\n' + where.join(' ');
           else msg += '\n（浏览器未提供档名／行号）';
-          var stk = (e.error && e.error.stack) ? String(e.error.stack) : '';
           if (stk) msg += '\n' + stk.slice(0, 300);
           showErr(msg);
         });
@@ -1276,24 +1288,32 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
         var wallIdx = 0;
         function hexCss(v) { return '#' + ('000000' + v.toString(16)).slice(-6); }
         function applyWall(i) {
-          wallIdx = ((i % WALL_STYLES.length) + WALL_STYLES.length) % WALL_STYLES.length;
-          var w = WALL_STYLES[wallIdx];
-          dome.material.uniforms.uTop.value.set(w.top);
-          dome.material.uniforms.uMid.value.set(w.mid);
-          dome.material.uniforms.uHor.value.set(w.hor);
-          waterUniforms.uDeep.value.set(w.deep);
-          waterUniforms.uSky.value.set(w.sky);
-          waterUniforms.uPink.value.set(w.pink);
-          waterUniforms.uFogColor.value.set(w.mid);
-          scene.fog.color.set(w.mid);
-          if (bloomPass) bloomPass.strength = 0.30 + (wallIdx % 5) * 0.06;
-          if (renderer) renderer.toneMappingExposure = 1.0 + (wallIdx % 4) * 0.04;
-          dust.material.color.set(w.dust);
-          moonGlow.material.color.set(w.hor);
-          sideTint.set(w.side); sideHot.set(w.dust); idleTint.set(w.pink);
-          document.querySelectorAll('.wall-opt').forEach(function (el, k) {
-            el.classList.toggle('sel', k === wallIdx);
-          });
+          /* v43.38 诊断：墙面换风格抛了就写真实错，别走全局抹掉的路（init 的
+             applyWall(0) 和墙面点选都走这里）。 */
+          try {
+            wallIdx = ((i % WALL_STYLES.length) + WALL_STYLES.length) % WALL_STYLES.length;
+            var w = WALL_STYLES[wallIdx];
+            dome.material.uniforms.uTop.value.set(w.top);
+            dome.material.uniforms.uMid.value.set(w.mid);
+            dome.material.uniforms.uHor.value.set(w.hor);
+            waterUniforms.uDeep.value.set(w.deep);
+            waterUniforms.uSky.value.set(w.sky);
+            waterUniforms.uPink.value.set(w.pink);
+            waterUniforms.uFogColor.value.set(w.mid);
+            scene.fog.color.set(w.mid);
+            if (bloomPass) bloomPass.strength = 0.30 + (wallIdx % 5) * 0.06;
+            if (renderer) renderer.toneMappingExposure = 1.0 + (wallIdx % 4) * 0.04;
+            dust.material.color.set(w.dust);
+            moonGlow.material.color.set(w.hor);
+            sideTint.set(w.side); sideHot.set(w.dust); idleTint.set(w.pink);
+            document.querySelectorAll('.wall-opt').forEach(function (el, k) {
+              el.classList.toggle('sel', k === wallIdx);
+            });
+          } catch (err) {
+            var m = '墙面出错：' + (err && err.message ? err.message : String(err));
+            if (err && err.stack) m += '\n' + String(err.stack).slice(0, 300);
+            showErr(m);
+          }
         }
         var wallSheet = document.getElementById('wallSheet');
         var wallGrid = document.getElementById('wallGrid');
@@ -1434,8 +1454,17 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           });
           PENTA = tpl.penta.map(function (m) { return m + s.tr; });
           stepDur = s.step; stepIdx = 0;
-          buildLyrics();
-          layoutLyrics(0);
+          try {
+            buildLyrics();
+            layoutLyrics(0);
+          } catch (err) {
+            /* v43.38 诊断：切歌时建歌词墙抛了就写真实错（message＋stack），别走
+               全局那条抹掉的路。three.min.js 是单独 <script src>，它的错会被
+               浏览器抹成 "Script error."，不给档名行号。首要嫌疑，但没实锤。 */
+            var m = '切歌出错：' + (err && err.message ? err.message : String(err));
+            if (err && err.stack) m += '\n' + String(err.stack).slice(0, 300);
+            showErr(m);
+          }
           document.getElementById('pTitle').textContent = s.zh;
           document.getElementById('pArtist').textContent = s.artist + (s.custom ? ' · 本次导入' : ' · 原唱试听');
           document.getElementById('coverSong').textContent = s.en;
@@ -1586,17 +1615,24 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           var dt = performance.now() - pDown.t;
           pDown = null; parTarget = 0;
           if (moved < 9 && dt < 400) {
-            var ndc = pointerNDC(e);
-            raycaster.setFromCamera(ndc, camera);
-            var o = raycaster.ray.origin, dir = raycaster.ray.direction;
-            if (dir.y < -0.02) {
-              var tt = -o.y / dir.y;
-              var hx = o.x + dir.x * tt, hz = o.z + dir.z * tt;
-              if (Math.abs(hx) < 22 && Math.abs(hz) < 22) {
-                spawnRipple(hx, hz, 1.25);
-                blip();
-                if (!playing) setPlaying(true);
+            /* v43.38 诊断：点水涟漪（raycaster）抛了就写真实错，别走全局抹掉的路。 */
+            try {
+              var ndc = pointerNDC(e);
+              raycaster.setFromCamera(ndc, camera);
+              var o = raycaster.ray.origin, dir = raycaster.ray.direction;
+              if (dir.y < -0.02) {
+                var tt = -o.y / dir.y;
+                var hx = o.x + dir.x * tt, hz = o.z + dir.z * tt;
+                if (Math.abs(hx) < 22 && Math.abs(hz) < 22) {
+                  spawnRipple(hx, hz, 1.25);
+                  blip();
+                  if (!playing) setPlaying(true);
+                }
               }
+            } catch (err) {
+              var m = '点水涟漪出错：' + (err && err.message ? err.message : String(err));
+              if (err && err.stack) m += '\n' + String(err.stack).slice(0, 300);
+              showErr(m);
             }
           }
         });
@@ -1607,10 +1643,17 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
         function resize() {
           var w = container.clientWidth, h = container.clientHeight;
           if (!w || !h) return;
-          if (renderer) renderer.setSize(w, h);
-          if (composer) composer.setSize(w, h);
-          camera.aspect = w / h;
-          camera.updateProjectionMatrix();
+          /* v43.38 诊断：尺寸改动抛了就写真实错，别走全局抹掉的路。 */
+          try {
+            if (renderer) renderer.setSize(w, h);
+            if (composer) composer.setSize(w, h);
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+          } catch (err) {
+            var m = '尺寸出错：' + (err && err.message ? err.message : String(err));
+            if (err && err.stack) m += '\n' + String(err.stack).slice(0, 300);
+            showErr(m);
+          }
         }
         new ResizeObserver(resize).observe(container);
         resize();
@@ -1621,6 +1664,7 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
         function tick() {
           requestAnimationFrame(tick);
           if (window.__ghlssPaused) return;
+          lastFrameAt = Date.now();
           try {
             var dt = Math.min(clock.getDelta(), 0.05);
             elapsed += dt;
