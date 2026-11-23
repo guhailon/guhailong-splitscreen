@@ -3313,6 +3313,24 @@ if (GHLSSIsFloatingWindowSlideLeft()) return 2.0;
 return screenBounds.size.width - peekW - 2.0;
 }
 
+// v43.40（1.0.113）：清調試畫布的安全寫法——先拆子視圖（UIView 拆掉時
+// UIKit 自己把它的 backing layer 從圖層樹上摘掉），再清剩下的獨立圖層
+// （ARC 扇形那個 CAShapeLayer 不是任何視圖的 backing layer，直接摘是對的；
+// 用 delegate 是不是 UIView 來認，delegate 是 nil 或非視圖才摘）。
+// 舊寫法先對全部 sublayers 調 removeFromSuperlayer，會把活 UIView 的
+// backing layer 直接從圖層樹上摘掉（UIKit 不支援這麼幹），再調
+// removeFromSuperview 時視圖／圖層已經不同步——第一次真拆沒死、第二次真拆
+// 就把 SpringBoard 帶走（兩份日誌都死在第二次真拆）。
+static void GHLSSClearDebugCanvas(void) {
+if (!GHLSSDebugTriggerView) return;
+for (UIView *sv in [[GHLSSDebugTriggerView subviews] copy]) [sv removeFromSuperview];
+CALayer *dbgLayer = GHLSSDebugTriggerView.layer;
+if (!dbgLayer) return;
+for (CALayer *ly in [[dbgLayer sublayers] copy]) {
+if (ly && ![ly.delegate isKindOfClass:[UIView class]]) [ly removeFromSuperlayer];
+}
+}
+
 // v43.32：调试模式画触发区——按当前触发方式画：ARC 画扇形（中心屏幕中心，
 // 半径 min(宽,高)/2-20，起始角＋扇角）、边缘画左右矩形（每边一个矩形，
 // 只画触发侧选中的边）、悬浮条画一条竖条（位置 Y%、大小是条长，边跟触发侧
@@ -3320,6 +3338,7 @@ return screenBounds.size.width - peekW - 2.0;
 //（prefschanged／感应带重定位时都调）。关了／分屏关了就藏窗。
 static void GHLSSUpdateTriggerDebugOverlay(void) {
 if (!GHLSSDebugTriggerWindow || !GHLSSDebugTriggerView) return;
+@try {
 // v43.39：被挡闪框优先——调试开关关着时也画，只画被滑的那一侧
 // （重用调试画法的红框；闪完由 GHLSSFlashTriggerZone 的收尾再调一次
 // 本函数，恢复常态画法）。
@@ -3327,8 +3346,7 @@ if (GHLSSFlashZoneSide >= 0) {
 CGRect sb = [UIScreen mainScreen].bounds;
 GHLSSDebugTriggerWindow.frame = sb;
 GHLSSDebugTriggerView.frame = CGRectMake(0, 0, sb.size.width, sb.size.height);
-for (CALayer *ly in [[GHLSSDebugTriggerView.layer sublayers] copy]) [ly removeFromSuperlayer];
-for (UIView *sv in [[GHLSSDebugTriggerView subviews] copy]) [sv removeFromSuperview];
+GHLSSClearDebugCanvas();
 BOOL landscape = sb.size.height < sb.size.width;
 CGRect z = GHLSSReadTriggerZoneRect(GHLSSFlashZoneSide == 0, landscape);
 UIView *box = [[UIView alloc] initWithFrame:z];
@@ -3349,8 +3367,7 @@ return;
 CGRect sb = [UIScreen mainScreen].bounds;
 GHLSSDebugTriggerWindow.frame = sb;
 GHLSSDebugTriggerView.frame = CGRectMake(0, 0, sb.size.width, sb.size.height);
-for (CALayer *ly in [[GHLSSDebugTriggerView.layer sublayers] copy]) [ly removeFromSuperlayer];
-for (UIView *sv in [[GHLSSDebugTriggerView subviews] copy]) [sv removeFromSuperview];
+GHLSSClearDebugCanvas();
 UIColor *fill = [[UIColor redColor] colorWithAlphaComponent:0.15];
 UIColor *edge = [UIColor redColor];
 int mode = GHLSSReadTriggerMode();
@@ -3419,6 +3436,13 @@ snprintf(dbuf, sizeof(dbuf), "v43.39 debug overlay bar side=%s frame=%.0f,%.0f,%
 GHLSSLogLine(dbuf);
 }
 GHLSSDebugTriggerWindow.hidden = NO;
+} @catch (NSException *e) {
+const char *r = e.reason ? [e.reason UTF8String] : "n/a";
+char ebuf[256];
+snprintf(ebuf, sizeof(ebuf), "v43.40 debug overlay error: %s", r ? r : "n/a");
+GHLSSLogLine(ebuf);
+if (GHLSSDebugTriggerWindow) GHLSSDebugTriggerWindow.hidden = YES;
+}
 }
 
 // v43.39：被挡闪框——边缘滑动起手 Y 落在触发区外面时，闪一下被滑那侧
@@ -3472,7 +3496,15 @@ GHLSSStripWindowLeft.frame = CGRectMake(0, 0, stripWidth, screenBounds.size.heig
 GHLSSStripWindowLeft.hidden = !showLeft;
 }
 // 调试画布也跟到新设定（改触发侧／改方式／改宽高位置都重画）。
+// v43.40：重画包一层防护——重画出錯只記日誌，不中斷開啓動器、不殺 SpringBoard。
+@try {
 GHLSSUpdateTriggerDebugOverlay();
+} @catch (NSException *e) {
+const char *r = e.reason ? [e.reason UTF8String] : "n/a";
+char ebuf[256];
+snprintf(ebuf, sizeof(ebuf), "v43.40 strip update overlay error: %s", r ? r : "n/a");
+GHLSSLogLine(ebuf);
+}
 }
 
 // v40：把活动量切到指定窗（手势/小卡/启动器点按时调——多窗时每个手势
