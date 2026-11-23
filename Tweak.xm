@@ -1317,6 +1317,9 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 
 // 窗与状态要一直留着（静态变量拿着，不会被释放）。
 static UIWindow *GHLSSStripWindow = nil;
+static UIWindow *GHLSSStripWindowLeft = nil; // v43.32：左边缘感应带（触发侧左／双侧时用，右带不动）。
+static UIWindow *GHLSSDebugTriggerWindow = nil; // v43.32：调试模式画触发区的窗（平时藏着，不接手势）。
+static UIView *GHLSSDebugTriggerView = nil; // v43.32：调试画布（普通 UIView，红框／扇形／竖条都画在这里）。
 static UIWindow *GHLSSLauncherWindow = nil;
 static UIView *GHLSSLauncherContentView = nil; // v55：ARC 啟動器透明覆蓋層（只有 App 圖標，沒有面板）。
 // v43.19：抽屜下滑關閉記面板起點 Y；橫向輪盤記 scroll view／卡片／
@@ -1333,6 +1336,7 @@ static UIWindow *GHLSSLauncherBackdropWindow = nil;
 static char GHLSSAppPickerBids[256][128]; // v41：選 App 頁每一行的 bundleID（開關 tag = 行號）。
 static int GHLSSAppPickerCount = 0;
 static UIScreenEdgePanGestureRecognizer *GHLSSLauncherEdgePan = nil; // v40：感应带上的右/左边缘滑动手势（跟小窗位置设定走，见 GHLSSUpdateStripPosition）。
+static UIScreenEdgePanGestureRecognizer *GHLSSLauncherEdgePanLeft = nil; // v43.32：左感应带上的左边缘滑动手势（触发侧左／双侧时用）。
 static GHLSSLauncher *GHLSSLauncherShared = nil;
 static BOOL GHLSSLauncherVisible = NO;
 // v43.37（1.0.110，扇形轉盤，第 6 檔 trollfan 才用；1.0.107 e4af0c0 拿回來，
@@ -1347,6 +1351,7 @@ static double GHLSSDialRotation = 0;
 static double GHLSSDialLastTouchAngle = 0;
 static double GHLSSDialLastTickRotation = 0;
 static int GHLSSDialTotal = 0;
+static double GHLSSDialSlot = 0; // v43.32：轉盤一格的角度（全圓 2π/總數；ARC 扇形時是扇角/(總數-1)，吸附＋tick 都走它）。
 // 轉盤手勢裝在哪個 contentView 上（弱引用——窗每次打開都重建，
 // 視圖釋放後自動歸 nil，不留懸空指標）。
 static __weak UIView *GHLSSDialPanView = nil;
@@ -1509,7 +1514,7 @@ static int GHLSSActiveAppIndex = -1;
 
 // v38：默认 scaleRatio（下面定义；GHLSSLoadCacheToActive 要用，先声明）。
 static CGFloat GHLSSDefaultScaleRatioForBundleID(const char *bundleID);
-// v41：先声明（下面定义；GHLSSIsEdgeSwipeLeft 等讀值 helper 要用，先声明）。
+// v41：先声明（下面定义；GHLSSIsWindowPositionLeft 等讀值 helper 要用，先声明）。
 static BOOL GHLSSIsWindowPositionLeft(void);
 // v42：先声明（下面定义；%ctor 与各处要用，先声明）。
 static void GHLSSUpdateTaskbar(void);
@@ -2161,16 +2166,93 @@ static int GHLSSReadEdgeSwipeCount(void) {
 double v = GHLSSReadPrefsDouble("edgeSwipeCount", 2.0);
 return (v <= 1.0) ? 1 : 2;
 }
-static BOOL GHLSSIsEdgeSwipeLeft(void) {
-char *side = GHLSSReadPrefsCString("edgeSwipeSide");
-BOOL isLeft = NO;
-if (side) {
-isLeft = (strcmp(side, "left") == 0);
-free(side);
-} else {
-isLeft = GHLSSIsWindowPositionLeft();
+// v43.32：觸發方式三選（Trigger.plist，triggerMode：arc／edge／bar，
+// 預設 edge——以前一直是邊緣滑動叫出啟動器，預設不變才不改行為）。
+// 0＝ARC（扇形轉盤角度那套），1＝邊緣（左右矩形那套），2＝懸浮條
+// （位置＋大小兩行是假設值，觸發本身還沒接行為）。
+static int GHLSSReadTriggerMode(void) {
+char *v = GHLSSReadPrefsCString("triggerMode");
+int m = 1;
+if (v) {
+if (strcmp(v, "arc") == 0) m = 0;
+else if (strcmp(v, "bar") == 0) m = 2;
+free(v);
 }
-return isLeft;
+return m;
+}
+static BOOL GHLSSReadTriggerModeIsARC(void) {
+return GHLSSReadTriggerMode() == 0;
+}
+// v43.32：觸發側三段（Trigger.plist，沿用 edgeSwipeSide 鍵，皇上存過的
+// left／right 直接帶過來；新加 both，預設雙側）。0＝左，1＝右，2＝雙側。
+static int GHLSSReadTriggerSide(void) {
+char *side = GHLSSReadPrefsCString("edgeSwipeSide");
+int s = 2;
+if (side) {
+if (strcmp(side, "left") == 0) s = 0;
+else if (strcmp(side, "right") == 0) s = 1;
+free(side);
+}
+return s;
+}
+// v43.32：調試模式（triggerDebugMode，預設關）——開起來屏幕上直接
+// 畫出當前方式的觸發區（ARC 畫扇形、邊緣畫左右矩形、懸浮條畫那條）。
+static BOOL GHLSSReadTriggerDebugMode(void) {
+return GHLSSReadPrefsBool("triggerDebugMode", NO);
+}
+// v43.32：ARC 扇形角度（Trigger.plist，TrollOpen 照片上的數就是預設）：
+// 起始角度 0–360（從右側基準逆時針算，90＝正上方），扇形大小 30–360。
+static double GHLSSReadARCStartAngle(void) {
+double v = GHLSSReadPrefsDouble("arcStartAngle", 90.0);
+if (v < 0) v = 0;
+if (v > 360) v = 360;
+return v;
+}
+static double GHLSSReadARCFanAngle(void) {
+double v = GHLSSReadPrefsDouble("arcFanAngle", 180.0);
+if (v < 30) v = 30;
+if (v > 360) v = 360;
+return v;
+}
+// v43.32：懸浮條位置／大小（Trigger.plist，假設值——影片和照片裡都沒
+// 拍到懸浮條那頁，等皇上看過再定；觸發本身還沒接行為）。
+static double GHLSSReadFloatingBarY(void) {
+double v = GHLSSReadPrefsDouble("floatingBarY", 0.5);
+if (v < 0.05) v = 0.05;
+if (v > 0.95) v = 0.95;
+return v;
+}
+static double GHLSSReadFloatingBarSize(void) {
+double v = GHLSSReadPrefsDouble("floatingBarSize", 60.0);
+if (v < 20) v = 20;
+if (v > 200) v = 200;
+return v;
+}
+// v43.32：邊緣觸發區矩形（Trigger.plist 邊緣那套，每邊一個矩形）：
+// 寬＝距邊寬度（5–100，預設 20），高＝矩形高度（50–800；左預設 300、
+// 右預設 171.73），位置＝矩形中心的 Y%（0.05–0.95；左預設 0.77、
+// 右預設 0.84）。橫屏那組預設先跟豎屏同一組數（照片上沒拍到橫屏那頁）。
+// 取代舊的上／下觸發高度（topTriggerHeight／bottomTriggerHeight 已刪）。
+static CGRect GHLSSReadTriggerZoneRect(BOOL left, BOOL landscape) {
+char key[64];
+const char *side = left ? "Left" : "Right";
+const char *orient = landscape ? "Landscape" : "Portrait";
+snprintf(key, sizeof(key), "trigger%sWidth%s", side, orient);
+double w = GHLSSReadPrefsDouble(key, 20.0);
+if (w < 5) w = 5;
+if (w > 100) w = 100;
+snprintf(key, sizeof(key), "trigger%sHeight%s", side, orient);
+double h = GHLSSReadPrefsDouble(key, left ? 300.0 : 171.73);
+if (h < 50) h = 50;
+if (h > 800) h = 800;
+snprintf(key, sizeof(key), "trigger%sY%s", side, orient);
+double y = GHLSSReadPrefsDouble(key, left ? 0.77 : 0.84);
+if (y < 0.05) y = 0.05;
+if (y > 0.95) y = 0.95;
+CGRect sb = [UIScreen mainScreen].bounds;
+CGFloat cy = (CGFloat)(y * (double)sb.size.height);
+CGFloat x = left ? 0 : sb.size.width - (CGFloat)w;
+return CGRectMake(x, cy - (CGFloat)h / 2.0, (CGFloat)w, (CGFloat)h);
 }
 static BOOL GHLSSReadWindowDragEnabled(void) {
 return GHLSSReadPrefsBool("windowDragEnabled", YES);
@@ -2476,24 +2558,8 @@ if (v < 50.0) v = 50.0;
 if (v > 100.0) v = 100.0;
 return (CGFloat)v;
 }
-// v43.3：上方触发高度（topTriggerHeight，0–100，预设 20）：边缘滑动
-// 触发区距屏幕顶部的距离；从比这更靠近顶缘的地方起手，边缘滑动
-// 不开启动器（跟状态栏手势让路）。
-static CGFloat GHLSSReadTopTriggerHeight(void) {
-double v = GHLSSReadPrefsDouble("topTriggerHeight", 20.0);
-if (v < 0) v = 0;
-if (v > 100) v = 100;
-return (CGFloat)v;
-}
-// v43.3：下方触发高度（bottomTriggerHeight，0–100，预设 40）：
-// 触发区距屏幕底部的距离；从比这更靠近底缘的地方起手不开启动器
-//（跟 Home 条手势让路）。
-static CGFloat GHLSSReadBottomTriggerHeight(void) {
-double v = GHLSSReadPrefsDouble("bottomTriggerHeight", 40.0);
-if (v < 0) v = 0;
-if (v > 100) v = 100;
-return (CGFloat)v;
-}
+// v43.32：上／下触发高度已删——触发区改走 Trigger.plist 边缘那套
+// 每边一个矩形（GHLSSReadTriggerZoneRect），见上面触发读值那组。
 // v43.3：上甩速度阈值（flickUpThreshold，0–100 S2 刻度，预设 40）：
 // 浮窗往上甩的速度门槛，换算成 pt/s 是设定值 ×25（40 → 1000 pt/s，
 // 一次干脆利落的上甩）；行为在 handleTitleDrag。
@@ -3240,22 +3306,102 @@ if (GHLSSIsFloatingWindowSlideLeft()) return 2.0;
 return screenBounds.size.width - peekW - 2.0;
 }
 
+// v43.32：调试模式画触发区——按当前触发方式画：ARC 画扇形（中心屏幕中心，
+// 半径 min(宽,高)/2-20，起始角＋扇角）、边缘画左右矩形（每边一个矩形，
+// 只画触发侧选中的边）、悬浮条画一条竖条（位置 Y%、大小是条长，边跟触发侧
+// 走，双侧画左边）。窗不接手势（userInteractionEnabled=NO），改设定就重画
+//（prefschanged／感应带重定位时都调）。关了／分屏关了就藏窗。
+static void GHLSSUpdateTriggerDebugOverlay(void) {
+if (!GHLSSDebugTriggerWindow || !GHLSSDebugTriggerView) return;
+if (!GHLSSReadTriggerDebugMode() || !GHLSSReadEnabled()) {
+GHLSSDebugTriggerWindow.hidden = YES;
+return;
+}
+CGRect sb = [UIScreen mainScreen].bounds;
+GHLSSDebugTriggerWindow.frame = sb;
+GHLSSDebugTriggerView.frame = CGRectMake(0, 0, sb.size.width, sb.size.height);
+for (CALayer *ly in [[GHLSSDebugTriggerView.layer sublayers] copy]) [ly removeFromSuperlayer];
+for (UIView *sv in [[GHLSSDebugTriggerView subviews] copy]) [sv removeFromSuperview];
+UIColor *fill = [[UIColor redColor] colorWithAlphaComponent:0.15];
+UIColor *edge = [UIColor redColor];
+int mode = GHLSSReadTriggerMode();
+if (mode == 1) {
+// 边缘：每边一个矩形（竖屏／横屏按当前方向取组）。
+BOOL landscape = sb.size.height < sb.size.width;
+int side = GHLSSReadTriggerSide();
+if (side == 0 || side == 2) {
+CGRect z = GHLSSReadTriggerZoneRect(YES, landscape);
+UIView *box = [[UIView alloc] initWithFrame:z];
+box.backgroundColor = fill;
+box.layer.borderColor = edge.CGColor;
+box.layer.borderWidth = 1.0;
+[GHLSSDebugTriggerView addSubview:box];
+}
+if (side == 1 || side == 2) {
+CGRect z = GHLSSReadTriggerZoneRect(NO, landscape);
+UIView *box = [[UIView alloc] initWithFrame:z];
+box.backgroundColor = fill;
+box.layer.borderColor = edge.CGColor;
+box.layer.borderWidth = 1.0;
+[GHLSSDebugTriggerView addSubview:box];
+}
+} else if (mode == 0) {
+// ARC：扇形（起始角从右侧基准逆时针算，扇角是整扇跨度，跟转盘同一套数）。
+CGPoint c = CGPointMake(sb.size.width / 2.0, sb.size.height / 2.0);
+CGFloat r = MIN(sb.size.width, sb.size.height) / 2.0 - 20.0;
+if (r < 40.0) r = 40.0;
+double start = -GHLSSReadARCStartAngle() * M_PI / 180.0;
+double span = GHLSSReadARCFanAngle() * M_PI / 180.0;
+UIBezierPath *p = [UIBezierPath bezierPath];
+[p moveToPoint:c];
+[p addArcWithCenter:c radius:r startAngle:start endAngle:start - span clockwise:NO];
+[p closePath];
+CAShapeLayer *layer = [CAShapeLayer layer];
+layer.path = p.CGPath;
+layer.fillColor = fill.CGColor;
+layer.strokeColor = edge.CGColor;
+layer.lineWidth = 1.0;
+[GHLSSDebugTriggerView.layer addSublayer:layer];
+} else {
+// 悬浮条：一条竖条（宽 12，长度＝大小，中心 Y＝位置 Y%×屏高；
+// 边跟触发侧走，双侧画左边）。
+double y = GHLSSReadFloatingBarY();
+double len = GHLSSReadFloatingBarSize();
+int side = GHLSSReadTriggerSide();
+CGFloat bx = (side == 1) ? sb.size.width - 12.0 : 0;
+CGFloat by = (CGFloat)(y * (double)sb.size.height) - (CGFloat)len / 2.0;
+UIView *bar = [[UIView alloc] initWithFrame:CGRectMake(bx, by, 12.0, (CGFloat)len)];
+bar.backgroundColor = fill;
+bar.layer.borderColor = edge.CGColor;
+bar.layer.borderWidth = 1.0;
+bar.layer.cornerRadius = 6.0;
+[GHLSSDebugTriggerView addSubview:bar];
+}
+GHLSSDebugTriggerWindow.hidden = NO;
+}
+
 // v40：感应带跟小窗位置设定走（左/右）。%ctor 建带时调一次（初始位置）；
 // showLauncher 也调（设定改了，下次开启动器时带子就跟到对的边；
-// 哆啦A夢鈕一直在右邊，永遠能開啟動器）。带子 24pt 宽、全高；
-// 边缘滑动手势的 edges 也一起改（右緣滑 / 左緣滑）。
-// v41：感應帶跟調度設定走（edgeSwipeSide；沒設就跟小窗位置設定）。
+// 哆啦A夢鈕一直在右邊，永遠能開啟動器）。带子 24pt 宽、全高。
+// v43.32：触发侧三段（edgeSwipeSide，默认双侧）——左右各一条带子，
+// 各挂自己的边缘滑动手势（左带 edges=Left，右带 edges=Right）；
+// 只显示触发侧选中的边（左／右／双侧）。旧的单带＋改 edges 写法拿掉。
 static void GHLSSUpdateStripPosition(void) {
-if (!GHLSSStripWindow) return;
 CGRect screenBounds = [UIScreen mainScreen].bounds;
 CGFloat stripWidth = 24.0;
-if (GHLSSIsEdgeSwipeLeft()) {
-GHLSSStripWindow.frame = CGRectMake(0, 0, stripWidth, screenBounds.size.height);
-if (GHLSSLauncherEdgePan) GHLSSLauncherEdgePan.edges = UIRectEdgeLeft;
-} else {
+int side = GHLSSReadTriggerSide();
+BOOL showLeft = (side == 0 || side == 2);
+BOOL showRight = (side == 1 || side == 2);
+if (GHLSSStripWindow) {
 GHLSSStripWindow.frame = CGRectMake(screenBounds.size.width - stripWidth, 0, stripWidth, screenBounds.size.height);
-if (GHLSSLauncherEdgePan) GHLSSLauncherEdgePan.edges = UIRectEdgeRight;
+GHLSSStripWindow.hidden = !showRight;
 }
+if (GHLSSStripWindowLeft) {
+GHLSSStripWindowLeft.frame = CGRectMake(0, 0, stripWidth, screenBounds.size.height);
+GHLSSStripWindowLeft.hidden = !showLeft;
+}
+// 调试画布也跟到新设定（改触发侧／改方式／改宽高位置都重画）。
+GHLSSUpdateTriggerDebugOverlay();
 }
 
 // v40：把活动量切到指定窗（手势/小卡/启动器点按时调——多窗时每个手势
@@ -4075,6 +4221,8 @@ if (!enabled) {
 if (GHLSSLauncherShared) [GHLSSLauncherShared dismissLauncher];
 if (GHLSSDoraemonButtonWindow) GHLSSDoraemonButtonWindow.hidden = YES;
 if (GHLSSStripWindow) GHLSSStripWindow.hidden = YES;
+if (GHLSSStripWindowLeft) GHLSSStripWindowLeft.hidden = YES;
+if (GHLSSDebugTriggerWindow) GHLSSDebugTriggerWindow.hidden = YES;
 for (int i = 0; i < GHLSSAppCount; i++) {
 if (GHLSSCacheWindows[i] && !GHLSSCacheWindows[i].hidden) {
 GHLSSCacheWindows[i].hidden = YES;
@@ -4086,7 +4234,8 @@ GHLSSLogLine("v57 splitscreen disabled");
 return;
 }
 if (GHLSSDoraemonButtonWindow) GHLSSDoraemonButtonWindow.hidden = NO;
-if (GHLSSStripWindow) GHLSSStripWindow.hidden = NO;
+// v43.32：感应带按触发侧重放（左／右／双侧各显各的边；调试画布也一起重画）。
+GHLSSUpdateStripPosition();
 for (int i = 0; i < GHLSSAppCount; i++) {
 if (GHLSSCacheHiddenByDisable[i] && GHLSSCacheWindows[i]) {
 GHLSSCacheWindows[i].hidden = NO;
@@ -4487,19 +4636,21 @@ if (recognizer.state != UIGestureRecognizerStateEnded) return;
 // v43.14：改边立刻生效（其一）——每次边缘滑动先按现值重算感应带位置
 //（设定改了、还没开过启动器时，带子先跟到新边；新边滑动本身见 3b）。
 GHLSSUpdateStripPosition();
-// v43.3：触发区——起手 Y 必须落在 [上方触发高度, 屏高 − 下方触发高度] 内，
-// 不然这次滑动不开启动器，也不计入 1x/2x 计数。感应带窗本身保持全高
-//（拖动手势拿它当固定参考坐标，改 frame 会量错手指位置），只在
-// 这里按起手 Y 拦。起手 Y 没记到就退回松手 Y。
+// v43.32：触发区——每边一个矩形（Trigger.plist 边缘那套）：起手 Y 必须落在
+// 这次滑动那边的矩形里（宽＝距边宽度，高＝高度，竖直中心＝位置 Y%×屏高；
+// 竖屏用竖屏那组、横屏用横屏那组），不然这次滑动不开启动器，也不计入
+// 1x/2x 计数。感应带窗本身保持全高（拖动手势拿它当固定参考坐标，
+// 改 frame 会量错手指位置），只在这里按起手 Y 拦。起手 Y 没记到就退回松手 Y。
 CGFloat swipeStartY = GHLSSLastSwipeStartY;
 GHLSSLastSwipeStartY = -1;
 if (swipeStartY < 0) swipeStartY = [recognizer locationInView:nil].y;
-CGFloat trigTop = GHLSSReadTopTriggerHeight();
-CGFloat trigBottom = GHLSSReadBottomTriggerHeight();
-CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
-if (swipeStartY < trigTop || swipeStartY > screenH - trigBottom) {
-char dbuf[128];
-snprintf(dbuf, sizeof(dbuf), "v43.3 edge swipe outside trigger zone y=%.0f top=%.0f bottom=%.0f", swipeStartY, trigTop, trigBottom);
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+BOOL fromLeft = (recognizer.edges == UIRectEdgeLeft);
+BOOL landscape = screenBounds.size.height < screenBounds.size.width;
+CGRect zone = GHLSSReadTriggerZoneRect(fromLeft, landscape);
+if (swipeStartY < zone.origin.y || swipeStartY > zone.origin.y + zone.size.height) {
+char dbuf[160];
+snprintf(dbuf, sizeof(dbuf), "v43.32 edge swipe outside trigger zone y=%.0f side=%s zone y=%.0f..%.0f", swipeStartY, fromLeft ? "left" : "right", zone.origin.y, zone.origin.y + zone.size.height);
 GHLSSLogLine(dbuf);
 return;
 }
@@ -8390,6 +8541,14 @@ GHLSSDialRotation = 0;
 GHLSSDialLastTickRotation = 0;
 GHLSSDialTotal = (int)total;
 }
+// v43.32：ARC 触发方式时转盘按扇形排（起始角＋扇角，Trigger.plist）；
+// 扇角 360 就是全圆（只转个起始方向）；其他方式／底部扇形保持全圆。
+// （偏离 7a5734b 一处：7a5734b 时转盘挂在 radial 上，这里转盘已是独立第 6 档，
+// 所以多一道 trollfan 門——radial（0）靜態圓環一行都不動，扇形排只改轉盤。）
+BOOL arcFanMode = GHLSSReadLauncherStyleTrollFan() && !slideBottom && GHLSSReadTriggerModeIsARC() && GHLSSReadARCFanAngle() < 360.0;
+double arcStart = -GHLSSReadARCStartAngle() * M_PI / 180.0;
+double arcSpan = GHLSSReadARCFanAngle() * M_PI / 180.0;
+GHLSSDialSlot = (arcFanMode && total > 1) ? arcSpan / (double)(total - 1) : 2.0 * M_PI / (double)total;
 // v43.8 单圈优先：半径取 Rmax（留 12pt 边距），容量＝周长／间距；
 // 装不下就往小缩（每次减 4，最小 40），缩到底还装不下就不走单圈。
 CGFloat radii[6] = {0, 0, 0, 0, 0, 0};
@@ -8524,6 +8683,13 @@ if (!bid || bid[0] == '\0') continue;
 double step = (count == 1) ? 0.0 : 2.0 * M_PI / (double)count;
 double stagger = (ring % 2 == 1) ? step / 2.0 : 0.0;
 double angle = -M_PI_2 + stagger + step * (double)j;
+// v43.32：ARC 方式时按扇形排——从起始角起、逆时针跨扇角（奇数环错半格
+// 跟全圆版同一做法）；扇角 360 时上面 arcFanMode 为假，走全圆。
+if (arcFanMode) {
+double fstep = (count == 1) ? 0.0 : arcSpan / (double)(count - 1);
+double fstagger = (ring % 2 == 1) ? fstep / 2.0 : 0.0;
+angle = arcStart - fstep * (double)j + fstagger;
+}
 // v43.23：第 3 件——從底部出：只排上半扇（角度 π..2π，從底緣往上展開），
 // 奇數環錯半格（跟全圓版同一做法，扇面裡也錯開）。
 if (slideBottom) {
@@ -8598,7 +8764,7 @@ if (delta < -M_PI) delta += 2.0 * M_PI;
 GHLSSDialLastTouchAngle = ang;
 GHLSSDialRotation += delta;
 GHLSSDialApplyRotation();
-double slot = 2.0 * M_PI / (double)GHLSSDialTotal;
+double slot = (GHLSSDialSlot > 0) ? GHLSSDialSlot : 2.0 * M_PI / (double)GHLSSDialTotal;
 if (fabs(GHLSSDialRotation - GHLSSDialLastTickRotation) >= slot) {
 GHLSSDialLastTickRotation = GHLSSDialRotation;
 GHLSSDialTickFeedback();
@@ -8607,7 +8773,7 @@ return;
 }
 if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled) {
 // 吸附到最近的格子。
-double slot = 2.0 * M_PI / (double)GHLSSDialTotal;
+double slot = (GHLSSDialSlot > 0) ? GHLSSDialSlot : 2.0 * M_PI / (double)GHLSSDialTotal;
 double target = round(GHLSSDialRotation / slot) * slot;
 GHLSSDialRotation = target;
 [UIView animateWithDuration:0.15 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
@@ -9594,6 +9760,43 @@ edgePan.delegate = GHLSSLauncherShared;
 [stripView addGestureRecognizer:edgePan];
 GHLSSLauncherEdgePan = edgePan;
 GHLSSLogLine("v57 edge gesture added");
+// v43.32：左边缘感应带（触发侧左／双侧时用）——跟右带同一层级／scene／
+// 透明底，自己的边缘滑动手势（edges=Left）接同一个 handleEdgeSwipe:。
+CGRect stripFrameL = CGRectMake(0, 0, stripWidth, screenBounds.size.height);
+GHLSSStripWindowLeft = [[UIWindow alloc] initWithFrame:stripFrameL];
+GHLSSStripWindowLeft.windowLevel = UIWindowLevelAlert - 4.0;
+GHLSSStripWindowLeft.backgroundColor = [UIColor clearColor];
+if (stripScene) {
+GHLSSStripWindowLeft.windowScene = stripScene;
+}
+UIViewController *stripVCL = [[UIViewController alloc] init];
+GHLSSPlainStripView *stripViewL = [[GHLSSPlainStripView alloc] initWithFrame:CGRectMake(0, 0, stripWidth, screenBounds.size.height)];
+stripViewL.backgroundColor = [UIColor clearColor];
+stripVCL.view = stripViewL;
+GHLSSStripWindowLeft.rootViewController = stripVCL;
+GHLSSStripWindowLeft.hidden = YES;
+UIScreenEdgePanGestureRecognizer *edgePanL = [[UIScreenEdgePanGestureRecognizer alloc] initWithTarget:GHLSSLauncherShared action:@selector(handleEdgeSwipe:)];
+edgePanL.edges = UIRectEdgeLeft;
+edgePanL.delegate = GHLSSLauncherShared;
+[stripViewL addGestureRecognizer:edgePanL];
+GHLSSLauncherEdgePanLeft = edgePanL;
+GHLSSLogLine("v43.32 left edge strip built");
+// v43.32：调试画布窗（平时藏着，不接手势；调试模式开起来才画触发区）。
+GHLSSDebugTriggerWindow = [[UIWindow alloc] initWithFrame:screenBounds];
+GHLSSDebugTriggerWindow.windowLevel = UIWindowLevelAlert - 3.0;
+GHLSSDebugTriggerWindow.backgroundColor = [UIColor clearColor];
+GHLSSDebugTriggerWindow.userInteractionEnabled = NO;
+if (stripScene) {
+GHLSSDebugTriggerWindow.windowScene = stripScene;
+}
+UIViewController *dbgVC = [[UIViewController alloc] init];
+GHLSSDebugTriggerView = [[UIView alloc] initWithFrame:screenBounds];
+GHLSSDebugTriggerView.backgroundColor = [UIColor clearColor];
+GHLSSDebugTriggerView.userInteractionEnabled = NO;
+dbgVC.view = GHLSSDebugTriggerView;
+GHLSSDebugTriggerWindow.rootViewController = dbgVC;
+GHLSSDebugTriggerWindow.hidden = YES;
+GHLSSLogLine("v43.32 debug trigger window built");
 // v40：感应带跟小窗位置设定走（初始位置按设定放；设定改了，下次开
 // 启动器时 showLauncher 会再调 GHLSSUpdateStripPosition 跟到对的边）。
 GHLSSUpdateStripPosition();
