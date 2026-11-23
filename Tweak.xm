@@ -2271,6 +2271,10 @@ return GHLSSReadPrefsBool("windowDragEnabled", YES);
 static BOOL GHLSSReadDoraemonDoubleTapEnabled(void) {
 return GHLSSReadPrefsBool("doraemonDoubleTapEnabled", YES);
 }
+// v43.43（1.0.115，哆啦A夢鈕開關）：顯示開關（預設開；關了鈕藏起來）。
+static BOOL GHLSSReadDoraemonButtonEnabled(void) {
+return GHLSSReadPrefsBool("doraemonButtonEnabled", YES);
+}
 static double GHLSSReadLongPressDuration(void) {
 double v = GHLSSReadPrefsDouble("longPressDuration", 0.5);
 if (v < 0.3) v = 0.3;
@@ -2696,7 +2700,8 @@ AudioServicesPlaySystemSound(1104);
 // v41：陰影細項（透明度 0–1 預設 0.5、半徑 0–30 預設 12）、通知橫幅
 // 顯示時長（1–3 秒，預設 1.5）、
 // 哆啦A夢鈕大小（44–72 預設 56）、左右邊（doraemonSide，沒設就跟小窗
-// 位置）；鈕永遠顯示（v52 取消顯示開關）。鍵盤/相機兩個開關只存偏好
+// 位置）；鈕顯示開關（doraemonButtonEnabled，預設開，v43.43 加回——v52
+// 拿掉過，皇上 17:27 要加進 1.0.115）。鍵盤/相機兩個開關只存偏好
 // （見 BUILD_LOG §113：鍵盤在浮窗內的表現、相機授權都不是這個開關能直接改的，誠實記為待真機驗證/未實作）。
 static CGFloat GHLSSReadShadowOpacity(void) {
 double v = GHLSSReadPrefsDouble("shadowOpacity", 0.5);
@@ -4394,6 +4399,29 @@ static BOOL GHLSSAppliedEnabledValue = NO;
 // v43.28：激活码锁（定义在这里，GHLSSApplyEnabledState 和下面
 // %ctor 后的激活模块共用）——锁住时分屏开关就当关着。
 static BOOL GHLSSActivationLocked = NO;
+// v43.43（1.0.115，哆啦A夢鈕開關）：顯示開關跟進（tick 每 2 秒跑一次＋
+// prefschanged 立刻跑一次）。關→藏鈕；開→只在分屏開著、沒鎖、表盤沒藏
+// 著鈕時顯示回來。開關狀態變了才動手，沒變直接回（tick 便宜）。
+static BOOL GHLSSAppliedDoraemonButtonEnabled = NO;
+static BOOL GHLSSAppliedDoraemonButtonEnabledValue = YES;
+static void GHLSSApplyDoraemonButtonEnabled(void) {
+BOOL want = GHLSSReadDoraemonButtonEnabled();
+if (GHLSSAppliedDoraemonButtonEnabled && want == GHLSSAppliedDoraemonButtonEnabledValue) return;
+GHLSSAppliedDoraemonButtonEnabled = YES;
+GHLSSAppliedDoraemonButtonEnabledValue = want;
+if (!GHLSSDoraemonButtonWindow) return;
+if (!want) {
+GHLSSDoraemonButtonWindow.hidden = YES;
+GHLSSLogLine("v43.43 doraemon button disabled");
+return;
+}
+// 開：表盤正藏著鈕時不搶回來（dismissLauncher 會放回）；分屏關著／
+// 激活鎖住時也不顯示（GHLSSApplyEnabledState 管那邊）。
+if (GHLSSDialHidDoraemonButton) return;
+if (!GHLSSReadEnabled() || GHLSSActivationLocked) return;
+GHLSSDoraemonButtonWindow.hidden = NO;
+GHLSSLogLine("v43.43 doraemon button enabled");
+}
 static void GHLSSApplyEnabledState(void) {
 BOOL enabled = GHLSSReadEnabled() && !GHLSSActivationLocked;
 if (GHLSSAppliedEnabledState && enabled == GHLSSAppliedEnabledValue) return;
@@ -4415,7 +4443,7 @@ GHLSSUpdateTaskbar();
 GHLSSLogLine("v57 splitscreen disabled");
 return;
 }
-if (GHLSSDoraemonButtonWindow) GHLSSDoraemonButtonWindow.hidden = NO;
+if (GHLSSDoraemonButtonWindow && GHLSSReadDoraemonButtonEnabled()) GHLSSDoraemonButtonWindow.hidden = NO;
 // v43.32：感应带按触发侧重放（左／右／双侧各显各的边；调试画布也一起重画）。
 GHLSSUpdateStripPosition();
 for (int i = 0; i < GHLSSAppCount; i++) {
@@ -4744,6 +4772,8 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), di
 GHLSSApplyDoraemonSettings();
 GHLSSRefreshDoraemonButtonImageIfNeeded();
 GHLSSApplyEnabledState();
+// v43.43：哆啦A夢鈕開關兜底（prefschanged 沒收到時 2 秒內也跟上）。
+GHLSSApplyDoraemonButtonEnabled();
 // v42：任務欄開了就建（2 秒內生效，不用 respring；v53：懸浮球已拿掉）。
 if (GHLSSReadTaskbarEnabled()) GHLSSBuildTaskbarIfNeeded();
 GHLSSUpdateTaskbar();
@@ -8450,7 +8480,8 @@ GHLSSLauncherVisible = NO;
 // v43.42（1.0.115，表盘启动器）：表盘打开时藏了悬浮钮，关掉时放回来
 //（钮位是用户拖好的 prefs，不动；只恢复显示）。
 if (GHLSSDialHidDoraemonButton) {
-if (GHLSSDoraemonButtonWindow) GHLSSDoraemonButtonWindow.hidden = NO;
+// v43.43：開關關著時不放回（邊緣滑動也能叫出表盤，關掉時同樣藏過鈕）。
+if (GHLSSDoraemonButtonWindow && GHLSSReadDoraemonButtonEnabled()) GHLSSDoraemonButtonWindow.hidden = NO;
 GHLSSDialHidDoraemonButton = NO;
 }
 // v43.37（1.0.110，扇形轉盤）：轉盤狀態清空——圖標按鈕跟著舊窗走，
@@ -10512,8 +10543,9 @@ doraemonLongPress.delegate = GHLSSLauncherShared;
 GHLSSDoraemonButton = doraemonButton;
 GHLSSAppliedDoraemonSize = doraemonSize;
 GHLSSAppliedDoraemonLeft = GHLSSIsDoraemonSideLeft();
-// v52：鈕永遠顯示（顯示開關已取消）。
-GHLSSDoraemonButtonWindow.hidden = NO;
+// v43.43：顯示開關加回來（doraemonButtonEnabled，預設開；關著建完就
+// 藏起來，等開關開了 tick／prefschanged 再放回來）。
+GHLSSDoraemonButtonWindow.hidden = GHLSSReadDoraemonButtonEnabled() ? NO : YES;
 GHLSSLogLine("v57 doraemon button added");
 CGRect bf = doraemonButton.frame;
 snprintf(dbuf, sizeof(dbuf), "v57 doraemon button frame=%d,%d,%d,%d", (int)bf.origin.x, (int)bf.origin.y, (int)bf.size.width, (int)bf.size.height);
@@ -10689,6 +10721,8 @@ GHLSSUpdateStripPosition();
 // v43.16 C：任務欄位置／透明度／大小一改就重刷（新三行都帶 PostNotification）；
 // v43.21：樣式也一樣（taskbarStyle 行帶 PostNotification，切換立刻生效）。
 GHLSSUpdateTaskbar();
+// v43.43：哆啦A夢鈕開關一改立刻生效（不用等 2 秒 tick）。
+GHLSSApplyDoraemonButtonEnabled();
 });
 if (prefsChangedResult == 0) {
 GHLSSLogLine("v43.13 prefsChanged notify registered");
