@@ -225,7 +225,11 @@
         position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 50; display: none;
         padding: 12px 14px; border-radius: 12px; background: rgba(80,16,32,.92); color: #ffe9ee;
         font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+        align-items: flex-start;
       }
+      /* v43.37 (1.0.110): errBox 不再永久——可关 ×＋6 秒自动消失，同一条错 30 秒内不重弹。 */
+      #errText { flex: 1; min-width: 0; }
+      #errClose { flex: none; margin-left: 10px; border: none; background: transparent; color: #ffe9ee; font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 6px; }
 
       /* ---------- Playlist ---------- */
       .list-btn {
@@ -236,6 +240,14 @@
       }
       .list-btn:active { transform: scale(.95); }
       .list-btn svg { width: 15px; height: 15px; }
+      /* v43.37 (1.0.110): control row too crowded — hide the control-row
+         Douyin button, keep the buttons on one row, tighten the gap.
+         Per-song Douyin links (.dy-link) and the preview toast link (#pvDy)
+         are untouched; #dyBtn stays in the DOM so applySong writing
+         dyBtn.href does not throw (removing it would trip the error box). */
+      #dyBtn { display: none; }
+      .btn-row { flex-wrap: nowrap; gap: 8px; }
+      .list-btn { white-space: nowrap; }
       .playlist {
         position: absolute; left: 10px; right: 10px; top: 10px; bottom: 104px;
         padding: 14px 6px 10px 14px; border-radius: 20px;
@@ -454,7 +466,7 @@
         </section>
       </main>
     </div>
-    <div id="errBox" role="alert"></div>
+    <div id="errBox" role="alert"><span id="errText"></span><button id="errClose" type="button" aria-label="关闭">✕</button></div>
 
     <audio id="bgm" src="assets/piano.m4a" loop preload="auto" playsinline style="display:none"></audio>
 
@@ -462,9 +474,48 @@
     <script>
       (function () {
         var errBox = document.getElementById('errBox');
+        var errText = document.getElementById('errText');
+        /* v43.37 (1.0.110): 错条不再永久——有关闭 ×，6 秒自动消失；同一条错
+           在 30 秒内不重弹（渲染每帧都抛同一错时也不会一直盖着控制行）。
+           不在渲染成功时清除：那样条子一闪就没，诊断（档名／行号）来不及截图。 */
+        var errTimer = null, errLastMsg = '', errLastHide = 0;
+        function hideErr() {
+          errBox.style.display = 'none';
+          errLastHide = Date.now();
+          if (errTimer) { clearTimeout(errTimer); errTimer = null; }
+        }
+        function showErr(msg) {
+          if (msg === errLastMsg && Date.now() - errLastHide < 30000) return;
+          if (errBox.style.display !== 'none' && errText.textContent === msg) return;
+          errText.textContent = msg;
+          errBox.style.display = 'flex';
+          errLastMsg = msg;
+          if (errTimer) clearTimeout(errTimer);
+          errTimer = setTimeout(hideErr, 6000);
+        }
+        document.getElementById('errClose').addEventListener('click', hideErr);
         window.addEventListener('error', function (e) {
-          errBox.style.display = 'block';
-          errBox.textContent = '页面出错了：' + (e.message || '未知错误') + '\n请刷新重试。';
+          /* v43.37 诊断：把档名／行号／列号／堆叠一起写进错条，下次截图就能
+             直接看到是哪个档案哪一行。"Script error." 是浏览器抹掉资讯后的
+             通用字（外部脚本错），那时档名／行号／堆叠本来就是空的，条子会
+             如实写「浏览器未提供档名／行号」，不是诊断坏了。 */
+          var msg = '页面出错了：' + (e.message || '未知错误');
+          var where = [];
+          if (e.filename) where.push(e.filename);
+          if (e.lineno) where.push('第' + e.lineno + '行');
+          if (e.colno) where.push('第' + e.colno + '列');
+          if (where.length) msg += '\n' + where.join(' ');
+          else msg += '\n（浏览器未提供档名／行号）';
+          var stk = (e.error && e.error.stack) ? String(e.error.stack) : '';
+          if (stk) msg += '\n' + stk.slice(0, 300);
+          showErr(msg);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          var msg = '未处理的 Promise 错误：' + ((r && r.message) || String(r || '未知错误'));
+          var stk = (r && r.stack) ? String(r.stack).slice(0, 300) : '';
+          if (stk) msg += '\n' + stk;
+          showErr(msg);
         });
 
         /* ================= 歌单数据：123 首（原曲 + 历批清单 + 抖音热歌榜 20 首） =================
@@ -859,11 +910,10 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         } catch (e) {
           // v43.35 fail-soft：WebGL 建不起来也不抛（之前 throw e 会触发全局
-          // error 框「页面出错了…请刷新重试」，墙面空白）。降级：3D 水面不渲，
+          // error 框「页面出错了」，墙面空白）。降级：3D 水面不渲，
           // 封面／歌单／控制／音频照常工作。
           renderer = null;
-          errBox.style.display = 'block';
-          errBox.textContent = '这台设备不支持 WebGL，水面歌词墙没法流动起来。';
+          showErr('这台设备不支持 WebGL，水面歌词墙没法流动起来。');
         }
         if (renderer) {
           renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -1625,8 +1675,7 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
 
             if (composer) composer.render(); else if (renderer) renderer.render(scene, camera);
           } catch (err) {
-            errBox.style.display = 'block';
-            errBox.textContent = '渲染出错：' + err.message;
+            showErr('渲染出错：' + err.message);
           }
         }
         applySong(0);
