@@ -561,6 +561,12 @@ static CGFloat GHLSSInlineLyricWallHeight(CGFloat w) {
                 WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
                 wv = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, w, h) configuration:config];
                 wv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+                // v43.38（1.0.111，捏合缩放锁）：只关内嵌播放器的捏合缩放，手指一捏不再放大、
+                // 缩不回去。滚动、点按、滑动手势不动。pinch 手势关掉＋maximumZoomScale 锁 1.0
+                // ＋bouncesZoom 关掉，三重保险。
+                wv.scrollView.pinchGestureRecognizer.enabled = NO;
+                wv.scrollView.maximumZoomScale = 1.0;
+                wv.scrollView.bouncesZoom = NO;
                 // v43.35：同上，跟页面底色一致。
                 wv.backgroundColor = [UIColor colorWithRed:23.0/255.0 green:17.0/255.0 blue:43.0/255.0 alpha:1.0];
                 wv.opaque = YES;
