@@ -2584,7 +2584,7 @@ static BOOL GHLSSReadDialModeEnabled(void) {
 return GHLSSReadPrefsBool("dialMode", YES);
 }
 static BOOL GHLSSReadDialCentered(void) {
-return GHLSSReadPrefsBool("dialCentered", NO);
+return GHLSSReadPrefsBool("dialCentered", YES);
 }
 static BOOL GHLSSReadDialHidePointer(void) {
 return GHLSSReadPrefsBool("dialHidePointer", NO);
@@ -9061,7 +9061,8 @@ return maxBottom + 12.0;
 // 整个圆弧以按钮位置往上 60pt 为弧顶（皇上 15:46 定；参考最低图标
 // 底边 y≈942 被裁，+60 后 ≈882，离屏底 50pt）。
 // 居中显示开时圆心改屏幕中心、扇区改全圆，圈数按屏幕收成贴合的 3 圈
-//（影片里的居中圆盘形态；紧凑圆盘的精确几何影片里量不出来）。
+//（影片里的居中圆盘形态；默认形态，皇上 16:08 定「表盘不是以哆啦A夢视角走」；
+// 紧凑圆盘的精确几何影片里量不出来）。
 // 打开时悬浮钮已由 showLauncher 藏起（关掉时放回）；中心钮点一下收起。
 // 背景沿用 0.55 黑遮罩，另加一面淡白圆盘（透明度走导航台设置）。
 // 指针只画示意短针（形态影片里辨认不出来）；隐藏指针开时不画。
@@ -9080,7 +9081,8 @@ if (icon > 64.0) icon = 64.0;
 CGFloat spacing = GHLSSReadDialElementSpacing();
 CGFloat pitch = icon + spacing;
 if (pitch < icon + 2.0) pitch = icon + 2.0;
-// 弧顶：按钮位置往上 60pt；居中显示时改屏幕中心。
+// v43.42 fix（皇上 16:08）：默认居中圆盘（圆心屏幕正中，不锚哆啦A夢钮位）；
+// 居中显示关时弧顶才是按钮位置往上 60pt。
 CGPoint center;
 BOOL centered = GHLSSReadDialCentered();
 if (centered) {
