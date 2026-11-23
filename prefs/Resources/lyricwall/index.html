@@ -1630,14 +1630,21 @@ var REAL_LYRICS = {"送别": [{"en": "Outside the long pavilion, by the ancient 
           document.getElementById('playBtn').setAttribute('aria-label', playing ? '暂停' : '播放');
         }
         /* v43.30：主页内嵌播放器暂停钩子（设置主页消失时由原生侧调用，
-           防主页墙与详情页墙同时出声；只停声音＋停渲染，不改曲目／进度；
-           恢复只恢复渲染，不自动续播）。 */
+           防主页墙与详情页墙同时出声；只停声音＋停渲染，不改曲目／进度）。
+           v43.41（1.0.114）：回来自动续播——暂停时记下当时是否在播，
+           回来时若在播就从停的位置续播；用户自己先手动停了的（暂停时
+           playing 为 false）不续播。 */
         window.ghlssPausePlayer = function () {
           window.__ghlssPaused = true;
+          window.__ghlssResumePlaying = playing;
           if (playing) setPlaying(false);
         };
         window.ghlssResumeView = function () {
           window.__ghlssPaused = false;
+          if (window.__ghlssResumePlaying) {
+            window.__ghlssResumePlaying = false;
+            setPlaying(true);
+          }
         };
         bigPlay.addEventListener('click', function () { setPlaying(true); spawnRipple(0, 1.8, 1.0); });
         document.getElementById('playBtn').addEventListener('click', function () { setPlaying(!playing); });

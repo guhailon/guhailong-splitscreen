@@ -624,8 +624,8 @@ static CGFloat GHLSSInlineLyricWallHeight(CGFloat w) {
 }
 
 // v43.30：主页嵌了整个歌词墙（整页 9:16 高的 WKWebView 头）：离开主页时暂停内嵌
-// 播放器（停声音＋停渲染），防主页墙与详情页墙同时出声；回来时只恢复
-// 渲染，不自动续播（声音等用户再点播放）。
+// 播放器（停声音＋停渲染），防主页墙与详情页墙同时出声；回来时恢复渲染并
+// v43.41（1.0.114）：自动续播离开前正在播的声音（用户自己先停了的不续）。
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     if (![self isMemberOfClass:[GuHaiLongSplitScreenRootListController class]]) return;
@@ -703,9 +703,9 @@ static CGFloat GHLSSInlineLyricWallHeight(CGFloat w) {
         char buf[192];
         snprintf(buf, sizeof(buf), "v57 prefs-update: latest %s", [latest UTF8String]);
         GHLSSPrefsLogLine(buf);
-        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.113");
+        int cmp = GHLSSCompareDottedVersions([latest UTF8String], "1.0.114");
         if (cmp <= 0) {
-            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.113。")];
+            [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("已经是最新版") message:GHLSSRuntimeString("已经是最新版 1.0.114。")];
         } else {
             NSString *msg = [[GHLSSRuntimeString("有新版 ") stringByAppendingString:latest] stringByAppendingString:GHLSSRuntimeString("，请去 Sileo 更新。")];
             [strongSelf ghlssShowAlertWithTitle:GHLSSRuntimeString("有新版") message:msg];
@@ -2038,7 +2038,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
     NSString *tail = GHLSSLogTailNewestFirstN(5);
     if (!tail) tail = GHLSSRuntimeString("");
     NSString *onOff = on ? GHLSSRuntimeString("开") : GHLSSRuntimeString("关");
-    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.113\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
+    NSString *diag = [[[GHLSSRuntimeString("顾海龙集团分屏 v1.0.114\n插件开关：") stringByAppendingString:onOff] stringByAppendingString:GHLSSRuntimeString("\n最近日志：\n")] stringByAppendingString:tail];
     // v43.23：第 8 件——診斷信息也帶上 kbHelperLoaded 標記。
     NSString *marks = GHLSSKbHelperMarkersText();
     if (marks) {
@@ -2256,7 +2256,7 @@ static NSString *GHLSSKbHelperMarkersText(void) {
                     NSString *txt = [GHLSSRuntimeString("iOS ") stringByAppendingString:(ver ? ver : GHLSSRuntimeString("?"))];
                     [spec setProperty:txt forKey:GHLSSRuntimeString("valueText")];
                 } else if ([vk isEqualToString:GHLSSRuntimeString("pluginVersion")]) {
-                    [spec setProperty:GHLSSRuntimeString("1.0.113") forKey:GHLSSRuntimeString("valueText")];
+                    [spec setProperty:GHLSSRuntimeString("1.0.114") forKey:GHLSSRuntimeString("valueText")];
                 }
             }
             _specifiers = loaded;
