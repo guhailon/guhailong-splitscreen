@@ -112,6 +112,7 @@
 				<string>抽屉式</string>
 				<string>横向轮盘式</string>
 				<string>磁贴式</string>
+				<string>扇形轉盤</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -120,6 +121,7 @@
 				<string>drawer</string>
 				<string>carousel</string>
 				<string>tile</string>
+				<string>trollfan</string>
 			</array>
 		</dict>
 		<dict>

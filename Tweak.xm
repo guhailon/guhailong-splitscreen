@@ -1278,6 +1278,9 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // v43.2：圓環中央大設定齒輪。
 - (UIButton *)arcRadialGearButtonAtCenter:(CGPoint)center size:(CGFloat)size;
 - (void)handleARCRadialGearButton:(UIButton *)sender;
+// v43.37（1.0.110，扇形轉盤，第 6 檔 trollfan）：轉盤拖動手勢（見 handleDialPan:）。
+// 1.0.107 e4af0c0 拿回來，門從 radial（0）改成 trollfan（5）。
+- (void)handleDialPan:(UIPanGestureRecognizer *)recognizer;
 - (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)showNotificationBannerWithText:(const char *)text;
 // v72：showNotificationBannerForName 整个拿掉（皇上：浮窗已打开提示取消）——
@@ -1332,6 +1335,35 @@ static int GHLSSAppPickerCount = 0;
 static UIScreenEdgePanGestureRecognizer *GHLSSLauncherEdgePan = nil; // v40：感应带上的右/左边缘滑动手势（跟小窗位置设定走，见 GHLSSUpdateStripPosition）。
 static GHLSSLauncher *GHLSSLauncherShared = nil;
 static BOOL GHLSSLauncherVisible = NO;
+// v43.37（1.0.110，扇形轉盤，第 6 檔 trollfan 才用；1.0.107 e4af0c0 拿回來，
+// 門從 radial（0）改成 trollfan（5））：每顆圖標的半徑／基準角（弧度，
+// 螢幕座標系）／中心點＋當前轉角。重建啟動器時清空、轉角歸零；
+// slideBottom 扇形不轉，不記。
+static NSMutableArray *GHLSSDialButtons = nil;
+static NSMutableArray *GHLSSDialRadii = nil;
+static NSMutableArray *GHLSSDialAngles = nil;
+static CGPoint GHLSSDialCenter = {0, 0};
+static double GHLSSDialRotation = 0;
+static double GHLSSDialLastTouchAngle = 0;
+static double GHLSSDialLastTickRotation = 0;
+static int GHLSSDialTotal = 0;
+// 轉盤手勢裝在哪個 contentView 上（弱引用——窗每次打開都重建，
+// 視圖釋放後自動歸 nil，不留懸空指標）。
+static __weak UIView *GHLSSDialPanView = nil;
+// 轉盤按當前轉角重排圖標（基準角＋轉角，繞中心轉）。
+static void GHLSSDialApplyRotation(void) {
+if (!GHLSSDialButtons || !GHLSSDialRadii || !GHLSSDialAngles) return;
+NSUInteger n = [GHLSSDialButtons count];
+for (NSUInteger i = 0; i < n; i++) {
+UIButton *btn = (UIButton *)[GHLSSDialButtons objectAtIndex:i];
+NSNumber *rNum = (NSNumber *)[GHLSSDialRadii objectAtIndex:i];
+NSNumber *aNum = (NSNumber *)[GHLSSDialAngles objectAtIndex:i];
+if (!btn || !rNum || !aNum) continue;
+double r = [rNum doubleValue];
+double a = [aNum doubleValue] + GHLSSDialRotation;
+btn.center = CGPointMake(GHLSSDialCenter.x + r * cos(a), GHLSSDialCenter.y + r * sin(a));
+}
+}
 // 上一次边缘滑动的时间（CFAbsoluteTime），用来做"滑两次才开"。
 static double GHLSSLastSwipeTime = 0;
 static CGFloat GHLSSLastSwipeStartY = -1; // v43.3：这次边缘滑动起手的 Y（屏幕坐标，触发区判定用；没起手过是 -1）。
@@ -2367,8 +2399,9 @@ free(v);
 }
 return a;
 }
-// v43.19：啟動器樣式五檔（launcherStyle 字串）：radial 圓環（預設）、
-// sidebar 側邊欄、drawer 抽屜、carousel 橫向輪盤、tile 磁貼。grid 已刪——
+// v43.19：啟動器樣式六檔（launcherStyle 字串）：radial 圓環（預設）、
+// sidebar 側邊欄、drawer 抽屜、carousel 橫向輪盤、tile 磁貼、trollfan 扇形轉盤
+//（1.0.110，v43.37：撥動轉盤切頁，見 handleDialPan:）。grid 已刪——
 // 存過的 "grid" 和未知值都當 radial（舊格狀用戶遷回圓環）。
 static int GHLSSReadLauncherStyle(void) {
 char *v = GHLSSReadPrefsCString("launcherStyle");
@@ -2378,12 +2411,62 @@ if (strcmp(v, "sidebar") == 0) s = 1;
 else if (strcmp(v, "drawer") == 0) s = 2;
 else if (strcmp(v, "carousel") == 0) s = 3;
 else if (strcmp(v, "tile") == 0) s = 4;
+else if (strcmp(v, "trollfan") == 0) s = 5;
 free(v);
 }
 return s;
 }
 static BOOL GHLSSReadLauncherStyleRadial(void) {
 return GHLSSReadLauncherStyle() == 0;
+}
+// v43.37（1.0.110，扇形轉盤）：trollfan 樣式才走轉盤（1.0.107 e4af0c0 拿回來）。
+static BOOL GHLSSReadLauncherStyleTrollFan(void) {
+return GHLSSReadLauncherStyle() == 5;
+}
+// 扇形轉盤開關（trollfan 樣式才用；預設開）。
+static BOOL GHLSSReadCarouselEnabled(void) {
+return GHLSSReadPrefsBool("dialEnabled", YES);
+}
+// 轉盤專用震動／音效（跟 1.0.99 的 arcHaptics／arcTouchSound 分開，
+// 只管轉盤轉動與選中；水滴聲沿用現有 1104 音效 ID）。
+static BOOL GHLSSReadDialHapticEnabled(void) {
+return GHLSSReadPrefsBool("dialHapticEnabled", YES);
+}
+// 轉盤震動強度：字串 "heavy"/"medium"/"light"，預設 "medium"；
+// 回 2 重／1 中／0 輕（UIImpactFeedbackStyle 對應值）。
+static int GHLSSReadDialHapticStyle(void) {
+char *s = GHLSSReadPrefsCString("dialHapticStrength");
+int style = 1;
+if (s) {
+if (strcmp(s, "heavy") == 0) style = 2;
+else if (strcmp(s, "light") == 0) style = 0;
+free(s);
+}
+return style;
+}
+static BOOL GHLSSReadDialSoundEnabled(void) {
+return GHLSSReadPrefsBool("dialSoundEnabled", YES);
+}
+// v43.37（1.0.110，扇形轉盤）：轉盤專用 tick 反饋——震動強度走
+// dialHapticStrength（重／中／輕），音效固定水滴聲（AudioServices 1104，
+// 跟現有點按音效同一 ID；水滴音色到底像不像，要皇上在真機上聽）。
+// 放 readers 後面（它讀 prefs，定義要在 readers 之後）。
+static void GHLSSDialTickFeedback(void) {
+if (GHLSSReadDialHapticEnabled()) {
+@try {
+UIImpactFeedbackStyle style = UIImpactFeedbackStyleMedium;
+int s = GHLSSReadDialHapticStyle();
+if (s == 2) style = UIImpactFeedbackStyleHeavy;
+else if (s == 0) style = UIImpactFeedbackStyleLight;
+UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
+[haptic impactOccurred];
+} @catch (NSException *e) {
+(void)e;
+}
+}
+if (GHLSSReadDialSoundEnabled()) {
+AudioServicesPlaySystemSound(1104);
+}
 }
 // v70：浮窗大小百分比（windowSizePercent 50–100，預設 100（1.0.80 改回：
 // 55 太小，Lee 要上一版的尺寸；v43.3 曾照 S2 值改成 55）；夾住）。
@@ -2443,7 +2526,7 @@ return GHLSSReadPrefsBool("arcHaptics", YES);
 static BOOL GHLSSReadARCTouchSound(void) {
 return GHLSSReadPrefsBool("arcTouchSound", YES);
 }
-// v43.24：第 5 件——啟動器點按回饋（輕震＋系統點按音），五檔共用：震動走現成
+// v43.24：第 5 件——啟動器點按回饋（輕震＋系統點按音），六檔共用：震動走現成
 // arcHaptics 開關（不新開關、不動 Lee 的開關值），音效走現成 arcTouchSound 開關。
 static void GHLSSLauncherTapFeedback(void) {
 if (GHLSSReadARCHaptics()) {
@@ -7916,6 +7999,14 @@ GHLSSCollectLauncherFlyers(sub, flyers, panels);
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherVisible = NO;
+// v43.37（1.0.110，扇形轉盤）：轉盤狀態清空——圖標按鈕跟著舊窗走，
+// 靜態陣列不留著它們（不然每次打開都漏 25 顆按鈕）；弱引用跟著歸 nil。
+GHLSSDialButtons = nil;
+GHLSSDialRadii = nil;
+GHLSSDialAngles = nil;
+GHLSSDialTotal = 0;
+GHLSSDialRotation = 0;
+GHLSSDialPanView = nil;
 // v43.2：關閉動畫——圖標往外四散飛走（S2 關啟動器那樣），不是直接消失。
 // 四散方向是各圖標相對屏幕中心的方向（圓環／格狀都適用），140pt 外＋縮 0.6＋淡出，0.35 秒。
 // 動畫跑完才藏窗；中途重開的話 completion 只藏舊窗（指標比對＋
@@ -8073,8 +8164,9 @@ return;
 // v43.4：啟動器裡的工具鈕已拿掉（皇上 2026-11-18 說沒必要留），
 // 只排 App 圖標。
 GHLSSLogLine("v43.4 launcher no tool buttons");
-// v43.19：啟動器樣式五檔——0 圓環（預設，見 addRadialARCIconsForBids）、
-// 1 側邊欄、2 抽屜、3 橫向輪盤、4 磁貼（見下面四個新函數）。grid 已刪，
+// v43.19：啟動器樣式六檔——0 圓環（預設，見 addRadialARCIconsForBids）、
+// 1 側邊欄、2 抽屜、3 橫向輪盤、4 磁貼（見下面四個新函數）、5 扇形轉盤
+//（1.0.110：同一套圓環排布＋轉盤手勢，見 handleDialPan:）。grid 已刪，
 // 讀值處已把 "grid"／未知值當 radial（見 GHLSSReadLauncherStyle）。
 // v72：樣式分支記一行，下次日誌證明讀值有沒有到。
 int launcherStyle = GHLSSReadLauncherStyle();
@@ -8084,6 +8176,7 @@ if (launcherStyle == 1) styleName = "sidebar";
 else if (launcherStyle == 2) styleName = "drawer";
 else if (launcherStyle == 3) styleName = "carousel";
 else if (launcherStyle == 4) styleName = "tile";
+else if (launcherStyle == 5) styleName = "trollfan";
 char sbuf[64];
 snprintf(sbuf, sizeof(sbuf), "v43.19 launcher style %s", styleName);
 GHLSSLogLine(sbuf);
@@ -8098,6 +8191,15 @@ if (launcherStyle == 1) {
 [self addTileLauncherIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
 } else {
 [self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+}
+// v43.37（1.0.110，扇形轉盤）：trollfan 才裝轉盤手勢——手指在
+// 啟動器上撥動，圖標沿弧線轉著切頁；radial（0）走回靜態圓環，不裝。
+// contentView 每次打開都重建，弱引用守衛保證一個視圖只裝一次
+//（重建時舊視圖已釋放，弱引用自動歸 nil）。
+if (launcherStyle == 5 && GHLSSReadCarouselEnabled() && !GHLSSIsARCSlideBottom() && GHLSSDialTotal > 0 && GHLSSDialPanView != GHLSSLauncherContentView) {
+UIPanGestureRecognizer *dialPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleDialPan:)];
+[GHLSSLauncherContentView addGestureRecognizer:dialPan];
+GHLSSDialPanView = GHLSSLauncherContentView;
 }
 GHLSSLogLine("v57 launcher icons only");
 }
@@ -8276,6 +8378,18 @@ center = CGPointMake(ax, screenBounds.size.height - 76.0);
 CGFloat icon = size;
 if (icon < 40.0) icon = 40.0;
 if (icon > 72.0) icon = 72.0;
+// v43.37（1.0.110，扇形轉盤）：轉盤狀態重建——trollfan 才記，
+// 每次重排都清空、轉角歸零（slideBottom 扇形不轉，循環裡不記；
+// radial（0）靜態圓環，不進這裡）。
+if (GHLSSReadLauncherStyleTrollFan()) {
+GHLSSDialButtons = [NSMutableArray array];
+GHLSSDialRadii = [NSMutableArray array];
+GHLSSDialAngles = [NSMutableArray array];
+GHLSSDialCenter = center;
+GHLSSDialRotation = 0;
+GHLSSDialLastTickRotation = 0;
+GHLSSDialTotal = (int)total;
+}
 // v43.8 单圈优先：半径取 Rmax（留 12pt 边距），容量＝周长／间距；
 // 装不下就往小缩（每次减 4，最小 40），缩到底还装不下就不走单圈。
 CGFloat radii[6] = {0, 0, 0, 0, 0, 0};
@@ -8436,6 +8550,13 @@ NSInteger tag = GHLSSAppIndexForBundleID(bid);
 if (tag < 0) continue;
 UIButton *btn = [self arcIconButtonForBundleID:bid name:name tag:tag action:action atCenter:p size:icon withName:NO];
 [GHLSSLauncherContentView addSubview:btn];
+// v43.37（1.0.110，扇形轉盤）：記下半徑／基準角，供轉盤拖動重排
+//（trollfan 才記；slideBottom 扇形不轉，循環裡不記）。
+if (!slideBottom && GHLSSReadLauncherStyleTrollFan()) {
+[GHLSSDialButtons addObject:btn];
+[GHLSSDialRadii addObject:[NSNumber numberWithDouble:(double)radius]];
+[GHLSSDialAngles addObject:[NSNumber numberWithDouble:angle]];
+}
 CGFloat bottom = p.y + icon / 2.0;
 if (bottom > maxBottom) maxBottom = bottom;
 }
@@ -8449,6 +8570,51 @@ snprintf(sbuf, sizeof(sbuf), "v43.2 radial icons=%d size=%d rings=%d", (int)tota
 GHLSSLogLine(sbuf);
 }
 return maxBottom + 12.0;
+}
+
+// v43.37（1.0.110，扇形轉盤，第 6 檔 trollfan 才裝；1.0.107 e4af0c0 拿回來）：
+// 手指撥動轉盤——按觸點繞圓心的角度增量轉圖標；每轉過一格（2π/總數）
+// 給一次 tick 震動＋水滴音；放手時吸附到最近的格子（0.15 秒動畫）。
+// 齒輪鈕在圓心，不跟著轉。圓心 40pt 內不算（角度在圓心附近不穩定，
+// 手指按著齒輪不轉盤）。
+- (void)handleDialPan:(UIPanGestureRecognizer *)recognizer {
+if (!GHLSSDialButtons || [GHLSSDialButtons count] == 0 || GHLSSDialTotal <= 0) return;
+UIView *view = GHLSSLauncherContentView;
+if (!view) return;
+CGPoint p = [recognizer locationInView:view];
+double dx = (double)(p.x - GHLSSDialCenter.x);
+double dy = (double)(p.y - GHLSSDialCenter.y);
+if (dx * dx + dy * dy < 40.0 * 40.0) return;
+double ang = atan2(dy, dx);
+if (recognizer.state == UIGestureRecognizerStateBegan) {
+GHLSSDialLastTouchAngle = ang;
+return;
+}
+if (recognizer.state == UIGestureRecognizerStateChanged) {
+double delta = ang - GHLSSDialLastTouchAngle;
+// 角度跳變（-π↔π 邊界）時 delta 會跳 ±2π，折回 [-π, π]。
+if (delta > M_PI) delta -= 2.0 * M_PI;
+if (delta < -M_PI) delta += 2.0 * M_PI;
+GHLSSDialLastTouchAngle = ang;
+GHLSSDialRotation += delta;
+GHLSSDialApplyRotation();
+double slot = 2.0 * M_PI / (double)GHLSSDialTotal;
+if (fabs(GHLSSDialRotation - GHLSSDialLastTickRotation) >= slot) {
+GHLSSDialLastTickRotation = GHLSSDialRotation;
+GHLSSDialTickFeedback();
+}
+return;
+}
+if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled) {
+// 吸附到最近的格子。
+double slot = 2.0 * M_PI / (double)GHLSSDialTotal;
+double target = round(GHLSSDialRotation / slot) * slot;
+GHLSSDialRotation = target;
+[UIView animateWithDuration:0.15 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+GHLSSDialApplyRotation();
+} completion:nil];
+GHLSSDialLastTickRotation = target;
+}
 }
 
 // v43.19：側邊欄式——邊緣滑出來（跟圓環／格狀一樣由邊緣滑動叫出，不常駐）。
@@ -8937,11 +9103,18 @@ GHLSSLogLine(buf);
 // 綠點（主窗金色），點一下升為主窗；置頂的帶 ★；長按圖標置頂/取消置頂。
 // v54 L：改按中心點放（弧圈排布用；withName=NO 時不寫名字——弧圈裡
 // 名字會疊到下一圈圖標上）。
-// v43.24：第 5 件——啟動器圖標點按回饋（五檔共用）：按下縮 0.95＋輕震＋點按音；
+// v43.24：第 5 件——啟動器圖標點按回饋（六檔共用）：按下縮 0.95＋輕震＋點按音；
 // 鬆開／取消還原。掛在共用工廠 arcIconButtonForBundleID 與 tile 大卡上。
 - (void)handleLauncherIconTouchDown:(UIButton *)sender {
 sender.transform = CGAffineTransformMakeScale(0.95, 0.95);
+// v43.37（1.0.110，扇形轉盤）：trollfan 轉盤上的圖標點下走轉盤專用
+// tick（震動強度＋水滴音各走各的開關）；其他五種樣式、轉盤關掉時
+// 走原來的共用點按反饋。
+if (GHLSSReadLauncherStyleTrollFan() && GHLSSReadCarouselEnabled()) {
+GHLSSDialTickFeedback();
+} else {
 GHLSSLauncherTapFeedback();
+}
 }
 - (void)handleLauncherIconTouchCancel:(UIButton *)sender {
 sender.transform = CGAffineTransformIdentity;
