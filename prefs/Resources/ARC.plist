@@ -204,6 +204,14 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Dial</string>
+			<key>label</key>
+			<string>导航台</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>注意：横屏状态下，启动器上应用操作都是以浮窗模式显示！</string>

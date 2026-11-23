@@ -1281,6 +1281,10 @@ typedef struct { uint32_t val[8]; } GHLSSAuditToken;
 // v43.37（1.0.110，扇形轉盤，第 6 檔 trollfan）：轉盤拖動手勢（見 handleDialPan:）。
 // 1.0.107 e4af0c0 拿回來，門從 radial（0）改成 trollfan（5）。
 - (void)handleDialPan:(UIPanGestureRecognizer *)recognizer;
+// v43.42（1.0.115，表盘启动器，第 7 档 dial）：照 TrollOpen 参考图／影片
+// 的排布，中心钮点一下收起启动器。
+- (CGFloat)addDialLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action;
+- (void)handleDialCenterButton:(UIButton *)sender;
 - (void)handleARCIconLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)showNotificationBannerWithText:(const char *)text;
 // v72：showNotificationBannerForName 整个拿掉（皇上：浮窗已打开提示取消）——
@@ -1354,6 +1358,11 @@ static double GHLSSDialLastTouchAngle = 0;
 static double GHLSSDialLastTickRotation = 0;
 static int GHLSSDialTotal = 0;
 static double GHLSSDialSlot = 0; // v43.32：轉盤一格的角度（全圓 2π/總數；ARC 扇形時是扇角/(總數-1)，吸附＋tick 都走它）。
+// v43.42（1.0.115，表盘启动器）：整个圆弧上移量（皇上 15:46 定 60pt，
+// 相对参考图：中心钮 y 424→364，最低图标底边 y≈942→≈882，离屏底 50pt）。
+static const CGFloat GHLSSDialUpShift = 60.0;
+// v43.42：表盘打开时藏了悬浮钮（关掉时放回；只记这一个布尔，不动钮位）。
+static BOOL GHLSSDialHidDoraemonButton = NO;
 // 轉盤手勢裝在哪個 contentView 上（弱引用——窗每次打開都重建，
 // 視圖釋放後自動歸 nil，不留懸空指標）。
 static __weak UIView *GHLSSDialPanView = nil;
@@ -2488,10 +2497,11 @@ free(v);
 }
 return a;
 }
-// v43.19：啟動器樣式六檔（launcherStyle 字串）：radial 圓環（預設）、
+// v43.19：啟動器樣式七檔（launcherStyle 字串）：radial 圓環（預設）、
 // sidebar 側邊欄、drawer 抽屜、carousel 橫向輪盤、tile 磁貼、trollfan 扇形轉盤
-//（1.0.110，v43.37：撥動轉盤切頁，見 handleDialPan:）。grid 已刪——
-// 存過的 "grid" 和未知值都當 radial（舊格狀用戶遷回圓環）。
+//（1.0.110，v43.37：撥動轉盤切頁，見 handleDialPan:）、dial 表盘启动器
+//（1.0.115，v43.42：照 TrollOpen 参考图／影片的排布，见 addDialLauncherIconsForBids）。
+// grid 已刪——存過的 "grid" 和未知值都當 radial（舊格狀用戶遷回圓環）。
 static int GHLSSReadLauncherStyle(void) {
 char *v = GHLSSReadPrefsCString("launcherStyle");
 int s = 0;
@@ -2501,6 +2511,7 @@ else if (strcmp(v, "drawer") == 0) s = 2;
 else if (strcmp(v, "carousel") == 0) s = 3;
 else if (strcmp(v, "tile") == 0) s = 4;
 else if (strcmp(v, "trollfan") == 0) s = 5;
+else if (strcmp(v, "dial") == 0) s = 6;
 free(v);
 }
 return s;
@@ -2511,6 +2522,10 @@ return GHLSSReadLauncherStyle() == 0;
 // v43.37（1.0.110，扇形轉盤）：trollfan 樣式才走轉盤（1.0.107 e4af0c0 拿回來）。
 static BOOL GHLSSReadLauncherStyleTrollFan(void) {
 return GHLSSReadLauncherStyle() == 5;
+}
+// v43.42（1.0.115，表盘启动器）：第 7 档 dial 才走表盘排布。
+static BOOL GHLSSReadLauncherStyleDial(void) {
+return GHLSSReadLauncherStyle() == 6;
 }
 // 扇形轉盤開關（trollfan 樣式才用；預設開）。
 static BOOL GHLSSReadCarouselEnabled(void) {
@@ -2559,6 +2574,44 @@ else if (strcmp(s, "crisp") == 0) sid = 1108;
 free(s);
 }
 return sid;
+}
+// v43.42（1.0.115，表盘启动器，导航台设置）：只定义这版用到的读值器；
+// 指针加速（dialPointerAccel，默认 2.00）、圆形中心裁剪
+//（dialCircleCenterCrop，默认 0.04）、首行应用（dialFirstRowApps，
+// 默认 4）三项只存设定值，含义待真机对照 TrollOpen 再定，这版不驱动排布
+//（首行 4 若硬塞进最内圈会跟参考图冲突——参考最内圈只有 1 颗）。
+static BOOL GHLSSReadDialModeEnabled(void) {
+return GHLSSReadPrefsBool("dialMode", YES);
+}
+static BOOL GHLSSReadDialCentered(void) {
+return GHLSSReadPrefsBool("dialCentered", NO);
+}
+static BOOL GHLSSReadDialHidePointer(void) {
+return GHLSSReadPrefsBool("dialHidePointer", NO);
+}
+static BOOL GHLSSReadDialGradientBg(void) {
+return GHLSSReadPrefsBool("dialGradientBg", YES);
+}
+static BOOL GHLSSReadDialCircleBg(void) {
+return GHLSSReadPrefsBool("dialCircleBg", YES);
+}
+static double GHLSSReadDialCircleBgOpacity(void) {
+double v = GHLSSReadPrefsDouble("dialCircleBgOpacity", 0.40);
+if (v < 0.05) v = 0.05;
+if (v > 1.0) v = 1.0;
+return v;
+}
+static double GHLSSReadDialIconSize(void) {
+double v = GHLSSReadPrefsDouble("dialIconSize", 36.0);
+if (v < 28.0) v = 28.0;
+if (v > 64.0) v = 64.0;
+return v;
+}
+static double GHLSSReadDialElementSpacing(void) {
+double v = GHLSSReadPrefsDouble("dialElementSpacing", 8.0);
+if (v < 0.0) v = 0.0;
+if (v > 24.0) v = 24.0;
+return v;
 }
 // v43.37（1.0.110，扇形轉盤）：轉盤專用 tick 反饋——震動強度走
 // dialHapticStrength（重／中／輕），音效走 dialSoundChoice 12 選一
@@ -8369,17 +8422,23 @@ UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithS
 (void)e;
 }
 }
+// v43.42（1.0.115，表盘启动器）：表盘打开时悬浮钮隐藏——中心钮就是
+// 哆啦A夢钮本人（表盘里画一颗）；关掉时放回原位（见 dismissLauncher）。
+if (GHLSSReadLauncherStyleDial() && GHLSSReadDialModeEnabled() && GHLSSDoraemonButtonWindow) {
+GHLSSDoraemonButtonWindow.hidden = YES;
+GHLSSDialHidDoraemonButton = YES;
+}
 }
 
 // v43.19：遞迴收啟動器裡的按鈕——新樣式的按鈕在 scroll view／面板裡面，
 // 不是 contentView 的直接子視圖；面板容器（9101 側邊欄／9102 抽屜／
-// 9103 輪盤 scroll view／9104 磁貼卡／9105 輪盤圓點）一起淡出。
+// 9103 輪盤 scroll view／9104 磁貼卡／9105 輪盤圓點／9106 表盘圆盘）一起淡出。
 static void GHLSSCollectLauncherFlyers(UIView *view, NSMutableArray *flyers, NSMutableArray *panels) {
 for (UIView *sub in view.subviews) {
 if ([sub isKindOfClass:[UIButton class]]) {
 [flyers addObject:sub];
 } else {
-if (sub.tag == 9101 || sub.tag == 9102 || sub.tag == 9103 || sub.tag == 9104 || sub.tag == 9105) [panels addObject:sub];
+if (sub.tag == 9101 || sub.tag == 9102 || sub.tag == 9103 || sub.tag == 9104 || sub.tag == 9105 || sub.tag == 9106) [panels addObject:sub];
 GHLSSCollectLauncherFlyers(sub, flyers, panels);
 }
 }
@@ -8388,6 +8447,12 @@ GHLSSCollectLauncherFlyers(sub, flyers, panels);
 - (void)dismissLauncher {
 if (!GHLSSLauncherVisible) return;
 GHLSSLauncherVisible = NO;
+// v43.42（1.0.115，表盘启动器）：表盘打开时藏了悬浮钮，关掉时放回来
+//（钮位是用户拖好的 prefs，不动；只恢复显示）。
+if (GHLSSDialHidDoraemonButton) {
+if (GHLSSDoraemonButtonWindow) GHLSSDoraemonButtonWindow.hidden = NO;
+GHLSSDialHidDoraemonButton = NO;
+}
 // v43.37（1.0.110，扇形轉盤）：轉盤狀態清空——圖標按鈕跟著舊窗走，
 // 靜態陣列不留著它們（不然每次打開都漏 25 顆按鈕）；弱引用跟著歸 nil。
 GHLSSDialButtons = nil;
@@ -8553,9 +8618,10 @@ return;
 // v43.4：啟動器裡的工具鈕已拿掉（皇上 2026-11-18 說沒必要留），
 // 只排 App 圖標。
 GHLSSLogLine("v43.4 launcher no tool buttons");
-// v43.19：啟動器樣式六檔——0 圓環（預設，見 addRadialARCIconsForBids）、
+// v43.19：啟動器樣式七檔——0 圓環（預設，見 addRadialARCIconsForBids）、
 // 1 側邊欄、2 抽屜、3 橫向輪盤、4 磁貼（見下面四個新函數）、5 扇形轉盤
-//（1.0.110：同一套圓環排布＋轉盤手勢，見 handleDialPan:）。grid 已刪，
+//（1.0.110：同一套圓環排布＋轉盤手勢，見 handleDialPan:）、6 表盘启动器
+//（1.0.115，見 addDialLauncherIconsForBids）。grid 已刪，
 // 讀值處已把 "grid"／未知值當 radial（見 GHLSSReadLauncherStyle）。
 // v72：樣式分支記一行，下次日誌證明讀值有沒有到。
 int launcherStyle = GHLSSReadLauncherStyle();
@@ -8566,6 +8632,7 @@ else if (launcherStyle == 2) styleName = "drawer";
 else if (launcherStyle == 3) styleName = "carousel";
 else if (launcherStyle == 4) styleName = "tile";
 else if (launcherStyle == 5) styleName = "trollfan";
+else if (launcherStyle == 6) styleName = "dial";
 char sbuf[64];
 snprintf(sbuf, sizeof(sbuf), "v43.19 launcher style %s", styleName);
 GHLSSLogLine(sbuf);
@@ -8578,14 +8645,22 @@ if (launcherStyle == 1) {
 [self addCarouselLauncherIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
 } else if (launcherStyle == 4) {
 [self addTileLauncherIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+} else if (launcherStyle == 6) {
+// v43.42（1.0.115，表盘启动器）：第 7 档；表盘模式关了就回落圆环。
+if (GHLSSReadDialModeEnabled()) {
+[self addDialLauncherIconsForBids:ordered iconSize:GHLSSReadDialIconSize() action:@selector(handleAppButton:)];
 } else {
 [self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
 }
-// v43.37（1.0.110，扇形轉盤）：trollfan 才裝轉盤手勢——手指在
-// 啟動器上撥動，圖標沿弧線轉著切頁；radial（0）走回靜態圓環，不裝。
+} else {
+[self addRadialARCIconsForBids:ordered iconSize:iconSize action:@selector(handleAppButton:)];
+}
+// v43.37（1.0.110，扇形轉盤；v43.42 表盘启动器也走同一套）：trollfan／
+// 表盘才裝轉盤手勢——手指在啟動器上撥動，圖標沿弧線轉著切頁；
+// radial（0）走回靜態圓環，不裝。
 // contentView 每次打開都重建，弱引用守衛保證一個視圖只裝一次
 //（重建時舊視圖已釋放，弱引用自動歸 nil）。
-if (launcherStyle == 5 && GHLSSReadCarouselEnabled() && !GHLSSIsARCSlideBottom() && GHLSSDialTotal > 0 && GHLSSDialPanView != GHLSSLauncherContentView) {
+if ((launcherStyle == 5 || launcherStyle == 6) && GHLSSReadCarouselEnabled() && !GHLSSIsARCSlideBottom() && GHLSSDialTotal > 0 && GHLSSDialPanView != GHLSSLauncherContentView) {
 UIPanGestureRecognizer *dialPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleDialPan:)];
 [GHLSSLauncherContentView addGestureRecognizer:dialPan];
 GHLSSDialPanView = GHLSSLauncherContentView;
@@ -8974,6 +9049,305 @@ snprintf(sbuf, sizeof(sbuf), "v43.2 radial icons=%d size=%d rings=%d", (int)tota
 GHLSSLogLine(sbuf);
 }
 return maxBottom + 12.0;
+}
+
+// v43.42（1.0.115，表盘启动器，第 7 档 dial）：照 TrollOpen 参考图／影片
+// 的排布做（只模仿排布与设置项，不抄代码、不拿它的图和素材）：
+// 图标沿圆弧排开、中心钮（哆啦A夢）在弧顶、扇形向下展开；
+// 7 圈同心弧，扇区 54°–104°（向下偏右，跟参考图一样；钮在右边缘附近时
+// 镜像成 76°–126°，向下偏左——不然外圈会被右边缘挤成一条缝）；
+// 图标 36pt、间距 8pt；图标个数跟已启用 App 清单走，
+// 按每圈弧长容量比例分圈（最大余数法）；
+// 整个圆弧以按钮位置往上 60pt 为弧顶（皇上 15:46 定；参考最低图标
+// 底边 y≈942 被裁，+60 后 ≈882，离屏底 50pt）。
+// 居中显示开时圆心改屏幕中心、扇区改全圆，圈数按屏幕收成贴合的 3 圈
+//（影片里的居中圆盘形态；紧凑圆盘的精确几何影片里量不出来）。
+// 打开时悬浮钮已由 showLauncher 藏起（关掉时放回）；中心钮点一下收起。
+// 背景沿用 0.55 黑遮罩，另加一面淡白圆盘（透明度走导航台设置）。
+// 指针只画示意短针（形态影片里辨认不出来）；隐藏指针开时不画。
+// 转盘状态照 trollfan 的记法记（GHLSSDialButtons／Radii／Angles／
+// Center），拨动＋tick＋吸附走现成的 handleDialPan:；
+// radial（0）／trollfan（5）现有分支一行不动。
+- (CGFloat)addDialLauncherIconsForBids:(NSArray *)bids iconSize:(CGFloat)size action:(SEL)action {
+if (!bids || [bids count] == 0) return 0;
+NSInteger total = (NSInteger)[bids count];
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+CGFloat screenW = screenBounds.size.width;
+CGFloat screenH = screenBounds.size.height;
+CGFloat icon = size;
+if (icon < 28.0) icon = 28.0;
+if (icon > 64.0) icon = 64.0;
+CGFloat spacing = GHLSSReadDialElementSpacing();
+CGFloat pitch = icon + spacing;
+if (pitch < icon + 2.0) pitch = icon + 2.0;
+// 弧顶：按钮位置往上 60pt；居中显示时改屏幕中心。
+CGPoint center;
+BOOL centered = GHLSSReadDialCentered();
+if (centered) {
+center = CGPointMake(screenW / 2.0, screenH / 2.0);
+} else {
+CGFloat ax = GHLSSLauncherAnchorX;
+CGFloat ay = GHLSSLauncherAnchorY;
+if (ax < 0) ax = (CGFloat)GHLSSReadDoraemonButtonX();
+if (ay < 0) ay = (CGFloat)GHLSSReadDoraemonButtonY();
+if (ax < 0) ax = screenW - 28.0;
+if (ay < 0) ay = screenH / 2.0;
+center = CGPointMake(ax, ay - GHLSSDialUpShift);
+}
+// 圆心夹在屏幕里（顶留刘海＋钮半径，底留 Home 条＋钮半径）。
+CGFloat topInset = GHLSSScreenSafeTopInset();
+CGFloat topLimit = topInset + 28.0 + 4.0;
+CGFloat botLimit = screenH - 34.0 - 28.0 - 4.0;
+if (center.x < 32.0) center.x = 32.0;
+if (center.x > screenW - 32.0) center.x = screenW - 32.0;
+if (center.y < topLimit) center.y = topLimit;
+if (center.y > botLimit) center.y = botLimit;
+// 扇区：居中全圆；扇形一律 54°–104°（向下偏右，跟参考图一样）；
+// 钮在右边缘附近（120pt 内）时镜像成 76°–126°（向下偏左）——
+// 钮贴边时往右下展开会被右边缘挤成一条缝（外圈只剩 15°，25 颗装不下）；
+// 每圈再按左右边收窄（图标整颗在屏幕内），见下面。
+double angLo = 54.0 * M_PI / 180.0;
+double angHi = 104.0 * M_PI / 180.0;
+if (centered) {
+angLo = 0.0;
+angHi = 2.0 * M_PI;
+} else if (center.x > screenW - 120.0) {
+angLo = 76.0 * M_PI / 180.0;
+angHi = 126.0 * M_PI / 180.0;
+}
+double span = angHi - angLo;
+// 圈半径：扇形用参考图实测的 7 圈（36pt 图标时，随图标大小等比缩放）；
+// 居中圆盘用贴合屏幕的圈（外圈不超 min(宽,高)/2−图标/2−12）。
+static const CGFloat baseRadii[7] = {80.0, 150.0, 210.0, 275.0, 340.0, 405.0, 500.0};
+int rings = 7;
+CGFloat radii[7] = {0, 0, 0, 0, 0, 0, 0};
+int caps[7] = {0, 0, 0, 0, 0, 0, 0};
+double ringLo[7] = {0, 0, 0, 0, 0, 0, 0};
+double ringHi[7] = {0, 0, 0, 0, 0, 0, 0};
+int capSum = 0;
+// 先按给定图标算容量；装不下就把图标往小缩（36→32→28），每档重算。
+while (YES) {
+CGFloat scale = icon / 36.0;
+capSum = 0;
+rings = 7;
+if (centered) {
+// 居中圆盘：从齿轮外缘起、环距＝图标＋14，外圈不超屏幕半宽。
+CGFloat maxR = MIN(screenW, screenH) / 2.0 - icon / 2.0 - 12.0;
+CGFloat r0 = 38.0 + icon / 2.0 + 16.0;
+CGFloat step = icon + 14.0;
+rings = 0;
+while (rings < 7) {
+CGFloat r = r0 + rings * step;
+if (r > maxR) break;
+radii[rings] = r;
+rings++;
+}
+if (rings < 1) { radii[0] = maxR; rings = 1; }
+}
+for (int k = 0; k < rings; k++) {
+CGFloat r = centered ? radii[k] : baseRadii[k] * scale;
+if (!centered) radii[k] = r;
+double lo = angLo;
+double hi = angHi;
+if (!centered) {
+// 每圈按左右边收窄扇区（图标整颗在屏幕内；居中全圆不收窄）。
+double hiCos = (double)((screenW - icon / 2.0 - 4.0 - center.x) / r);
+double loCos = (double)((icon / 2.0 + 4.0 - center.x) / r);
+if (hiCos > 1.0) hiCos = 1.0;
+if (hiCos < -1.0) hiCos = -1.0;
+if (loCos > 1.0) loCos = 1.0;
+if (loCos < -1.0) loCos = -1.0;
+double edgeLo = acos(hiCos);
+double edgeHi = acos(loCos);
+if (edgeLo > lo) lo = edgeLo;
+if (edgeHi < hi) hi = edgeHi;
+}
+ringLo[k] = lo;
+ringHi[k] = hi;
+double ringSpan = hi - lo;
+int cap = 0;
+if (ringSpan >= 0.09) {
+cap = (int)(r * ringSpan / pitch);
+if (cap < 1) cap = 1;
+}
+caps[k] = cap;
+capSum += cap;
+}
+if (capSum >= (int)total || icon <= 28.0) break;
+icon = (icon > 32.0) ? 32.0 : 28.0;
+pitch = icon + spacing;
+if (pitch < icon + 2.0) pitch = icon + 2.0;
+}
+// 按容量比例分圈（最大余数法）；图标少于圈数时内圈先各放一颗。
+int counts[7] = {0, 0, 0, 0, 0, 0, 0};
+int assigned = 0;
+if ((int)total <= rings) {
+for (int k = 0; k < rings && assigned < (int)total; k++) {
+if (caps[k] > 0) { counts[k] = 1; assigned++; }
+}
+} else {
+double rems[7] = {0, 0, 0, 0, 0, 0, 0};
+for (int k = 0; k < rings; k++) {
+double exact = (capSum > 0) ? (double)total * caps[k] / capSum : 0;
+counts[k] = (int)exact;
+rems[k] = exact - counts[k];
+assigned += counts[k];
+}
+while (assigned < (int)total) {
+int best = -1;
+for (int k = 0; k < rings; k++) {
+if (caps[k] <= 0) continue;
+if (counts[k] >= caps[k]) continue;
+if (best < 0 || rems[k] > rems[best]) best = k;
+}
+if (best < 0) break;
+counts[best]++;
+rems[best] = -1;
+assigned++;
+}
+}
+// 装不下：剩下的塞最外圈（日志记一笔，不硬塞别的样式）。
+if (assigned < (int)total) {
+int outer = rings - 1;
+while (outer > 0 && caps[outer] <= 0) outer--;
+counts[outer] += (int)total - assigned;
+char obuf[160];
+snprintf(obuf, sizeof(obuf), "v43.42 dial overflow, cap=%d total=%d center=%d,%d", capSum, (int)total, (int)center.x, (int)center.y);
+GHLSSLogLine(obuf);
+assigned = (int)total;
+}
+// 保险：最低图标底边不许过 882（效果图上移 60pt 那档的数，离屏底 50pt）。
+// 钮位本身没问题时（参考位置）一动不动；钮被拖到下面时整体再往上抬。
+{
+CGFloat lowest = 0;
+for (int k = 0; k < rings; k++) {
+if (counts[k] <= 0) continue;
+double aMid = M_PI_2;
+if (aMid < ringLo[k]) aMid = ringLo[k];
+if (aMid > ringHi[k]) aMid = ringHi[k];
+CGFloat b = center.y + radii[k] * sin(aMid) + icon / 2.0;
+if (b > lowest) lowest = b;
+}
+if (lowest > 882.0 && center.y > topLimit) {
+CGFloat up = lowest - 882.0;
+if (center.y - up < topLimit) up = center.y - topLimit;
+center.y -= up;
+}
+}
+// 转盘状态重建（跟 trollfan 同一套，拨动＋tick＋吸附走 handleDialPan:）。
+GHLSSDialButtons = [NSMutableArray array];
+GHLSSDialRadii = [NSMutableArray array];
+GHLSSDialAngles = [NSMutableArray array];
+GHLSSDialCenter = center;
+GHLSSDialRotation = 0;
+GHLSSDialLastTickRotation = 0;
+GHLSSDialTotal = (int)total;
+GHLSSDialSlot = (centered && total > 1) ? 2.0 * M_PI / (double)total : ((total > 1) ? span / (double)(total - 1) : 2.0 * M_PI);
+// 淡白圆盘（在图标下面；渐变开时上亮下淡，关时平色）。
+if (GHLSSReadDialCircleBg()) {
+CGFloat discR = radii[rings - 1] + icon / 2.0 + 12.0;
+UIView *disc = [[UIView alloc] initWithFrame:CGRectMake(center.x - discR, center.y - discR, discR * 2.0, discR * 2.0)];
+disc.tag = 9106;
+disc.userInteractionEnabled = NO;
+disc.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:(CGFloat)GHLSSReadDialCircleBgOpacity()];
+disc.layer.cornerRadius = discR;
+disc.layer.masksToBounds = YES;
+if (GHLSSReadDialGradientBg()) {
+CAGradientLayer *grad = [CAGradientLayer layer];
+grad.frame = disc.bounds;
+grad.colors = [NSArray arrayWithObjects:(id)[[UIColor whiteColor] colorWithAlphaComponent:0.28].CGColor, (id)[[UIColor whiteColor] colorWithAlphaComponent:0.04].CGColor, nil];
+grad.startPoint = CGPointMake(0.5, 0.0);
+grad.endPoint = CGPointMake(0.5, 1.0);
+[disc.layer addSublayer:grad];
+}
+[GHLSSLauncherContentView addSubview:disc];
+// 指针（示意短针：圆心到第一圈，中角方向；隐藏指针开时不画）。
+if (!GHLSSReadDialHidePointer()) {
+double midA = centered ? -M_PI_2 : (angLo + angHi) / 2.0;
+CGFloat px0 = center.x + 30.0 * cos(midA);
+CGFloat py0 = center.y + 30.0 * sin(midA);
+CGFloat px1 = center.x + radii[0] * cos(midA);
+CGFloat py1 = center.y + radii[0] * sin(midA);
+UIBezierPath *path = [UIBezierPath bezierPath];
+[path moveToPoint:CGPointMake(px0 - center.x + discR, py0 - center.y + discR)];
+[path addLineToPoint:CGPointMake(px1 - center.x + discR, py1 - center.y + discR)];
+CAShapeLayer *needle = [CAShapeLayer layer];
+needle.path = path.CGPath;
+needle.strokeColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85].CGColor;
+needle.lineWidth = 2.0;
+needle.lineCap = kCALineCapRound;
+[disc.layer addSublayer:needle];
+}
+}
+CGFloat maxBottom = 0;
+NSInteger idx = 0;
+for (int ring = 0; ring < rings; ring++) {
+int count = counts[ring];
+if (count <= 0) continue;
+CGFloat radius = radii[ring];
+double lo = ringLo[ring];
+double hi = ringHi[ring];
+// 不加半步错开——那半步会把最后一颗顶出扇区、被夹回后两颗图标
+// 只剩约 30pt 间距（36pt 图标会重叠）；各圈图标数不同，径向本来就不会整齐对上。
+// 步进：扇形两端各落一颗（span/(c−1)）；居中全圆按周长均分（span/c），
+// 不然最后一颗落在 2π、跟第一颗 0° 重叠在同一个点上。
+double step;
+if (count == 1) step = 0.0;
+else if (centered) step = (hi - lo) / (double)count;
+else step = (hi - lo) / (double)(count - 1);
+for (int j = 0; j < count; j++) {
+if (idx >= total) break;
+id item = [bids objectAtIndex:idx++];
+if (![item isKindOfClass:[NSString class]]) continue;
+const char *bid = [(NSString *)item UTF8String];
+if (!bid || bid[0] == '\0') continue;
+double angle = (count == 1) ? (lo + hi) / 2.0 : lo + step * (double)j;
+CGPoint p = CGPointMake(center.x + radius * cos(angle), center.y + radius * sin(angle));
+char name[128];
+GHLSSAppNameForBundleID(bid, name, sizeof(name));
+NSInteger tag = GHLSSAppIndexForBundleID(bid);
+if (tag < 0) continue;
+UIButton *btn = [self arcIconButtonForBundleID:bid name:name tag:tag action:action atCenter:p size:icon withName:NO];
+[GHLSSLauncherContentView addSubview:btn];
+[GHLSSDialButtons addObject:btn];
+[GHLSSDialRadii addObject:[NSNumber numberWithDouble:(double)radius]];
+[GHLSSDialAngles addObject:[NSNumber numberWithDouble:angle]];
+CGFloat bottom = p.y + icon / 2.0;
+if (bottom > maxBottom) maxBottom = bottom;
+}
+}
+// 中心钮：哆啦A夢本人（悬浮钮已藏起，这颗就是它）；点一下收起启动器。
+// 图拿不到就回落齿轮钮（设置入口不断）。
+UIButton *centerBtn = nil;
+UIImage *doraemonImage = GHLSSLoadDoraemonImage();
+double dSize = GHLSSReadPrefsDouble("doraemonIconSize", 56.0);
+if (dSize < 44.0) dSize = 44.0;
+if (dSize > 72.0) dSize = 72.0;
+if (doraemonImage) {
+centerBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+centerBtn.frame = CGRectMake(center.x - dSize / 2.0, center.y - dSize / 2.0, dSize, dSize);
+[centerBtn setImage:doraemonImage forState:UIControlStateNormal];
+centerBtn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+centerBtn.layer.cornerRadius = dSize / 2.0;
+centerBtn.layer.masksToBounds = YES;
+[centerBtn addTarget:self action:@selector(handleDialCenterButton:) forControlEvents:UIControlEventTouchUpInside];
+} else {
+centerBtn = [self arcRadialGearButtonAtCenter:center size:76.0];
+}
+[GHLSSLauncherContentView addSubview:centerBtn];
+{
+char sbuf[160];
+snprintf(sbuf, sizeof(sbuf), "v43.42 dial icons=%d size=%d rings=%d center=%d,%d centered=%d", (int)total, (int)icon, rings, (int)center.x, (int)center.y, centered ? 1 : 0);
+GHLSSLogLine(sbuf);
+}
+return maxBottom + 12.0;
+}
+
+// v43.42（1.0.115，表盘启动器）：中心哆啦A夢钮点一下收起启动器
+//（悬浮钮回原位，见 dismissLauncher）。
+- (void)handleDialCenterButton:(UIButton *)sender {
+(void)sender;
+[self dismissLauncher];
 }
 
 // v43.37（1.0.110，扇形轉盤，第 6 檔 trollfan 才裝；1.0.107 e4af0c0 拿回來）：
@@ -9511,10 +9885,10 @@ GHLSSLogLine(buf);
 // 鬆開／取消還原。掛在共用工廠 arcIconButtonForBundleID 與 tile 大卡上。
 - (void)handleLauncherIconTouchDown:(UIButton *)sender {
 sender.transform = CGAffineTransformMakeScale(0.95, 0.95);
-// v43.37（1.0.110，扇形轉盤）：trollfan 轉盤上的圖標點下走轉盤專用
-// tick（震動強度＋水滴音各走各的開關）；其他五種樣式、轉盤關掉時
-// 走原來的共用點按反饋。
-if (GHLSSReadLauncherStyleTrollFan() && GHLSSReadCarouselEnabled()) {
+// v43.37（1.0.110，扇形轉盤；v43.42 表盘启动器同）：trollfan／表盘上
+// 的圖標點下走轉盤專用 tick（震動強度＋水滴音各走各的開關）；其他
+// 五種樣式、轉盤關掉時走原來的共用點按反饋。
+if ((GHLSSReadLauncherStyleTrollFan() || GHLSSReadLauncherStyleDial()) && GHLSSReadCarouselEnabled()) {
 GHLSSDialTickFeedback();
 } else {
 GHLSSLauncherTapFeedback();

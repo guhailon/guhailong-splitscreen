@@ -113,6 +113,7 @@
 				<string>横向轮盘式</string>
 				<string>磁贴式</string>
 				<string>扇形轉盤</string>
+				<string>表盘启动器</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -122,6 +123,7 @@
 				<string>carousel</string>
 				<string>tile</string>
 				<string>trollfan</string>
+				<string>dial</string>
 			</array>
 		</dict>
 		<dict>
