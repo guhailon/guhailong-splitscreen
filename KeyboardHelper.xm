@@ -43,6 +43,11 @@
 #define GHLSS_KB_NOTIFY_SHOW "com.guhailong.splitscreen.keyboardWillShow"
 #define GHLSS_KB_NOTIFY_HIDE "com.guhailong.splitscreen.keyboardDidHide"
 #define GHLSS_KB_INFO_KEY "kbNotifyInfo"
+// v70.1（1.0.116）：SpringBoard 把当前浮窗 frame 写进 kbHostedFrame 再 post
+// 这个通知；助手收到后把键盘窗缩放并对齐到浮窗内底部。
+#define GHLSS_KB_FRAME_KEY "kbHostedFrame"
+#define GHLSS_KB_FRAME_NOTIFY "com.guhailong.splitscreen.keyboardFrameReady"
+#define GHLSS_KB_INWIN_KEY "keyboardInWindowEnabled"
 
 static void GHLSSKBLogLine(const char *line) {
     FILE *f = fopen(GHLSS_KB_LOG_PATH, "a");
@@ -254,6 +259,89 @@ static BOOL GHLSSKBIsFullscreenVideoPlaying(void) {
 
 static UIWindow *GHLSSKBDragTarget = nil;
 
+// ── v70.1：键盘进浮窗 ──
+// 键盘窗在 App 进程里，frame 是屏幕坐标；SpringBoard 把浮窗 frame 写进
+// kbHostedFrame。App 的内容在浮窗里是按「浮窗宽 / 屏宽」等比缩过的，
+// App 自己也按系统键盘高度把输入框上移了。所以键盘要跟内容用同一个
+// 缩放比（横向＝浮窗宽/屏宽，纵向＝浮窗高/屏高中的较小者，避免变形过度），
+// 再把键盘左上角放到浮窗里输入框下方的位置——底边贴浮窗底边。
+// 只用 transform＋position，不改键盘内部 view、不拦按键、不碰 first responder。
+static CGFloat GHLSSKBLastHeight = 0;
+static BOOL GHLSSKBInWindowApplied = NO;
+static CGRect GHLSSKBInWindowSavedBounds = {{0, 0}, {0, 0}};
+static CGPoint GHLSSKBInWindowSavedAnchor = {0, 0};
+static CGAffineTransform GHLSSKBInWindowSavedTransform;
+static CGPoint GHLSSKBInWindowSavedPosition = {0, 0};
+
+static void GHLSSKBRestoreKeyboardWindow(void) {
+if (!GHLSSKBInWindowApplied) return;
+GHLSSKBInWindowApplied = NO;
+UIWindow *kbWindow = GHLSSKBFindKeyboardWindow();
+if (!kbWindow) return;
+kbWindow.layer.anchorPoint = GHLSSKBInWindowSavedAnchor;
+kbWindow.bounds = GHLSSKBInWindowSavedBounds;
+kbWindow.transform = GHLSSKBInWindowSavedTransform;
+kbWindow.layer.position = GHLSSKBInWindowSavedPosition;
+GHLSSKBLogLine("v70.1 kb-helper in-window restored");
+}
+
+static void GHLSSKBApplyKeyboardInWindow(void) {
+if (!GHLSSKBReadPrefsBool(GHLSS_KB_INWIN_KEY, YES)) {
+GHLSSKBRestoreKeyboardWindow();
+return;
+}
+char *frameStr = GHLSSKBReadPrefsCString(GHLSS_KB_FRAME_KEY);
+if (!frameStr || frameStr[0] == '\0') {
+// 没浮窗（关了/最小化）→ 还原键盘到系统原位。
+if (frameStr) free(frameStr);
+GHLSSKBRestoreKeyboardWindow();
+return;
+}
+CGRect winFrame = CGRectZero;
+if (sscanf(frameStr, "%lf|%lf|%lf|%lf",
+           &winFrame.origin.x, &winFrame.origin.y,
+           &winFrame.size.width, &winFrame.size.height) != 4 || winFrame.size.width <= 0) {
+free(frameStr);
+GHLSSKBRestoreKeyboardWindow();
+return;
+}
+free(frameStr);
+UIWindow *kbWindow = GHLSSKBFindKeyboardWindow();
+if (!kbWindow) {
+GHLSSKBLogLine("v70.1 kb-helper no keyboard window for in-window");
+return;
+}
+CGRect screenBounds = [UIScreen mainScreen].bounds;
+if (screenBounds.size.width <= 0 || screenBounds.size.height <= 0) return;
+CGFloat scaleX = winFrame.size.width / screenBounds.size.width;
+if (scaleX <= 0.05 || scaleX > 1.5) return;
+CGFloat kbHeight = GHLSSKBLastHeight > 0 ? GHLSSKBLastHeight : kbWindow.bounds.size.height;
+// 内容在浮窗里等比缩放（浮窗宽/屏宽），键盘也用同一个比例；键盘的
+// 视觉高度＝kbHeight×scaleX，顶边落在「浮窗底边 - 键盘视觉高度」，
+// 正好接住按同比例缩过的输入框，底部贴浮窗底边。
+CGFloat targetH = kbHeight * scaleX;
+if (targetH > winFrame.size.height) targetH = winFrame.size.height;
+CGFloat targetY = winFrame.origin.y + winFrame.size.height - targetH;
+if (!GHLSSKBInWindowApplied) {
+GHLSSKBInWindowSavedBounds = kbWindow.bounds;
+GHLSSKBInWindowSavedAnchor = kbWindow.layer.anchorPoint;
+GHLSSKBInWindowSavedTransform = kbWindow.transform;
+GHLSSKBInWindowSavedPosition = kbWindow.layer.position;
+GHLSSKBInWindowApplied = YES;
+}
+// 左上锚点：缩放围绕左上角展开，layer.position 直接就是屏幕坐标左上角。
+kbWindow.layer.anchorPoint = CGPointMake(0, 0);
+kbWindow.bounds = CGRectMake(0, 0, screenBounds.size.width, kbHeight);
+kbWindow.transform = CGAffineTransformMakeScale(scaleX, scaleX);
+kbWindow.layer.position = CGPointMake(winFrame.origin.x, targetY);
+char buf[256];
+snprintf(buf, sizeof(buf), "v70.1 kb-helper in-window %d,%d %dx%d scale %d kb %d -> %d,%d %dx%d",
+    (int)winFrame.origin.x, (int)winFrame.origin.y, (int)winFrame.size.width, (int)winFrame.size.height,
+    (int)(scaleX * 100.0), (int)kbHeight, (int)winFrame.origin.x, (int)targetY,
+    (int)(screenBounds.size.width * scaleX), (int)targetH);
+GHLSSKBLogLine(buf);
+}
+
 @interface GHLSSKeyboardHelper : NSObject
 + (instancetype)shared;
 - (void)handleKeyboardWillShow:(NSNotification *)note;
@@ -290,7 +378,11 @@ static UIWindow *GHLSSKBDragTarget = nil;
     char infoBuf[256];
     snprintf(infoBuf, sizeof(infoBuf), "%s|%d", bid, (int)kbHeight);
     GHLSSKBWritePrefsCString(GHLSS_KB_INFO_KEY, infoBuf);
+    GHLSSKBLastHeight = kbHeight;
     notify_post(GHLSS_KB_NOTIFY_SHOW);
+    // v70.1：SpringBoard 收到 show 會把浮窗 frame 寫好再 post frameReady；
+    // 这里先直接試一次（prefs 可能已是上一帧位置），收到 frameReady 再對齊一次。
+    GHLSSKBApplyKeyboardInWindow();
     {
         char buf[256];
         snprintf(buf, sizeof(buf), "v43.5 kb-helper notify show %s %d", bid, (int)kbHeight);
@@ -304,6 +396,8 @@ static UIWindow *GHLSSKBDragTarget = nil;
     // 主窗口全屏≠全屏看影片；玩遊戲全屏時鍵盤本來就該在屏底全寬，不另擋。
     if (!GHLSSKBReadPrefsBool("keyboardExternalEnabled", NO)) return;
     if (GHLSSKBReadKeyboardPopupMode() != 1) return;
+    // v70.1：進浮窗模式優先——键盘已经搬进浮窗了，旧的外置全宽分支不再执行。
+    if (GHLSSKBReadPrefsBool(GHLSS_KB_INWIN_KEY, YES)) return;
     CGRect screenBounds = [UIScreen mainScreen].bounds;
     UIWindow *keyWindow = GHLSSKBKeyWindow();
     if (!keyWindow) return;
@@ -358,6 +452,9 @@ static UIWindow *GHLSSKBDragTarget = nil;
 
 - (void)handleKeyboardWillHide:(NSNotification *)note {
     (void)note;
+    // v70.1：键盘收起先把窗还原到系统原位，再通知 SpringBoard。
+    GHLSSKBRestoreKeyboardWindow();
+    GHLSSKBLastHeight = 0;
     char bid[128] = {0};
     NSString *bidStr = [[NSBundle mainBundle] bundleIdentifier];
     if (bidStr) {
@@ -434,6 +531,13 @@ static UIWindow *GHLSSKBDragTarget = nil;
     [nc addObserver:helper selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
     // v43.26：第二次標記——App 啟動完成時再發一次（見 handleAppDidFinishLaunching:）。
     [nc addObserver:helper selector:@selector(handleAppDidFinishLaunching:) name:UIApplicationDidFinishLaunchingNotification object:nil];
+    // v70.1：SpringBoard 写好浮窗 frame 后 post 这个通知，收到就重新对齐键盘。
+    int frameToken = 0;
+    notify_register_dispatch(GHLSS_KB_FRAME_NOTIFY, &frameToken, dispatch_get_main_queue(), ^(int token) {
+        (void)token;
+        GHLSSKBApplyKeyboardInWindow();
+        GHLSSKBLogLine("v70.1 kb-helper frameReady applied");
+    });
     // v43.26：%ctor 標記三件套（見 GHLSSKBReportLoaded）：prefs 鍵 best-effort、
     // TMPDIR 標記檔＋os_log、Darwin 通知（名字帶 bid）給 SpringBoard 寫共用
     // prefs。bid 為空整組跳過，不寫 kbHelperLoaded- 無用鍵（41.log 遺留）。

@@ -2938,3 +2938,14 @@ dyld ... findAndRunAllInitializers ... dlopen_from
   最好是奴才在浏览器里帮皇上办（需要皇上在浏览器里登入新
   账号一次），或者奴才一步步用中文教皇上在 App 里点。
 - 等皇上决定怎么做。
+
+
+---
+
+## 41. v1.0.116 键盘进入分屏浮窗内（2026-11-24）
+
+- 问题：分屏后键盘停在屏幕底部全宽，需要缩放后进浮窗内底部。
+- 修改文件：`Tweak.xm`、`KeyboardHelper.xm`、`prefs/Resources/Keyboard.plist`、`control`（版本 1.0.115→1.0.116）。
+- 方案：SpringBoard 写 `kbHostedFrame` + post `keyboardFrameReady`；键盘助手把键盘窗等比缩放贴浮窗底；开关 `keyboardInWindowEnabled` 默认开。
+- 新日志标记 `v70.1`；设备日志 `/var/mobile/Library/Logs/GuHaiLongSplitScreen.log`。
+- 完整 diff 见 `MOD_LOG_1.0.116.md`；产物 `com.guhailong.splitscreen_1.0.116_iphoneos-arm64.deb`。

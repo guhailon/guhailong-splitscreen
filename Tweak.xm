@@ -2324,6 +2324,12 @@ return GHLSSReadPrefsBool("enabled", NO);
 static BOOL GHLSSReadKeyboardAvoidEnabled(void) {
 return GHLSSReadPrefsBool("keyboardAvoidEnabled", YES);
 }
+// v70.1（1.0.116）：键盘进浮窗——默认开。开了以后键盘不再跑到屏幕底部，
+// 由 App 进程里的键盘助手把键盘窗缩放并对齐到浮窗内底部；SpringBoard 这边
+// 不再上移/放大浮窗（否则窗口位置变了，键盘就对不齐）。关掉恢复旧行为。
+static BOOL GHLSSReadKeyboardInWindowEnabled(void) {
+return GHLSSReadPrefsBool("keyboardInWindowEnabled", YES);
+}
 // v43.33（1.0.108，路線 A 探針）：鍵盤圖層樹探針開關（Keyboard.plist 的
 // kbProbeEnabled，預設開；關了鍵盤彈出時不打圖層樹。只記日誌，不改行為）。
 static BOOL GHLSSReadKbProbeEnabled(void) {
@@ -2997,6 +3003,27 @@ CFPreferencesAppSynchronize(domain);
 }
 if (domain) CFRelease(domain);
 if (keyRef) CFRelease(keyRef);
+}
+
+// v70.1（1.0.116）：键盘进浮窗——把当前活动浮窗的屏幕 frame 写进共享
+// prefs，再 post 一个 Darwin 通知给 App 进程的键盘助手。助手收到后把键盘窗
+// 缩放并对齐到这个框里。用 prefs 传四个数，是因为 Darwin 通知没有 payload
+//（跟 kbNotifyInfo 同一套写法）。没有活动窗就清空，助手收到空值会还原键盘。
+static BOOL GHLSSKeyboardInWindowActive = NO;
+static void GHLSSPublishHostedFrameForKeyboard(void) {
+if (!GHLSSHostedWindow || GHLSSHostedWindow.hidden || GHLSSHostedMinimized) {
+GHLSSWritePrefsCString("kbHostedFrame", "");
+notify_post("com.guhailong.splitscreen.keyboardFrameReady");
+return;
+}
+CGRect f = GHLSSHostedWindow.frame;
+char buf[128];
+snprintf(buf, sizeof(buf), "%.1f|%.1f|%.1f|%.1f", (double)f.origin.x, (double)f.origin.y, (double)f.size.width, (double)f.size.height);
+GHLSSWritePrefsCString("kbHostedFrame", buf);
+notify_post("com.guhailong.splitscreen.keyboardFrameReady");
+char lbuf[160];
+snprintf(lbuf, sizeof(lbuf), "v70.1 kb frame published %d,%d %dx%d", (int)f.origin.x, (int)f.origin.y, (int)f.size.width, (int)f.size.height);
+GHLSSLogLine(lbuf);
 }
 
 // v43.18：這個 prefs 鍵有沒有存過值（BOOL 鍵用 CString 讀不到，用這個判）。
@@ -7621,6 +7648,8 @@ if (GHLSSHostedScaleSlider) GHLSSHostedScaleSlider.frame = CGRectMake(10, 3, new
 if (GHLSSHostedScaleLabel) GHLSSHostedScaleLabel.frame = CGRectMake(newW - 56, 3, 46, 30);
 if (GHLSSHostedResizeHandle) GHLSSHostedResizeHandle.frame = CGRectMake(newW - 36, newH - 36, 36, 36);
 [self resizeHostedSceneToContentSize:CGSizeMake(newW, newH)];
+// v70.1：键盘进浮窗时，浮窗拖动/缩放后立刻重发几何，键盘跟着贴底。
+if (GHLSSKeyboardInWindowActive) GHLSSPublishHostedFrameForKeyboard();
 if (GHLSSActiveAppIndex >= 0 && GHLSSActiveAppIndex < GHLSSAppCount) {
 GHLSSSaveGeometryForIndex(GHLSSActiveAppIndex);
 }
@@ -7927,6 +7956,14 @@ GHLSSLogLine(fbuf);
 if (!GHLSSHostedWindow || GHLSSHostedMinimized) return;
 if (bid && bid[0] != '\0' && strcmp(bid, GHLSSHostedBundleID) != 0) return;
 if (kbHeight <= 0) return;
+// v70.1（1.0.116）：鍵盤進浮窗——把浮窗 frame 發給 App 進程的鍵盤助手，
+// 由助手把鍵盤窗搬進浮窗。這條路不再上移／放大浮窗（移動了就對不齊）。
+if (GHLSSReadKeyboardInWindowEnabled()) {
+GHLSSKeyboardInWindowActive = YES;
+GHLSSPublishHostedFrameForKeyboard();
+GHLSSLogLine("v70.1 keyboard show -> inside window");
+return;
+}
 // v43.33（1.0.108，路線 A 探針）：鍵盤彈出時打一遍當前 presentation 的
 // 圖層樹（只記日誌，2 秒節流；開關 kbProbeEnabled 預設開）。
 if (GHLSSReadKbProbeEnabled()) GHLSSKbProbeDumpOnKeyboardShow(kbHeight, bid);
@@ -8000,6 +8037,11 @@ GHLSSKeyboardEnlarged = NO;
 GHLSSLogLine("v43.5 window restored after keyboard hide (enlarge)");
 }
 - (void)ghlssHandleKeyboardHideBundleID:(const char *)bid {
+// v70.1：進浮窗模式的 hide 只清狀態（鍵盤窗還原由 App 進程助手自己做）。
+if (GHLSSKeyboardInWindowActive) {
+GHLSSKeyboardInWindowActive = NO;
+GHLSSLogLine("v70.1 keyboard hide -> inside window off");
+}
 // v43.10：最小化守衛（跟 show 路對稱）——鍵盤彈起上移後窗被收成小卡，
 // shift 旗標還在；收起時不能把滿窗框推到小卡窗上（內容還停在小卡縮放，
 // 其餘全黑，半黑）。直接清旗標走人，不要動窗框。
